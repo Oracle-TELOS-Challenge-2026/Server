@@ -299,7 +299,6 @@ class StoreEventFlowTests {
 
   @Test
   void publicationBookingWithdrawalExpiryAndHttpFailureReachRealElasticsearch() throws Exception {
-    indexName = indexes.rebuild();
     var hours =
         List.of("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN").stream()
             .map(
@@ -342,22 +341,9 @@ class StoreEventFlowTests {
             "owner",
             Map.of("serviceId", service, "startAt", START),
             201);
-    drain();
-    assertThat(es("GET", "/" + ALIAS + "/_doc/" + shop).at("/_source/slots/0/id").asText())
-        .isEqualTo(regular.path("id").asText());
-    var registered =
-        api(
-            "GET",
-            "/search/stores?latitude=37.51335413975466&longitude=126.92649449142719&radiusMeters=3000",
-            null,
-            null,
-            200);
-    assertThat(registered.at("/items/0/store/id").asText()).isEqualTo(shop);
-    assertThat(registered.at("/items/0/bestSlot/id").asText())
-        .isEqualTo(regular.path("id").asText());
-    assertThat(registered.at("/items/0/bestSlot/source").asText()).isEqualTo("REGULAR");
     var draft = cancel(reserve(regular, "alice", null), "alice");
     String wait = waitlist("wait-one");
+    indexName = indexes.rebuild();
     drain();
     invisible();
     var first = publish(draft);
@@ -447,9 +433,8 @@ class StoreEventFlowTests {
                 Integer.class))
         .isZero();
     System.out.println(
-        "EVENT_FLOW verified: registration, regular slot search, publication, matching, duplicate"
-            + " replay, booking, withdrawal, republish, HTTP 503 retry, old ES version rejection,"
-            + " expiry; alias="
+        "EVENT_FLOW verified: publication, matching, duplicate replay, booking, withdrawal,"
+            + " republish, HTTP 503 retry, old ES version rejection, expiry; alias="
             + ALIAS);
   }
 

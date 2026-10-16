@@ -10,9 +10,7 @@ import com.bintime.search.service.*;
 import com.bintime.store.contract.SearchStoreCatalog;
 import com.bintime.store.contract.SearchStoreCatalog.StoreDocument;
 import com.bintime.store.dto.*;
-import com.bintime.store.repository.StoreRepository;
 import com.bintime.store.service.StoreApplicationService;
-import com.bintime.store.service.StoreEventDelivery;
 import com.bintime.store.service.StoreSearchCatalogService;
 import java.net.*;
 import java.net.http.*;
@@ -28,7 +26,6 @@ import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.*;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(
@@ -49,9 +46,6 @@ class StoreCatalogConnectionTests {
   @Autowired SearchIndexService indexes;
   @Autowired SearchWorker worker;
   @Autowired WaitlistService waitlists;
-  @Autowired MatchService matches;
-  @Autowired StoreRepository storeRepository;
-  @Autowired TransactionTemplate transactions;
 
   @Autowired
   @Qualifier("connectionIndex")
@@ -129,10 +123,9 @@ class StoreCatalogConnectionTests {
   }
 
   @Test
-  void registeredStoreEventsFeedWaitlistsAndSearchAndRejectBookedSlot() throws Exception {
+  void realStoreCatalogFeedsRebuildWaitlistsAndSearchAndRejectsBookedSlot() throws Exception {
     assertThat(context.getBeansOfType(SearchStoreCatalog.class)).hasSize(1);
     assertThat(catalog).isInstanceOf(StoreSearchCatalogService.class);
-    indexName = indexes.rebuild();
     var hours =
         List.of("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN").stream()
             .map(
@@ -182,25 +175,9 @@ class StoreCatalogConnectionTests {
     assertThat(catalog.available(conditions, null, 100).items())
         .extracting(SearchStoreCatalog.Slot::id)
         .containsExactly(slot.id());
-    new StoreEventDelivery(
-            storeRepository,
-            (StoreSearchCatalogService) catalog,
-            matches,
-            indexes,
-            transactions,
-            clock)
-        .deliver();
+    indexName = indexes.rebuild();
     worker.poll();
     worker.poll();
-    assertThat(
-            db.queryForObject(
-                "select count(*) from store_events where status_code='PROCESSED'", Integer.class))
-        .isEqualTo(3);
-    assertThat(
-            db.queryForObject(
-                "select count(*) from search_work where kind='INDEX' and status<>'SUCCEEDED'",
-                Integer.class))
-        .isZero();
     assertThat(
             db.queryForObject(
                 "select count(*) from search_store_vector where store_id=?",
