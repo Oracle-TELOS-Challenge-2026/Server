@@ -120,7 +120,7 @@ IntelliJ에서도 Working directory를 저장소 루트로 지정하면 동일�
 
 ## API 계약 및 Swagger
 
-[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 계약을 정의했다. search의 S-01~08은 실제 처리 로직을 제공하며 실행·의존 계약·복구 방법은 [search 안내](docs/search.md)를 참고한다.
+[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 계약을 정의했다. search의 S-01~08은 실제 처리 로직을 제공하며 실행·의존 계약·복구 방법은 [search 안내](docs/search.md), 구현 범위·미연결 항목·다음 작업은 [search 진행 현황](docs/search-progress.md)을 참고한다.
 
 - [API별 Controller·DTO 이름 매핑](docs/contracts/api.md)
 - [SSE·WebSocket 계약](docs/contracts/realtime.md)
@@ -161,7 +161,7 @@ Notion v0.1의 알림 대상·슬롯 상태 정책은 기존 기획과 차이가
 ## 예약 연결 흐름
 
 1. `user`가 인증과 사용자 위치·설정을 제공한다.
-2. `search`가 OpenAI API로 자연어를 분석하고 사용자 확인 후 예약 대기 조건을 저장한다. 사용자가 명시한 선호와 예약 조건을 바탕으로 사용자별 벡터를 생성·갱신한다.
+2. `search`가 OpenAI API로 자연어를 분석하고 사용자 확인 후 예약 대기 조건을 저장한다. 사용자가 명시한 자유로운 선호 JSON 원문을 바탕으로 사용자별 벡터를 생성·갱신한다.
 3. `store`가 취소 슬롯을 저장하고 매칭을 위한 슬롯 생성 사실을 전달한다.
 4. `search`가 시간·위치·서비스·가격 조건을 필터링하고 고객 순위를 계산한다.
 5. `notification`이 대상자의 활성 조건과 동의 여부를 확인해 중복 없이 알림을 전달한다.

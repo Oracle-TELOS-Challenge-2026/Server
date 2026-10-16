@@ -1,5 +1,7 @@
 # Search 구현 및 운영
 
+구현 완료 범위·미연결 의존성·검증 이력·다음 작업 우선순위는 [Search 구현 현황과 후속 작업](search-progress.md)에 정리한다.
+
 ## 범위와 의존 작업
 
 S-01~08은 MVC Service/JDBC Repository와 OpenAI·Elasticsearch Adapter로 처리한다. Oracle이 원본이며 Elasticsearch는 파생 인덱스다. 인증부터 실제 알림 수신까지는 아래 공개 계약의 실제 구현 연결이 필요하다. 기본 구현은 빈 결과나 성공을 위장하지 않고 401/403/503으로 거절한다. 테스트 대역은 `src/test`에만 있다.
@@ -9,7 +11,7 @@ S-01~08은 MVC Service/JDBC Repository와 OpenAI·Elasticsearch Adapter로 처�
 - store 커밋 후 `MatchService.submit(eventId, slotId, publicationVersion)`와 `SearchIndexService.changed(전체문서)`를 생산자 outbox 등으로 재전달해야 한다. 슬롯 삭제/매장 비공개는 slots=[] tombstone을 전달한다. 예약 완료는 user/intent/version/reservationId를 담아 `WaitlistService.fulfilled`로 전달한다. 검색 도메인이 예약을 확정하지 않는다.
 - notification: `SearchNotificationGateway.dispatch`는 N-06 DTO를 접수한다. 동일 user+slot을 중복 발송하지 않고, 최종 동의·발송 제한·대기 ID/버전과 슬롯 유효성을 재확인한다. 취소와 외부 발송 사이의 경쟁은 수신자의 최종 검증 계약으로 닫는다. 검색 DB 잠금을 외부 호출 동안 유지하지 않는다.
 
-기존 다른 작업의 `WaitlistReservationService`/JPA Waitlist는 이 구현의 `search_intent`와 별개다. 해당 예약 연동은 위 공개 완료 계약으로 정합화한 후 연결해야 한다. search는 다른 도메인의 Repository를 호출하지 않는다.
+기존 JPA Waitlist(`search_waitlists`)와 새 `search_intent`는 별도 저장 모델이다. `WaitlistReservationService`는 두 모델을 지원하며 store 예약과 같은 트랜잭션에서 조건 검증과 완료 처리를 수행한다. search는 다른 도메인의 Repository를 호출하지 않는다.
 
 ## 확정한 정책과 HTTP 계약 변경
 
@@ -111,7 +113,7 @@ SEARCH_ORACLE_USER=<test-user> SEARCH_ORACLE_PASSWORD=<secret> \
 이미 저장된 선호의 최초 생성/수동 갱신은 내부 `PersonalizationService.requestRefresh(userId)` 또는 아래 명령으로 작업을 등록한다. 실제 DB에 존재하는 사용자 ID를 사용하며 일반 worker가 후속 처리한다.
 
 ```bash
-./gradlew bootRun --args='--search.vector.rebuild-user=usr_001'
+./gradlew bootRun --args='--spring.main.web-application-type=none --bintime.store.expiration-enabled=false --search.vector.rebuild-user=usr_001'
 ```
 
 확인 SQL (벡터/선호 원문을 출력하지 않는다):
@@ -130,4 +132,4 @@ select user_id, lease_until from search_vector_generation;
 
 `UserVectorFlowTests`는 자유로운 중첩 JSON, 동일 입력 재사용, 저장/outbox 롤백, 생성 중 변경, 동시 호출 방지, 중단 lease 회수, 직접 DB 변경 감지, 빈 선호 제거, 크기 제한, 영구/일시 오류를 검증한다. 동일 테스트를 실제 Oracle의 별도 스키마에서도 실행할 수 있다. 빈 전용 스키마에 초기 전체 DDL과 search DDL을 적용한 뒤 USER_VECTOR_ORACLE_URL/USER_VECTOR_ORACLE_USER/USER_VECTOR_ORACLE_PASSWORD 환경 변수를 설정하고 `./gradlew test --tests '*UserVectorFlowTests'`를 실행한다. 이 테스트는 해당 스키마의 사용자/벡터/작업 데이터를 정리하므로 앱 스키마를 사용하지 않는다.
 
-2026-10-16 검증: `.env`의 실제 키로 합성 한국어 선호 JSON을 임베딩하고, 별도 Oracle 스키마의 `search_vector` CLOB에 실제 응답을 저장·조회했다. 동일 Oracle 스키마에서 선호 저장/outbox 롤백·동시 호출 방지·lease 회수·오래된 응답 차단 테스트도 통과했으며 임시 스키마는 정리했다. 기존 앱 스키마에는 추가 DDL을 적용하지 않았다.
+2026-10-16 검증: `.env`의 실제 키로 합성 한국어 선호 JSON을 임베딩하고, 별도 Oracle 스키마의 `search_vector` CLOB에 실제 응답을 저장·조회했다. 동일 Oracle 스키마에서 선호 저장/outbox 롤백·동시 호출 방지·lease 회수·오래된 응답 차단 테스트도 통과했으며 임시 스키마는 정리했다. 이 검증에서는 기존 앱 스키마를 변경하지 않았다. 이후 같은 날 로컬 `FREEPDB1/BINTIME_APP`에 전체 search DDL을 별도로 적용했다. 기존 13개 테이블의 행 수를 유지하면서 search 테이블 11개와 잠금 버킷 256개를 추가했으며, 상세 반영 범위는 [진행 문서](search-progress.md#4-영속화와-db-반영)에 기록했다.
