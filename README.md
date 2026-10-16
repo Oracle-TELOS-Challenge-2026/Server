@@ -198,6 +198,8 @@ Notion v0.1의 알림 대상·슬롯 상태와 기존 기획 간 차이 및 stor
 
 **신규 빈 DB는 [통합 DDL](infra/oracle/ddl.sql) 하나로 준비한다.** user·store·search v2·notification·chatting의 25개 테이블, 전체 마이그레이션의 최종 구조와 search 잠금 초기값을 포함한다. 실행 후 `local-setup/01ddl.sql`, search DDL이나 기존 마이그레이션을 추가 실행하지 않는다. 계정·권한 준비, 파일별 반영 내역과 Oracle 대조 결과는 [통합 DDL 안내](docs/unified-ddl.md)를 참고한다.
 
+시연용 빈 DB에는 통합 DDL 다음 [더미 INSERT](infra/oracle/dummy-data.sql)를 실행한다. 사용자 지정 좌표를 기준으로 한 시나리오와 검증 방법은 [더미데이터 안내](docs/demo-data.md)를 참고한다.
+
 기존 DB는 현재 적용 상태에 맞춰 `infra/oracle/migrations/`의 변경 SQL을 사용한다. 통합 DDL은 기존 DB 업데이트용이 아니다. 기존 초기 store DB에는 `02-store-api.sql`, 기존 search v1에는 04·05 전환이 필요하며 프로필·알림·카탈로그·이벤트 전달 변경도 확인한다. `ddl-auto=validate`를 유지한다. 기존 분산 SQL은 마이그레이션 이력과 QA 비교를 위해 보존한다.
 
 `StoreApiTests`는 H2에서 API·동시성·멱등성·시간·대기 연동을 검증한다. `python3 infra/oracle/verify-store.py`는 로컬 Oracle의 격리 스키마에서 초기/변경 SQL·기존 데이터 보존·같은 API 및 경합 테스트를 실행한다. 인증 연결 조건, 테스트 실행 옵션, 후속 작업 소비 계약은 [store.md](docs/store.md)에 정리했다.
