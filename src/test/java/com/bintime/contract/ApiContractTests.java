@@ -7,6 +7,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.HashSet;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -17,6 +18,7 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles({"test", "api-docs"})
 class ApiContractTests {
+  private static final Set<String> IMPLEMENTED = Set.of("U-01", "U-02", "U-03", "U-09");
   private final JsonMapper mapper = JsonMapper.builder().build();
   @LocalServerPort private int port;
 
@@ -45,6 +47,7 @@ class ApiContractTests {
           .isEqualTo(
               !contract.path("id").asText().startsWith("S-")
                   && !contract.path("id").asText().startsWith("ST-"));
+          .isEqualTo(!IMPLEMENTED.contains(contract.path("id").asText()));
       assertThat(publicDoc.path("paths").has("/api/v1/chatting/ws")).isFalse();
 
       for (JsonNode query : contract.path("query")) {
@@ -137,7 +140,11 @@ class ApiContractTests {
             if (contract.path("path").asText().equals(path.getKey())
                 && contract.path("method").asText().equalsIgnoreCase(method.getKey())) {
               expected.add(contract.path("status").asText());
+              if (!IMPLEMENTED.contains(contract.path("id").asText())) expected.add("501");
               switch (contract.path("id").asText()) {
+                case "U-01" -> expected.addAll(Set.of("400", "503"));
+                case "U-03" -> expected.addAll(Set.of("401", "403"));
+                case "U-09" -> expected.add("401");
                 case "U-05", "U-06", "ST-06", "ST-16", "S-03", "N-04", "C-04" ->
                     expected.add("409");
                 case "C-05" -> expected.add("400");
@@ -266,6 +273,7 @@ class ApiContractTests {
     for (JsonNode contract : contracts()) {
       if (contract.path("id").asText().startsWith("S-")
           || contract.path("id").asText().startsWith("ST-")) continue;
+      if (IMPLEMENTED.contains(contract.path("id").asText())) continue;
       String name =
           "com.bintime."
               + contract.path("domain").asText()

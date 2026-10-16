@@ -28,12 +28,15 @@ import org.springframework.context.annotation.Configuration;
                 "store ST-01~17과 등록 API 3개, search S-01~08은 구현된 API입니다. search 미연결 의존 기능은 503, 나머지"
                     + " 도메인 골격은 501을 반환합니다. 공통 인증은 별도 연결이 필요합니다. C-WS는 HTTP operation이 아닌"
                     + " ChatWebSocketFrame 스키마와 docs/contracts/realtime.md를 참고하세요."))
+                "카카오 로그인·콜백·로그아웃·CSRF 조회는 구현되어 있습니다. 나머지는 Notion 명세 기반 계약 골격으로 501을 반환합니다."
+                    + " C-WS는 HTTP operation이 아닌 ChatWebSocketFrame 스키마와"
+                    + " docs/contracts/realtime.md를 참고하세요."))
 @SecurityScheme(
     name = "sessionCookie",
     type = SecuritySchemeType.APIKEY,
     in = SecuritySchemeIn.COOKIE,
     paramName = "bt_session",
-    description = "명세상 세션 쿠키. 로그인 로직 미구현")
+    description = "카카오 로그인 후 발급하는 HttpOnly 세션 쿠키")
 public class OpenApiConfig {
 
   @Bean

@@ -3,8 +3,9 @@
 출처: [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4) 및 [공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 2026-10-16 조회 기준의 구현 제안 계약이다.
 
 48개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~17 및 등록 API 3개는 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. 나머지 미구현 도메인의 Controller는 공통 실패 JSON과 501 상태를 반환한다.
+45개 HTTP 경로(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01·U-02·U-03·U-09는 카카오 로그인·세션·CSRF로 구현했다. 나머지는 Controller·DTO 계약 골격으로, Controller에 도달한 요청에 공통 실패 JSON과 501 상태를 반환한다.
 
-개발 단계에서는 Spring Security 의존성을 제외하고 CSRF 헤더 바인딩을 선택으로 두었다. 명세의 인증·권한·CSRF 요구는 향후 구현할 계약이며 현재 런타임에서 적용되지 않는다.
+Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`의 세션 인증·CSRF를 적용한다. 다른 도메인의 인증·권한은 해당 기능 구현 시 연결한다. `api-docs` 프로필은 문서 열람용으로 보안 필터와 DB 의존성을 제외한다. 자세한 설정은 [카카오 로그인](../kakao-login.md)을 따른다.
 
 ## 이름 및 응답 규칙
 

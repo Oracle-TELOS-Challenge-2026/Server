@@ -136,7 +136,11 @@ Oracle Free와 Autonomous DB는 관리 기능·접속 방식 등이 다르므로
 Spring의 `prod` 프로필은 로컬 `.env`를 직접 읽지 않는다. 서버에서는 `compose.yaml`이 `.env`를 읽어 app 컨테이너에 필요한 변수를 주입한다. 직접 JAR로 실행할 경우 같은 값을 프로세스 환경 변수로 제공한다.
 `.env`는 Git·Docker 이미지에 포함하지 않는다.
 
-필요할 때만 ARM64 이미지를 빌드해서 SSH로 직접 전달한다.
+필요할 때 저장소 루트에서 `bash deploy.sh`를 실행한다. Docker Desktop과 Java 21이 필요하다.
+스크립트는 서버 인증서 존재 확인, 빌드·테스트, ARM64 이미지와 인프라 설정 전송, 자동 갱신 타이머 활성화, 컨테이너 실행, Nginx 검증·리로드, 내부·외부 HTTPS 상태 확인을 수행한다.
+최초 인증서 발급을 마친 서버를 대상으로 한다. 인증서가 없으면 설정을 덮어쓰기 전에 중단한다.
+SSH 키 기본 경로는 `~/Downloads/team3/team-3-1.key`이며 다른 PC에서는 `BINTIME_SSH_KEY=/키/경로 bash deploy.sh`로 지정한다.
+Git 푸시로 자동 배포되지는 않는다. 아래는 같은 과정을 개별 명령으로 실행하는 예다.
 
 ```sh
 ./gradlew build
@@ -151,10 +155,34 @@ Redis 데이터는 Docker 볼륨에 보존되며 `docker compose down --volumes`
 
 ## 서버 확인
 
-외부 도메인과 HTTPS는 아직 설정하지 않았다. Mac에서 SSH 터널을 열어 확인한다.
+서버 `.env`의 `HTTP_BIND_ADDRESS=0.0.0.0`, `HTTP_PORT=8080`으로 Nginx를 공개한다.
+서버 방화벽과 OCI 보안 규칙에서 TCP 80·443·8080 접속을 허용해야 한다. 80은 인증서 검증과 HTTPS 리다이렉트에 사용하고 기존 8080 주소도 HTTPS로 리다이렉트한다. Redis는 계속 `127.0.0.1:6379`에만 바인딩하고 Spring은 Docker 내부에서만 접근한다.
+
+최초 인증서 발급 및 HTTPS 전환을 완료한 뒤 사용하는 주소는 다음과 같다.
+
+- API 주소: `https://140.238.19.165`
+- 상태 확인: `https://140.238.19.165/healthz`
+- Swagger: `https://140.238.19.165/swagger-ui/index.html`
+
+Nginx가 `http://127.0.0.1:5173`, `http://localhost:5173`, `https://frontend-oracle.vercel.app`에 대한 CORS와 OPTIONS 사전 요청을 처리한다. 5173은 프론트 개발 PC의 포트이므로 API 서버에 열지 않는다. 이 설정은 Nginx를 거치는 배포 API에 적용된다.
+프론트 API 주소도 위 HTTPS 주소로 지정한다. HTTP 주소로 보내는 OPTIONS 요청은 리다이렉트가 CORS 오류로 보일 수 있다.
+
+### IP 인증서와 자동 갱신
+
+Let’s Encrypt의 `shortlived` IP 인증서는 유효기간이 6일이다. `infra/certbot/bintime-cert-renew.timer`가 하루 두 번 갱신 필요 여부를 확인하며, `renew.sh`가 공식 `certbot/certbot:v5.8.0` 이미지를 실행하고 Nginx를 검증·리로드한다.
+인증서·개인키·ACME 계정은 서버 `~/bintime/infra/certbot/conf`에만 보관한다. `conf`, `www`, `log` 디렉터리는 Git에서 제외하며 Docker 앱 이미지에도 포함되지 않는다.
+인증서 최초 발급에는 Let’s Encrypt 이용약관 동의와 IP 소유 검증이 필요하다. 서버의 공개 IP가 바뀌면 새 IP 인증서를 발급하고 Nginx·배포 스크립트의 주소도 함께 변경한다.
 
 ```sh
-ssh -i ~/Downloads/team3/team-3-1.key -N -L 18080:127.0.0.1:8080 opc@140.238.19.165
+# 서버에서 갱신 예약과 실행 기록을 확인한다.
+sudo systemctl list-timers bintime-cert-renew.timer
+sudo journalctl -u bintime-cert-renew.service --no-pager -n 30
 ```
 
-다른 터미널에서 `curl --fail http://127.0.0.1:18080/healthz`를 실행한다.
+외부 상태 확인은 `curl --fail https://140.238.19.165/healthz`로 한다. 필요하면 HTTPS SSH 터널도 사용할 수 있다.
+
+```sh
+ssh -i ~/Downloads/team3/team-3-1.key -N -L 18443:127.0.0.1:443 opc@140.238.19.165
+```
+
+다른 터미널에서 `curl --fail --connect-to 140.238.19.165:443:127.0.0.1:18443 https://140.238.19.165/healthz`를 실행한다. 인증서 검증을 끄는 `-k`는 사용하지 않는다.

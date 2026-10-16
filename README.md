@@ -121,6 +121,7 @@ IntelliJ에서도 Working directory를 저장소 루트로 지정하면 동일�
 ## API 계약 및 Swagger
 
 [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 계약을 정의했다. search의 S-01~08은 실제 처리 로직을 제공하며 실행·의존 계약·복구 방법은 [search 안내](docs/search.md), 구현 범위·미연결 항목·다음 작업은 [search 진행 현황](docs/search-progress.md)을 참고한다.
+[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 이름과 요청·응답 스키마를 맞췄고, 카카오 로그인 4개 API부터 처리 로직을 연결했다.
 
 - [API별 Controller·DTO 이름 매핑](docs/contracts/api.md)
 - [SSE·WebSocket 계약](docs/contracts/realtime.md)
@@ -138,6 +139,9 @@ DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 �
 개발 단계에서는 Spring Security와 OAuth2 Client 의존성을 제외했다. Swagger와 미구현 도메인의 골격 API는 로그인 없이 접근한다. store는 공개 조회를 제외한 API에 요청자 경계와 권한 검증을 적용한다. search의 보호 API는 user 공개 인증 계약과 CSRF 검증 연결을 요구하며, 미연결 상태에서는 접근을 거절한다. Swagger의 세션 쿠키와 인증·CSRF 설명은 향후 구현할 API 계약이다. `api-docs` 프로필은 문서 검토용이며 Swagger의 API 실행 기능은 비활성화한다.
 
 store·search 이외의 골격 Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 미구현 도메인의 200·201 등은 향후 구현할 성공 계약이다. 필수 입력에 대한 요청 바인딩은 그 전에 요청을 거절할 수 있다. 로그인과 실제 SSE/WS 전송은 별도 구현이다. store 보호 API는 검증된 인증·CSRF 연결 전에는 운영에서 닫혀 있으며, 명시적 local/test 대체 식별만 제공한다.
+카카오 로그인 시작·콜백·로그아웃·CSRF 조회는 구현되어 있다. `/api/v1/auth/**`, `/api/v1/users/**`에는 세션 인증과 상태 변경 시 CSRF 검증을 적용한다. Swagger는 로그인 없이 접근한다. 설정과 프론트 연동은 [카카오 로그인 실행](docs/kakao-login.md)을 참고한다. `api-docs` 프로필은 DB·로그인 없이 문서를 검토하는 용도이며 API 실행 기능은 비활성화한다.
+
+로그인 외의 Controller 계약 골격은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 필수 입력 바인딩이나 user 도메인의 인증·CSRF 검증은 그 전에 요청을 거절할 수 있다. 프로필·예약·AI·SSE/WS와 다른 도메인의 인증·권한은 각 기능 구현 시 연결한다.
 
 ### 공통 JSON 응답
 
