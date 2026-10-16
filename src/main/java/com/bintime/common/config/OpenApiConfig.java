@@ -25,10 +25,10 @@ import org.springframework.context.annotation.Configuration;
             title = "BinTime API",
             version = "v0.1-contract",
             description =
-                "user U-01~09, store ST-01~20, search S-01~08은 구현된 API입니다. store·search의 카카오"
-                    + " 세션·CSRF 인증 연결은 별도 작업이 필요합니다. search 미연결 의존 기능은 503, notification·chatting"
-                    + " 골격은 501을 반환합니다. C-WS는 HTTP operation이 아닌 ChatWebSocketFrame 스키마와"
-                    + " docs/contracts/realtime.md를 참고하세요."))
+                "user U-01~09, store ST-01~20, search S-01~08, notification N-01~06은 구현된 API입니다."
+                    + " store의 카카오 세션·CSRF 인증 연결은 별도 작업이 필요합니다. search 미연결 외부 의존 기능은 503, chatting"
+                    + " 골격은 501을 반환합니다. 알림은 세션에 연결한 Firebase Installation ID를 사용합니다. C-WS는 HTTP"
+                    + " operation이 아닌 ChatWebSocketFrame 스키마와 docs/contracts/realtime.md를 참고하세요."))
 @SecurityScheme(
     name = "sessionCookie",
     type = SecuritySchemeType.APIKEY,

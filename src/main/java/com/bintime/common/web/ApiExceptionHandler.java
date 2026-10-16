@@ -57,9 +57,11 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
   ResponseEntity<Object> handleStoreException(
       com.bintime.common.web.ApiBusinessException ex, HttpServletRequest request) {
     return ResponseEntity.status(ex.status)
+        .contentType(MediaType.APPLICATION_JSON)
         .body(
             new ApiErrorResponse(
-                new ApiError(ex.code, ex.getMessage(), List.of(), false),
+                new ApiError(
+                    ex.code, ex.getMessage(), List.of(), ex.status == 429 || ex.status == 503),
                 ResponseMeta.now(request.getRequestURI())));
   }
 

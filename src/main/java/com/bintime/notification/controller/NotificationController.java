@@ -3,6 +3,9 @@ package com.bintime.notification.controller;
 import com.bintime.notification.dto.MarkNotificationReadRequest;
 import com.bintime.notification.dto.NotificationListResponse;
 import com.bintime.notification.dto.NotificationResponse;
+import com.bintime.notification.service.NotificationService;
+import com.bintime.notification.stream.NotificationStream;
+import com.bintime.user.security.BintimePrincipal;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -11,9 +14,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,20 +33,36 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Tag(name = "notification")
 public class NotificationController {
 
-  // 실제 처리 전까지 성공으로 오인되지 않도록 모든 요청에 501을 반환한다.
+  private final ObjectProvider<NotificationService> notifications;
+  private final ObjectProvider<NotificationStream> streams;
+
+  public NotificationController(
+      ObjectProvider<NotificationService> notifications,
+      ObjectProvider<NotificationStream> streams) {
+    this.notifications = notifications;
+    this.streams = streams;
+  }
+
+  private NotificationService notifications() {
+    var service = notifications.getIfAvailable();
+    if (service == null)
+      throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return service;
+  }
+
   @Operation(
       operationId = "getNotifications",
       summary = "N-01 · 알림 목록·안 읽은 수 조회",
       description =
           "createdAt 내림차순. 본인 알림만. 클릭 후 ST-05 최신 확인.\n\n"
               + "- 로그인 세션 — 본인 데이터\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "본인의 저장된 알림과 최신 슬롯 가용성을 조회합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481649c12da127fb36943"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "알림 목록과 안 읽은 수",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -91,10 +113,12 @@ public class NotificationController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "400", description = "유효하지 않은 커서 또는 limit", content = @Content)
+  @ApiResponse(responseCode = "401", description = "로그인 세션 필요", content = @Content)
   @GetMapping(value = "/api/v1/notifications", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<NotificationListResponse>>
       getNotifications(
+          @AuthenticationPrincipal BintimePrincipal principal,
           @RequestParam(value = "unreadOnly", required = false, defaultValue = "false")
               Boolean unreadOnly,
           @RequestParam(value = "cursor", required = false) String cursor,
@@ -103,7 +127,9 @@ public class NotificationController {
                       @io.swagger.v3.oas.annotations.media.Schema(minimum = "1", maximum = "100"))
               @RequestParam(value = "limit", required = false, defaultValue = "20")
               Integer limit) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(
+            notifications().list(principal, Boolean.TRUE.equals(unreadOnly), cursor, limit)));
   }
 
   @Operation(
@@ -113,13 +139,13 @@ public class NotificationController {
           "반복 요청은 최초 readAt 유지. 읽음과 예약 완료는 별개.\n\n"
               + "- 로그인 세션 — 본인 데이터\n"
               + "- X-CSRF-Token 필수\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "본인 알림만 변경하며 다른 탭에 notification.read 이벤트를 전달합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48110a228da3a4f12e85a"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "읽음 처리된 알림",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -161,17 +187,23 @@ public class NotificationController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "400", description = "read=true 필수", content = @Content)
+  @ApiResponse(responseCode = "401", description = "로그인 세션 필요", content = @Content)
+  @ApiResponse(responseCode = "403", description = "CSRF 검증 실패", content = @Content)
+  @ApiResponse(responseCode = "404", description = "본인 알림 없음", content = @Content)
   @PatchMapping(
       value = "/api/v1/notifications/{notificationId}/read",
       produces = MediaType.APPLICATION_JSON_VALUE,
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<NotificationResponse>>
       markNotificationRead(
+          @AuthenticationPrincipal BintimePrincipal principal,
           @PathVariable("notificationId") String notificationId,
-          @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
+          @RequestHeader(value = "X-CSRF-Token", required = true) String csrfToken,
           @RequestBody MarkNotificationReadRequest request) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(
+            notifications().read(principal, notificationId, request.read())));
   }
 
   @Operation(
@@ -181,7 +213,7 @@ public class NotificationController {
           "세션 쿠키 인증. Last-Event-ID로 누락 재생. 커서 만료는 410. 15초 heartbeat. 저장 알림 ID로 중복 제거.\n\n"
               + "- 로그인 세션 — 본인 데이터\n"
               + "- Accept: text/event-stream; Last-Event-ID 선택\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "최초 연결은 현재 이후 이벤트부터 전달하며 로그아웃·세션 만료 시 종료합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481529f3ff4711b7c4aaf"))
   @SecurityRequirement(name = "sessionCookie")
@@ -207,11 +239,20 @@ public class NotificationController {
       responseCode = "410",
       description = "STREAM_CURSOR_EXPIRED: 새 연결 후 알림함 재조회",
       content = @Content)
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "400", description = "본인 이벤트 커서가 아님", content = @Content)
+  @ApiResponse(responseCode = "401", description = "로그인 세션 필요", content = @Content)
   @GetMapping(value = "/api/v1/notifications/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   public ResponseEntity<SseEmitter> streamNotifications(
+      @AuthenticationPrincipal BintimePrincipal principal,
+      HttpServletRequest request,
       @RequestParam(value = "afterEventId", required = false) String afterEventId,
       @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    var stream = streams.getIfAvailable();
+    if (stream == null)
+      throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok()
+        .header("Cache-Control", "no-cache")
+        .header("X-Accel-Buffering", "no")
+        .body(stream.open(principal, request.getSession(false), lastEventId, afterEventId));
   }
 }

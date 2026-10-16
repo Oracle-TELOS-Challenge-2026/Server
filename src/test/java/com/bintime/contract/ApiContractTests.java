@@ -147,7 +147,14 @@ class ApiContractTests {
                 case "U-07" -> expected.addAll(Set.of("401", "403"));
                 case "ST-06", "ST-16", "S-03", "N-04", "C-04" -> expected.add("409");
                 case "C-05" -> expected.add("400");
+                case "N-01" -> expected.addAll(Set.of("400", "401"));
+                case "N-02" -> expected.addAll(Set.of("400", "401", "403", "404"));
+                case "N-03" -> expected.addAll(Set.of("400", "401"));
+                case "N-05" -> expected.addAll(Set.of("401", "403", "404"));
+                case "N-06" -> expected.addAll(Set.of("400", "403", "404", "503"));
               }
+              if (contract.path("id").asText().equals("N-04"))
+                expected.addAll(Set.of("400", "401", "403"));
             }
           }
           if (path.getKey().equals("/api/v1/notifications/stream")) expected.add("410");
@@ -225,7 +232,10 @@ class ApiContractTests {
           {"patch", "/api/v1/users/me"},
           {"put", "/api/v1/users/me/location"},
           {"delete", "/api/v1/users/me/location"},
-          {"put", "/api/v1/users/me/preferences"}
+          {"put", "/api/v1/users/me/preferences"},
+          {"post", "/api/v1/notifications/push-subscriptions"},
+          {"delete", "/api/v1/notifications/push-subscriptions/{subscriptionId}"},
+          {"patch", "/api/v1/notifications/{notificationId}/read"}
         }) {
       JsonNode operation = doc.path("paths").path(endpoint[1]).path(endpoint[0]);
       JsonNode csrf = parameter(operation, "X-CSRF-Token");
@@ -248,6 +258,28 @@ class ApiContractTests {
     }
     assertThat(callback.path("description").asText())
         .contains("성공", "code", "state", "실패", "error", "error_description");
+  }
+
+  @Test
+  void fcmSubscriptionSchemaUsesInstallationIdAndObjectSuccessData() throws Exception {
+    JsonNode doc = getDoc("public");
+    JsonNode request =
+        doc.path("components").path("schemas").path("RegisterPushSubscriptionRequest");
+    assertThat(request.path("properties").propertyNames()).containsExactly("installationId");
+    assertThat(stringValues(request.path("required"))).contains("installationId");
+    assertThat(request.at("/properties/installationId/maxLength").asInt()).isEqualTo(128);
+    var response =
+        doc.at(
+            "/paths/~1api~1v1~1notifications~1push-subscriptions/post/responses/201/content/application~1json/schema");
+    var envelope = resolve(doc, response);
+    var success = resolve(doc, envelope.at("/properties/success"));
+    var data = success.at("/properties/data");
+    assertThat(data.path("type").toString()).isNotEqualTo("\"null\"").isNotEqualTo("[\"null\"]");
+    assertThat(resolve(doc, data).path("properties").has("id")).isTrue();
+    var failure = doc.at("/components/schemas/ApiErrorResponse");
+    assertThat(failure.at("/properties/error/type").toString())
+        .isNotEqualTo("\"null\"")
+        .isNotEqualTo("[\"null\"]");
   }
 
   @Test
@@ -366,7 +398,10 @@ class ApiContractTests {
   }
 
   private boolean isImplemented(String id) {
-    return IMPLEMENTED.contains(id) || id.startsWith("S-") || id.startsWith("ST-");
+    return IMPLEMENTED.contains(id)
+        || id.startsWith("S-")
+        || id.startsWith("ST-")
+        || id.startsWith("N-");
   }
 
   private JsonNode parameter(JsonNode operation, String name) {

@@ -1934,12 +1934,7 @@
     "query": [],
     "auth": "- 로그인 세션 — 본인 데이터\n- X-CSRF-Token 필수",
     "requestExample": {
-      "endpoint": "https://push.example.net/subscription/opaque",
-      "keys": {
-        "p256dh": "base64url-key",
-        "auth": "base64url-secret"
-      },
-      "expirationTime": null
+        "installationId": "example-firebase-installation-id"
     },
     "responseExample": {
       "id": "push_001",

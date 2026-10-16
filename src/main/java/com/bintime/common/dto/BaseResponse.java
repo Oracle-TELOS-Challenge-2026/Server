@@ -33,7 +33,9 @@ public abstract class BaseResponse<T> {
     return success;
   }
 
-  @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true)
+  @Schema(
+      requiredMode = Schema.RequiredMode.REQUIRED,
+      types = {"object", "null"})
   public ApiError getError() {
     return error;
   }
@@ -47,6 +49,5 @@ public abstract class BaseResponse<T> {
 
   @Schema(description = "성공 데이터 봉투")
   @JsonInclude(JsonInclude.Include.ALWAYS)
-  public record Success<T>(
-      @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) T data) {}
+  public record Success<T>(@Schema(requiredMode = Schema.RequiredMode.REQUIRED) T data) {}
 }
