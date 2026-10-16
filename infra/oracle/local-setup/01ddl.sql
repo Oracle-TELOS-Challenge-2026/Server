@@ -415,5 +415,5 @@ CREATE INDEX ix_store_event_delivery ON store_events(status_code,available_at,le
 ALTER TABLE store_slots ADD CONSTRAINT ck_slot_discount CHECK (
  (discount_type IS NULL AND discount_value IS NULL)
  OR (discount_type IS NOT NULL AND discount_value IS NOT NULL AND
- ((discount_type='PERCENT' AND discount_value BETWEEN 0 AND 100)
+ ((discount_type='PERCENT' AND discount_value BETWEEN 0 AND 100)git
  OR (discount_type='FIXED_PRICE' AND discount_value BETWEEN 0 AND original_price))));

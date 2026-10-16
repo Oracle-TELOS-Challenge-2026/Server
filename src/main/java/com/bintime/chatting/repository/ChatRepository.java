@@ -229,6 +229,31 @@ public class ChatRepository {
         "select display_name from user_accounts where user_id=?", String.class, user);
   }
 
+  public boolean pushEligible(ChatMessageResponse message, String recipient) {
+    return jdbc.queryForObject(
+            """
+            select count(*) from chatting_messages m
+            join chatting_rooms r on r.room_id=m.room_id
+            join store_shops s on s.store_id=r.store_id
+            left join chatting_read_positions p on p.room_id=r.room_id and p.user_id=?
+            where m.message_id=? and m.room_id=? and m.sender_id=? and m.message_sequence=?
+              and m.sender_id<>?
+              and ((m.sender_id=r.customer_id and s.owner_user_id=?)
+                or (m.sender_id=s.owner_user_id and r.customer_id=?))
+              and coalesce(p.last_read_sequence,0)<m.message_sequence
+            """,
+            Integer.class,
+            recipient,
+            message.id(),
+            message.roomId(),
+            message.sender().id(),
+            message.sequence(),
+            recipient,
+            recipient,
+            recipient)
+        == 1;
+  }
+
   public Read read(String room, String user) {
     return jdbc
         .query(

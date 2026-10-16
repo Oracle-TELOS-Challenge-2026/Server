@@ -47,6 +47,8 @@ public class ChatService {
 
   public record MessageCommitted(ChatMessageResponse message) {}
 
+  public record PushRequested(ChatMessageResponse message, String recipientId) {}
+
   public record ReadCommitted(String userId, ChatReadResponse read) {}
 
   private record Cursor(String user, String id, OffsetDateTime activity) {}
@@ -187,6 +189,9 @@ public class ChatService {
     db.insertMessage(message);
     // Subscribers only observe this event after the message and room counter commit together.
     events.publishEvent(new MessageCommitted(message));
+    // Pin the other participant while the room is locked; later owner changes must not retarget it.
+    events.publishEvent(
+        new PushRequested(message, user.equals(room.customer()) ? room.owner() : room.customer()));
     return new Result<>(message, 201);
   }
 

@@ -43,7 +43,7 @@ store 발행 → search 매칭 → 알림 접수·발송의 연결과 통합 테
 - 사용자+슬롯당 알림을 한 번 저장한다. 무효 후보는 200 SKIPPED, 접수·중복 접수는 202 QUEUED다. FCM 제출 직전 현재 대기·슬롯·세션 구독을 다시 확인한다. 목록의 availability도 현재 슬롯을 기준으로 계산하며 외부 확인 실패 시 UNKNOWN이다.
 - 기기별 작업을 DB에 보존하고 5초 간격으로 처리한다. 사용자당 발송 간격 기본 1초(`notification.delivery.minimum-interval-seconds`)는 지연 처리하며 알림을 버리지 않는다. FCM 429/5xx·통신 실패는 Retry-After 및 지수 지연을 적용해 최대 5회 시도한다. UNREGISTERED만 구독을 비활성화하며 일반 INVALID_ARGUMENT는 비활성화하지 않는다.
 - 발송 성공은 FCM 접수이며 기기 수신·읽음·예약 확정을 뜻하지 않는다. 통신 응답 유실·프로세스 중단 후 재시도는 같은 notificationId를 사용하지만 FCM 전송 자체의 정확히 한 번 처리를 보장하지 않는다. 클라이언트도 notificationId로 중복을 제거해야 한다.
-- FCM payload는 `message.fid`, notification title/body, 문자열 data.url=`/customer/waitlist`, data.notificationId를 포함한다. HTTPS 프론트의 동일 origin 링크만 webpush.fcm_options.link에 넣으며 로컬 HTTP에서는 해당 링크 필드를 생략한다.
+- 매칭 FCM payload는 `message.fid`, notification title/body, 문자열 data.url=`/customer/waitlist`, data.notificationId를 포함한다. HTTPS 프론트의 동일 origin 링크만 webpush.fcm_options.link에 넣으며 로컬 HTTP에서는 해당 링크 필드를 생략한다. 채팅은 같은 FID 등록·전송을 사용하고 `CHAT_MESSAGE` 데이터와 `/chat?roomId=...` 링크를 보낸다([채팅 푸시](../chatting.md#채팅-fcm-푸시)).
 
 서버 인증·마이그레이션은 [환경 문서](../../infra/README.md#fcm-알림-설정)를 따른다. 등록·해제에는 기존 세션 쿠키와 X-CSRF-Token을 사용한다. FID는 인증 자격 증명이 아니며 서비스 계정 JSON을 브라우저에 전달하지 않는다. 공식 규격: [Firebase 웹 FID 등록](https://firebase.google.com/docs/cloud-messaging/web/get-started#access_the_firebase_installation_id), [HTTP v1 FID 예제](https://github.com/firebase/quickstart-js/blob/master/messaging/README.md#http), [FCM 오류 코드](https://firebase.google.com/docs/cloud-messaging/error-codes).
 
@@ -84,4 +84,4 @@ store 발행 → search 매칭 → 알림 접수·발송의 연결과 통합 테
 
 브라우저 WebSocket 프로토콜의 Ping에 자동으로 Pong을 응답한다. JSON `ping`에도 JSON `pong`을 반환한다. 세션 만료·로그아웃·계정 변경 시 연결을 닫으며 heartbeat는 HTTP 세션 유휴 시간을 연장하지 않는다. Origin은 `FRONTEND_URL`의 origin 한 개만 허용한다. 로컬 개발 시 프론트·API 호스트를 모두 `localhost`로 맞추고 쿠키로 로그인해야 한다. Bearer·URL 토큰·개발용 사용자 헤더는 채팅 인증에 사용하지 않는다.
 
-현재 전송·전송 제한은 단일 앱 프로세스 기준이다. DB는 메시지를 보존하지만 앱 재시작 때 소켓은 닫히므로 저장한 `afterSequence`로 재구독한다. 여러 앱 인스턴스로 확장하려면 프로세스 간 이벤트 전달을 추가해야 한다. 이미지·파일 첨부와 채팅 FCM 발송은 포함하지 않는다.
+현재 전송·전송 제한은 단일 앱 프로세스 기준이다. DB는 메시지를 보존하지만 앱 재시작 때 소켓은 닫히므로 저장한 `afterSequence`로 재구독한다. 여러 앱 인스턴스로 확장하려면 프로세스 간 이벤트 전달을 추가해야 한다. 이미지·파일 첨부는 포함하지 않는다. 채팅 FCM은 커밋 후 상대방의 활성 구독에 비동기로 발송하며, 읽음·구독·참여자 상태를 발송 직전에 다시 확인한다. 채팅 푸시의 제한된 재시도 대기열은 메모리에 있으며 앱 재시작 때 미전송 작업이 유실될 수 있다. Oracle 스키마와 매칭 알림 원장은 변경하지 않는다.
