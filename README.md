@@ -77,7 +77,7 @@ Controller마다 입력 Port를 만들거나 모든 Service에 인터페이스�
 
 ## 파일 구조
 
-user·store·search는 실제 기능에 필요한 Service·Repository 및 연동 경계를 구현했다. notification·chatting의 Controller·DTO 계약 골격은 유지한다.
+user·store·search·notification·chatting은 기능에 필요한 Service·Repository 및 연동 경계를 구현했다. 채팅은 텍스트 메시지 저장과 WebSocket 전송을 제공한다.
 
 ```text
 src/main/java/com/bintime/
@@ -139,7 +139,7 @@ DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 �
 
 store·search는 카카오 세션 쿠키·CSRF와 연결되었으며 선택적으로 Bearer JWT도 지원한다. 공개 조회와 보호 API의 구분은 [store 인증 계약](docs/store-auth.md), [search 인증 계약](docs/search-auth.md)을 참고한다. search 대기 API는 현재 DB 역할이 CUSTOMER인 본인 데이터만 허용한다. 알림 전역 설정과 실제 전달은 별도 연결이 필요하다.
 
-notification·chatting의 골격 Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 필수 입력 바인딩은 그 전에 요청을 거절할 수 있다. 실제 SSE/WS 전송은 후속 구현이다.
+notification은 저장·읽음·SSE·FCM을, chatting은 채팅방·메시지 이력·읽음 위치 REST와 WebSocket 송수신을 제공한다. 세션·CSRF 인증 및 프론트 연결 예시는 [실시간 계약](docs/contracts/realtime.md)과 [채팅 연동 안내](docs/chatting.md)를 참고한다.
 
 ### 공통 JSON 응답
 
@@ -192,7 +192,7 @@ Notion v0.1의 알림 대상·슬롯 상태와 기존 기획 간 차이 및 stor
 ./gradlew build
 ```
 
-`format`은 API 골격의 Java 코드를 포맷한다. 기존 부트스트랩 파일은 대상에서 제외한다. 계약 테스트는 요청·응답 예시와 전체 경로를 Swagger에 대조하고 DTO 역직렬화와 미구현 도메인의 501 스텁을 검증한다. user·store·search는 실제 API·정합성 테스트를 별도로 수행한다. 기본 테스트는 H2와 문서용 프로필을 사용하며 외부 AI·DB·Redis 연결이 필요하지 않다.
+`format`은 API 골격의 Java 코드를 포맷한다. 기존 부트스트랩 파일은 대상에서 제외한다. 계약 테스트는 요청·응답 예시와 전체 경로를 Swagger에 대조하고 DTO 역직렬화를 검증한다. 도메인별 API·정합성 테스트와 채팅의 실제 WebSocket 연결 테스트도 수행한다. 기본 테스트는 H2와 문서용 프로필을 사용하며 외부 AI·DB·Redis 연결이 필요하지 않다.
 
 ### DB 반영 및 검증
 

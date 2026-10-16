@@ -3,6 +3,8 @@ package com.bintime.chatting.controller;
 import com.bintime.chatting.dto.ChatMessageListResponse;
 import com.bintime.chatting.dto.ChatMessageResponse;
 import com.bintime.chatting.dto.SendChatMessageRequest;
+import com.bintime.chatting.service.ChatService;
+import com.bintime.user.security.BintimePrincipal;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -10,9 +12,10 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.http.HttpStatus;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,22 +26,30 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @Tag(name = "chatting")
+@ApiResponse(responseCode = "400", description = "입력 형식 오류 또는 필수 헤더 없음", content = @Content)
+@ApiResponse(responseCode = "401", description = "로그인 세션 필요", content = @Content)
+@ApiResponse(responseCode = "403", description = "권한 부족 또는 CSRF 토큰 없음·불일치", content = @Content)
+@ApiResponse(responseCode = "404", description = "매장 또는 참여 채팅방 없음", content = @Content)
 public class ChatMessageController {
 
-  // 실제 처리 전까지 성공으로 오인되지 않도록 모든 요청에 501을 반환한다.
+  private final ChatService service;
+
+  public ChatMessageController(@Lazy ChatService service) {
+    this.service = service;
+  }
+
   @Operation(
       operationId = "getMessages",
       summary = "C-03 · 채팅 메시지 이력 조회",
       description =
           "beforeSequence보다 작은 최근 메시지를 화면용 오름차순으로 반환. limit 기본 30, 최대 100.\n\n"
-              + "- 로그인한 채팅방 참여자 (고객/소유 매장 사장님)\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "- 로그인한 채팅방 참여자 (고객/소유 매장 사장님)",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481ab99f8e9575674c9d5"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "처리 성공",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -81,11 +92,11 @@ public class ChatMessageController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(
       value = "/api/v1/chatting/rooms/{roomId}/messages",
       produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<ChatMessageListResponse>> getMessages(
+      @AuthenticationPrincipal BintimePrincipal principal,
       @PathVariable("roomId") String roomId,
       @io.swagger.v3.oas.annotations.Parameter(
               schema =
@@ -98,7 +109,9 @@ public class ChatMessageController {
               schema = @io.swagger.v3.oas.annotations.media.Schema(minimum = "1", maximum = "100"))
           @RequestParam(value = "limit", required = false, defaultValue = "30")
           Integer limit) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(
+            service.history(userId(principal), roomId, beforeSequence, limit)));
   }
 
   @Operation(
@@ -108,14 +121,13 @@ public class ChatMessageController {
           "Idempotency-Key 필수. WS와 같은 저장·중복 제거 경로. clientMessageId 동일+내용 다름은 409. 내용 1\\~2000자.\n\n"
               + "- 로그인한 채팅방 참여자 (고객/소유 매장 사장님)\n"
               + "- X-CSRF-Token 필수\n"
-              + "- Idempotency-Key 필수 (24시간 재생)\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "- Idempotency-Key 필수 (24시간 재생)",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4818aa794f4d31bbcd63a"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "201",
-      description = "명세상 성공 응답 (미구현)",
+      description = "처리 성공",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -189,18 +201,30 @@ public class ChatMessageController {
                           """)))
   @ApiResponse(
       responseCode = "409",
-      description = "동일 clientMessageId로 다른 내용의 메시지 전송",
+      description = "동일 clientMessageId·Idempotency-Key에 다른 내용 또는 읽기 전용 채팅방",
       content = @Content)
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "429", description = "사용자별 초당 5건의 신규 메시지 한도 초과", content = @Content)
   @PostMapping(
       value = "/api/v1/chatting/rooms/{roomId}/messages",
       produces = MediaType.APPLICATION_JSON_VALUE,
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<ChatMessageResponse>> sendMessage(
+      @AuthenticationPrincipal BintimePrincipal principal,
       @PathVariable("roomId") String roomId,
-      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
+      @io.swagger.v3.oas.annotations.Parameter(
+              description = "현재 로그인 세션의 CSRF 토큰. 누락·불일치는 403 CSRF_INVALID",
+              required = true)
+          @RequestHeader(value = "X-CSRF-Token", required = false)
+          String csrfToken,
       @RequestHeader("Idempotency-Key") String idempotencyKey,
       @RequestBody SendChatMessageRequest request) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    var result = service.send(userId(principal), roomId, idempotencyKey, request);
+    return ResponseEntity.status(result.status())
+        .body(com.bintime.common.dto.ApiResponse.success(result.data()));
+  }
+
+  private static String userId(BintimePrincipal principal) {
+    com.bintime.common.web.ApiBusinessException.require(principal != null, 401, "UNAUTHORIZED");
+    return principal.userId();
   }
 }

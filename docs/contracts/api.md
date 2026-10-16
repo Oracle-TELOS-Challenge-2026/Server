@@ -2,9 +2,9 @@
 
 출처: [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4) 및 [공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 2026-10-16 조회 기준의 구현 제안 계약이다.
 
-48개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01~09는 카카오 로그인·세션·CSRF 및 [프로필·위치·선호도](../user-profile.md)로 구현했다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~20은 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. notification N-01~06은 저장·읽음·SSE·FCM으로 구현했다. chatting은 501 계약 골격이다.
+48개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01~09는 카카오 로그인·세션·CSRF 및 [프로필·위치·선호도](../user-profile.md)로 구현했다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~20은 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. notification N-01~06은 저장·읽음·SSE·FCM으로 구현했다. chatting C-01~05와 텍스트 WebSocket은 [채팅 연동 안내](../chatting.md)에 따라 구현했다.
 
-Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`, `/api/v1/notifications/**`의 세션 인증·CSRF를 적용한다. store의 공개 조회 5개를 제외한 15개 API에는 세션 쿠키·CSRF 및 선택적 Bearer JWT 인증을 적용한다. [store 인증 계약](../store-auth.md)에 적용 범위와 설정을 정의한다. search는 매장 검색을 공개하고 대기·분석 API는 현재 CUSTOMER 인증과 쿠키 변경 요청 CSRF를 검증한다. 내부 검색은 별도 내부 토큰을 유지한다([search 인증](../search-auth.md)). `SearchUserAccessAdapter`가 공통 세션/JWT 인증 경계와 알림 구독 조회를 연결한다. chatting의 인증·권한은 해당 기능 구현 시 연결한다. `api-docs` 프로필은 문서 열람용으로 Spring Security 필터와 DB 의존성을 제외하며, search 자체의 요청자 검증은 유지한다. 자세한 로그인 설정은 [카카오 로그인](../kakao-login.md)을 따른다.
+Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`, `/api/v1/notifications/**`의 세션 인증·CSRF를 적용한다. store의 공개 조회 5개를 제외한 15개 API에는 세션 쿠키·CSRF 및 선택적 Bearer JWT 인증을 적용한다. [store 인증 계약](../store-auth.md)에 적용 범위와 설정을 정의한다. search는 매장 검색을 공개하고 대기·분석 API는 현재 CUSTOMER 인증과 쿠키 변경 요청 CSRF를 검증한다. 내부 검색은 별도 내부 토큰을 유지한다([search 인증](../search-auth.md)). `SearchUserAccessAdapter`가 공통 세션/JWT 인증 경계와 알림 구독 조회를 연결한다. chatting은 별도 필터 체인으로 카카오 세션 쿠키·변경 요청 CSRF를 검증하고 방의 고객·현재 매장 소유자만 허용한다. WebSocket은 세션·Origin·첫 프레임 CSRF를 검증한다. `api-docs` 프로필은 문서 열람용으로 Spring Security 필터와 DB 의존성을 제외하며, search 자체의 요청자 검증은 유지한다. 자세한 로그인 설정은 [카카오 로그인](../kakao-login.md)을 따른다.
 
 ## 이름 및 응답 규칙
 

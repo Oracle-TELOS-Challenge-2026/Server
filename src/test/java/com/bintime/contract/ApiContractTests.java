@@ -173,7 +173,9 @@ class ApiContractTests {
                 case "U-04" -> expected.add("401");
                 case "U-05", "U-06", "U-08" -> expected.addAll(Set.of("400", "401", "403", "409"));
                 case "U-07" -> expected.addAll(Set.of("401", "403"));
-                case "ST-06", "ST-16", "S-03", "N-04", "C-04" -> expected.add("409");
+                case "ST-06", "ST-16", "S-03", "N-04" -> expected.add("409");
+                case "C-01" -> expected.add("409");
+                case "C-04" -> expected.addAll(Set.of("409", "429"));
                 case "C-05" -> expected.add("400");
                 case "N-01" -> expected.addAll(Set.of("400", "401"));
                 case "N-02" -> expected.addAll(Set.of("400", "401", "403", "404"));
@@ -181,6 +183,8 @@ class ApiContractTests {
                 case "N-05" -> expected.addAll(Set.of("401", "403", "404"));
                 case "N-06" -> expected.addAll(Set.of("400", "403", "404", "503"));
               }
+              if (contract.path("id").asText().startsWith("C-"))
+                expected.addAll(Set.of("400", "401", "403", "404"));
               if (contract.path("id").asText().equals("N-04"))
                 expected.addAll(Set.of("400", "401", "403"));
             }
@@ -263,7 +267,10 @@ class ApiContractTests {
           {"put", "/api/v1/users/me/preferences"},
           {"post", "/api/v1/notifications/push-subscriptions"},
           {"delete", "/api/v1/notifications/push-subscriptions/{subscriptionId}"},
-          {"patch", "/api/v1/notifications/{notificationId}/read"}
+          {"patch", "/api/v1/notifications/{notificationId}/read"},
+          {"post", "/api/v1/chatting/rooms"},
+          {"post", "/api/v1/chatting/rooms/{roomId}/messages"},
+          {"put", "/api/v1/chatting/rooms/{roomId}/read"}
         }) {
       JsonNode operation = doc.path("paths").path(endpoint[1]).path(endpoint[0]);
       JsonNode csrf = parameter(operation, "X-CSRF-Token");
@@ -272,6 +279,34 @@ class ApiContractTests {
           .as("CSRF header for %s %s", endpoint[0], endpoint[1])
           .isTrue();
     }
+  }
+
+  @Test
+  void chatDocumentsOnlyCookieAuthenticationAndNoPrincipalInput() throws Exception {
+    JsonNode doc = getDoc("public");
+    int count = 0;
+    for (var path : doc.path("paths").properties()) {
+      if (!path.getKey().startsWith("/api/v1/chatting/")) continue;
+      for (JsonNode operation : path.getValue()) {
+        var security = operation.path("security");
+        assertThat(security.size()).isEqualTo(1);
+        assertThat(security.get(0).propertyNames()).containsExactly("sessionCookie");
+        for (JsonNode parameter : operation.path("parameters")) {
+          assertThat(parameter.path("name").asText()).isNotEqualTo("principal");
+        }
+        count++;
+      }
+    }
+    assertThat(count).isEqualTo(5);
+    var request =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/chatting/rooms"))
+            .GET()
+            .build();
+    assertThat(
+            HttpClient.newHttpClient()
+                .send(request, HttpResponse.BodyHandlers.ofString())
+                .statusCode())
+        .isEqualTo(401);
   }
 
   @Test
@@ -429,7 +464,8 @@ class ApiContractTests {
     return IMPLEMENTED.contains(id)
         || id.startsWith("S-")
         || id.startsWith("ST-")
-        || id.startsWith("N-");
+        || id.startsWith("N-")
+        || id.startsWith("C-");
   }
 
   private JsonNode parameter(JsonNode operation, String name) {
