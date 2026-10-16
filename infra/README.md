@@ -1,12 +1,20 @@
 # 해커톤 개발 환경
 
-Java 21 · Spring Boot · Gradle · Oracle Autonomous DB · Redis를 사용한다.
+Java 21 · Spring Boot · Gradle · Oracle · Redis를 사용한다.
 기능은 `user`, `notification`, `search`, `store`, `chatting`에서 나눠 구현한다.
 프로젝트 규칙은 동료가 작성한 루트 `AGENTS.md`, `README.md`를 따른다.
 
+| 환경 | DB | Spring 프로필 |
+| --- | --- | --- |
+| 개인 개발 | 각 PC의 Oracle Free 26ai 컨테이너 | `dev` (기본값) |
+| 자동 테스트 | 매 실행 시 생성하는 메모리 H2 | `test` |
+| 배포·시연 | OCI Autonomous DB | `prod` (배포 Compose에서 지정) |
+
+세 환경은 데이터를 공유하지 않는다. 배포 DB에서 개발용 데이터 입력이나 테이블 실험을 하지 않는다.
+
 ## 팀원 시작 순서
 
-기본 설정이 `main`에 병합된 뒤 저장소를 clone하고 IntelliJ에서 루트 `build.gradle`을 연다.
+저장소를 clone하고 IntelliJ에서 루트 `build.gradle`을 연다.
 Project SDK와 Gradle JVM은 모두 Java 21로 지정한다.
 
 ```sh
@@ -28,42 +36,51 @@ git switch -c feat/user-login
 
 ## 로컬 실행
 
-1. `.env.example`을 `.env`로 복사한다. 기존 `.env`는 덮어쓰지 않는다.
-2. 담당자에게 DB URL과 `BINTIME_APP` 계정 비밀번호를 별도로 받는다. `.env`는 Git에 올라가지 않는다.
-3. `REDIS_PASSWORD`는 로컬용으로 정한다. 예: `openssl rand -hex 32`.
+Docker Desktop을 실행하고 개발용 Oracle·Redis를 띄운다. `.env`나 OCI 접속 정보는 필요 없다.
+Oracle 이미지와 데이터 파일을 위해 디스크 여유 공간을 확보한다. 첫 실행은 이미지 다운로드와 DB 초기화로 몇 분 걸릴 수 있다.
+Oracle Lite 이미지의 ARM64·AMD64 태그와 Compose 설정은 확인했다. 현재 담당자 PC의 디스크 공간 부족으로 로컬 Oracle 초기화·앱 연결은 아직 검증하지 못했다.
 
 ```sh
-cp -n .env.example .env
-chmod 600 .env
+docker compose -f compose.dev.yaml up --detach --wait --wait-timeout 600
 ```
 
-`DB_URL`에는 DataGrip에서 성공한 TLS JDBC URL 전체를 넣는다. `$`, `#`, 공백이 들어간 값은 작은따옴표로 감싼다.
-DB에 직접 연결할 개발 PC의 송신 공인 IP는 OCI DB의 허용 목록에 추가해야 한다.
-`BINTIME_APP`은 이미 생성되어 있다. 새 DB나 계정을 팀원마다 만들 필요는 없다.
+`BINTIME_APP` 계정은 최초 DB 볼륨 생성 시 자동으로 만들어진다.
+개발 Compose는 별도의 `bintime-dev` 프로젝트와 볼륨을 사용한다. Oracle·Redis 포트는 `127.0.0.1`에만 노출한다.
+저장소에 있는 고정 비밀번호는 로컬 컨테이너 전용이다. 배포 DB·Redis에는 별도 비밀번호를 사용한다.
+개발 PC의 공인 IP를 OCI DB 허용 목록에 등록할 필요가 없다.
+
+이전에 로컬에서 배포용 Compose를 실행했다면 포트 충돌을 피하도록 먼저 `docker compose down`을 실행한다. `--volumes`는 붙이지 않는다.
 
 ### IntelliJ에서 개발할 때
 
-`.env`를 채운 뒤 Redis만 실행한다.
+추가 환경 변수 없이 `BintimeApplication`을 실행하거나 다음 명령을 쓴다. 기본 프로필은 `dev`다.
+기존 Run Configuration에 `SPRING_PROFILES_ACTIVE=prod`, `SPRING_DATASOURCE_*` 등을 설정했다면 로컬 실행에서는 제거한다.
 
 ```sh
-docker compose up --detach redis
+./gradlew bootRun
 ```
 
-IntelliJ의 Run Configuration → Environment variables에 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `REDIS_PASSWORD`를 설정하고 `BintimeApplication`을 실행한다.
-Redis 기본 주소는 `localhost:6379`다. Spring을 IDE에서 실행하면 `.env`를 자동으로 읽지 않는다.
+DataGrip의 개발 DB 연결은 다음과 같다. 기존 Autonomous DB 연결과 별도 데이터 소스로 추가한다.
 
-### 전체를 Docker로 실행할 때
+| 항목 | 값 |
+| --- | --- |
+| JDBC URL | `jdbc:oracle:thin:@//localhost:1521/FREEPDB1` |
+| 사용자 | `BINTIME_APP` |
+| 비밀번호 | `BinTimeAppLocal123` |
 
-```sh
-./gradlew build
-docker compose build app
-docker compose up --detach --no-build --wait --wait-timeout 180
-curl --fail http://127.0.0.1:8080/healthz
-```
+Redis는 `localhost:6379`, 비밀번호는 `BinTimeRedisLocal123`이다.
+Spring은 `localhost:8080`에서 실행된다. 연결 확인은 `curl --fail http://localhost:8080/actuator/health/readiness`로 한다.
 
-Spring·Redis 연결이 정상이면 `{"status":"UP"}`을 반환한다.
-Nginx는 `127.0.0.1:8080`, Redis는 `127.0.0.1:6379`에서만 호스트에 연결된다.
-공유 DB의 테이블은 자동 생성하지 않으므로 엔티티를 추가할 때 적용 SQL도 함께 관리한다.
+### 테이블 변경과 데이터 보존
+
+`ddl-auto=validate`이므로 엔티티를 추가하면 로컬 DB에 적용할 SQL도 함께 관리한다.
+로컬에서 먼저 검증하고 배포 때 같은 변경 SQL을 Autonomous DB에 적용한다. 로컬 데이터를 배포 DB에 덮어쓰지 않는다.
+로컬 Oracle의 기본 테이블스페이스는 `USERS`, Autonomous DB 앱 계정의 테이블스페이스는 `DATA`다.
+공통 테이블 생성 SQL에는 테이블스페이스를 고정하지 않는다.
+
+개발 DB 중지는 `docker compose -f compose.dev.yaml down`이다. 볼륨은 유지되어 재실행해도 데이터가 남는다.
+`down --volumes`는 로컬 Oracle·Redis 데이터를 모두 삭제하므로 초기화할 때만 사용한다.
+Oracle Free와 Autonomous DB는 관리 기능·접속 방식 등이 다르므로 Oracle 고유 기능은 배포 환경에서도 확인한다.
 
 ## CI와 수동 배포
 
@@ -71,6 +88,11 @@ Nginx는 `127.0.0.1:8080`, Redis는 `127.0.0.1:6379`에서만 호스트에 연�
 - Docker 이미지 빌드·업로드·자동 배포는 CI에 넣지 않는다.
 - 앱 이미지 이름은 `bintime-backend:local`로 고정하고 레지스트리에서 pull하지 않는다.
 - 서버는 `opc@140.238.19.165`, Oracle Linux 9 / ARM64, 실행 폴더는 `~/bintime`이다.
+
+배포용 파일은 `compose.yaml`이며 로컬 개발용 `compose.dev.yaml`과 섞어서 사용하지 않는다.
+서버 `.env`에는 `.env.example`을 참고해 OCI JDBC URL 전체, `BINTIME_APP` 비밀번호, 별도 Redis 비밀번호를 설정한다.
+`$`, `#`, 공백이 들어간 값은 작은따옴표로 감싼다. 배포용 Compose는 `prod` 프로필을 명시하고 환경 변수가 없으면 실행을 중단한다.
+`.env`는 Git·Docker 이미지에 포함하지 않는다.
 
 필요할 때만 ARM64 이미지를 빌드해서 SSH로 직접 전달한다.
 

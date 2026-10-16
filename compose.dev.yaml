@@ -1,0 +1,35 @@
+name: bintime-dev
+
+services:
+  oracle:
+    image: container-registry.oracle.com/database/free:23.26.3.0-lite
+    environment:
+      ORACLE_PWD: BinTimeAdminLocal123
+    ports:
+      - '127.0.0.1:1521:1521'
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./infra/oracle/local-setup:/opt/oracle/scripts/setup:ro
+    healthcheck:
+      test: [CMD, /opt/oracle/checkDBStatus.sh]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, --appendonly, 'yes', --requirepass, BinTimeRedisLocal123]
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH=BinTimeRedisLocal123 redis-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  oracle-data:
+  redis-data:
