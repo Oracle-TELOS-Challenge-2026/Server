@@ -1,6 +1,6 @@
 # 실시간 전송 계약
 
-출처: [Notion 공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 알림 SSE는 구현했으며 WebSocket은 DTO·문서 계약 단계다.
+출처: [Notion 공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 알림 SSE·FCM 및 텍스트 채팅 WebSocket을 구현했다.
 
 ## 알림 SSE — N-03
 
@@ -49,14 +49,14 @@ store 발행 → search 매칭 → 알림 접수·발송의 연결과 통합 테
 
 ## 채팅 WebSocket — C-WS
 
-저장 구조와 더미데이터 입력 규칙은 [채팅 DB 계약 v1](../chatting-db.md)을 따른다. 로컬·OCI에 같은 `004-chatting.sql`을 적용한다. 전송 기능은 아직 계약 단계다.
+저장 구조와 더미데이터 입력 규칙은 [채팅 DB 계약 v1](../chatting-db.md)을 따른다. 로컬·OCI에 같은 `004-chatting.sql`을 적용한다. REST와 WebSocket은 같은 저장·중복 제거 경로를 사용한다. 실행 예시는 [채팅 연동 안내](../chatting.md)를 따른다.
 
 - 주소: `wss://{api-host}/api/v1/chatting/ws`
 - 서브프로토콜: `bintime.chat.v1`
 - 세션 쿠키 및 Origin 검증 후 업그레이드. 장기 토큰을 URL에 넣지 않는다.
 - 프레임: `ChatWebSocketFrame(type, requestId, payload)`. 클라이언트 requestId는 최대 64자이며 응답 연결용이다. 서버 이벤트에서는 생략할 수 있다.
 - Swagger는 프레임 스키마를 보여준다. WebSocket을 REST GET API로 가장하거나 Try it out으로 연결하지 않는다.
-- type에 따른 payload 선택·역직렬화와 권한 검증은 실제 WebSocket 구현에서 처리해야 한다. 현재 sealed payload DTO는 전송 스키마만 표현한다.
+- 핸들러가 type별 payload를 검증한다. 알 수 없는 type·잘못된 JSON·필수 필드 누락은 `error`이며 인증 전 오류는 연결도 종료한다.
 
 | type | payload (`ChatWebSocketFrame` 내부 record) |
 | --- | --- |
@@ -77,4 +77,11 @@ store 발행 → search 매칭 → 알림 접수·발송의 연결과 통합 테
 
 연결 후 5초 이내 CSRF 인증을 완료한다. ACK는 영속 저장만 의미한다. REST와 WS에서 동일한 clientMessageId를 유지해 재전송한다. 구독 시 afterSequence 초과부터 replayThroughSequence까지 재생 후 실시간 메시지를 잇는다. 누락 1000건 초과는 REST 이력 조회 후 재구독한다.
 
-메시지는 1~2000자 일반 텍스트, 프레임 최대 16KiB, 전송 제한은 사용자당 초당 5개, 동시 구독은 최대 20개를 제안한다. ping은 25초, 60초 무응답이면 재연결한다. 4401은 세션 만료, 4403은 인증·정책 위반, 4429는 반복적인 과다 요청이다. 재연결은 1→2→4→8→최대 30초 지터 방식이며 4401/4403은 무한 재시도하지 않는다.
+메시지는 1~2000자 일반 텍스트, 프레임 최대 16KiB, 전송 제한은 사용자당 초당 5개, 동시 구독은 연결당 최대 20개다. 초당 5개 제한은 REST·WS를 합친 신규 저장에 적용하며 같은 메시지의 재전송은 제한 횟수를 소모하지 않는다. ping은 25초, 60초 무응답이면 재연결한다. 4401은 앱에서 감지한 세션 만료, 4403은 인증·정책 위반, 4429는 반복적인 과다 요청이다. HTTP 세션 무효화 시 Tomcat이 먼저 소켓을 닫으면 표준 정책 위반 코드 1008이 올 수 있다. 재연결은 1→2→4→8→최대 30초 지터 방식이며 4401/4403/1008은 무한 재시도하지 않고 로그인·CSRF 상태부터 확인한다.
+
+
+구독 경계와 실시간 전달은 DB의 방별 sequence 커서를 공유한다. 커밋 후 콜백 순서가 바뀌어도 DB에서 오름차순으로 읽고, 읽음 이벤트도 같은 연결에서 이전 값으로 돌아가지 않는다. 구독하지 않은 방에도 참여자라면 `message.send`·`room.read`를 보낼 수 있지만 해당 방의 실시간 이벤트는 받지 않는다. 수신 UI는 `message.id` 또는 방별 `sequence`로 중복을 제거하고 읽음 위치는 최댓값으로 병합한다. 자신의 메시지도 `message.ack`와 `message.created` 양쪽으로 올 수 있으며 순서는 보장하지 않는다.
+
+브라우저 WebSocket 프로토콜의 Ping에 자동으로 Pong을 응답한다. JSON `ping`에도 JSON `pong`을 반환한다. 세션 만료·로그아웃·계정 변경 시 연결을 닫으며 heartbeat는 HTTP 세션 유휴 시간을 연장하지 않는다. Origin은 `FRONTEND_URL`의 origin 한 개만 허용한다. 로컬 개발 시 프론트·API 호스트를 모두 `localhost`로 맞추고 쿠키로 로그인해야 한다. Bearer·URL 토큰·개발용 사용자 헤더는 채팅 인증에 사용하지 않는다.
+
+현재 전송·전송 제한은 단일 앱 프로세스 기준이다. DB는 메시지를 보존하지만 앱 재시작 때 소켓은 닫히므로 저장한 `afterSequence`로 재구독한다. 여러 앱 인스턴스로 확장하려면 프로세스 간 이벤트 전달을 추가해야 한다. 이미지·파일 첨부와 채팅 FCM 발송은 포함하지 않는다.

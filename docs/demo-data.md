@@ -5,9 +5,10 @@
 ## 실행 순서
 
 1. 시연용 빈 앱 스키마에 `infra/oracle/ddl.sql` 전체 실행.
-2. 앱 쓰기와 worker가 실행되지 않는 상태에서 `infra/oracle/dummy-data.sql` 전체를 **스크립트로** 실행. DataGrip에서는 `DECLARE ... END;` 전체를 선택해 실행하거나 스크립트 실행을 사용한다. 끝의 `/`는 PL/SQL 블록 구분자다.
-3. 앱을 시작하기 전에 `infra/oracle/verify-dummy-data.sql`을 실행해 초기 상태 검증.
-4. 시연용 앱을 연결하고 아래 시나리오 진행.
+2. 같은 앱 계정에서 `infra/oracle/migrations/004-chatting.sql`을 실행해 채팅 v1을 준비한다. 통합본 25개 테이블에 읽음·멱등성 테이블 2개가 추가되어 전체 27개, 채팅 4개가 된다. 이미 004를 적용한 기존 OCI 공유 DB에는 초기 DDL을 재실행하지 않는다.
+3. 앱 쓰기와 worker가 실행되지 않는 상태에서 `infra/oracle/dummy-data.sql` 전체를 **스크립트로** 실행. DataGrip에서는 `DECLARE ... END;` 전체를 선택해 실행하거나 스크립트 실행을 사용한다. 끝의 `/`는 PL/SQL 블록 구분자다.
+4. 앱을 시작하기 전에 `infra/oracle/verify-dummy-data.sql`을 실행해 기존 시연 데이터의 초기 상태를 검증하고, `infra/oracle/verify-chatting.sql`로 채팅 v1을 별도 확인한다.
+5. 시연용 앱을 연결하고 아래 시나리오 진행.
 
 SQL*Plus에서는 호출 측에 `SET DEFINE OFF`, `WHENEVER SQLERROR EXIT SQL.SQLCODE`를 설정한다. INSERT 파일은 PL/SQL 블록 하나이며 기준 시각을 한 번만 잡는다. 마지막 COMMIT 전 실패하면 전체 INSERT를 ROLLBACK한다. 다른 미커밋 작업과 섞지 않는다. 기존 데이터가 있는 24개 업무 테이블 중 하나라도 비어 있지 않으면 시작 전에 거절한다. 테이블을 지우거나 기존 데이터를 수정하지 않는다.
 
@@ -43,9 +44,9 @@ SQL*Plus에서는 호출 측에 `SET DEFINE OFF`, `WHENEVER SQLERROR EXIT SQL.SQ
 | `store_reservations` | 16 | CONFIRMED 8·CANCELED 4·COMPLETED 2·NO_SHOW 2 |
 | `search_intent` | 20 | ACTIVE 14·CANCELED 2·EXPIRED 2·FULFILLED 2 |
 | `search_user_lock` | 추가 0 | 통합 DDL의 기존 256행 유지 |
-| 나머지 18개 테이블 | 0 | 실제 기능 실행으로 생성하거나 이번 store 시연 범위에서 제외 |
+| 통합 DDL 기준 나머지 18개 테이블 | 0 | 실제 기능 실행으로 생성하거나 이번 store 시연 범위에서 제외 |
 
-INSERT 합계는 **120행**이며 잠금 테이블을 포함한 전체 초기 행 수는 376행이다. 알림 7개 테이블, store 고객 잠금/멱등/이벤트, search 레거시 대기/멱등/work/offer/벡터 2개, chatting 2개 테이블은 비워둔다.
+INSERT 합계는 **120행**이며 잠금 테이블을 포함한 전체 초기 행 수는 376행이다. 알림 7개 테이블, store 고객 잠금/멱등/이벤트, search 레거시 대기/멱등/work/offer/벡터 2개, 통합본의 chatting 2개 테이블은 비워둔다. 004에서 추가되는 `chatting_read_positions`, `chatting_idempotency`에도 이 INSERT는 데이터를 넣지 않으므로 채팅 4개 테이블 모두 빈 상태로 시작한다. 전체 27개 테이블 환경에서도 초기 총 행 수는 376행이다.
 
 시술 ID 규칙은 `demo_service_{매장번호}_{care|gel|art}`다. `demo_service_06_art` 하나만 비활성이다. 일반 공급이 AVAILABLE이어도 비활성 시술은 검색/예약 대상에서 제외되는지 확인한다.
 
@@ -110,6 +111,8 @@ SQL은 애플리케이션 이벤트를 발행하지 않는다. 따라서 이미 
 - 실제 알림 시연은 [알림 연결 계약](store-notification-integration.md)에 따라 해당 고객과 연결된 실제 로그인 세션·FID·FCM 설정이 필요하다. 로컬 사용자 헤더만으로 알림 세션/기기 구독이 생기지는 않는다. 실계정과 더미 고객의 연결은 시연 환경에서 별도 준비한다.
 
 ## 검증 방법과 범위
+
+아래 `verify-dummy-data.py`와 기존 실행 기록은 통합 DDL의 **25개 기본 테이블** 및 store/search 시나리오를 검증한다. 검증용 임시 계정에는 채팅 004를 적용하지 않으므로 현재 채팅 v1의 27개 테이블 구성·WebSocket까지 검증한 결과는 아니다. 실제 시연 DB에는 위 실행 순서대로 004를 적용하고 채팅 검증 SQL을 따로 실행한다.
 
 ```sh
 # SQL 삽입·모든 테이블 건수·정합성·롤백·재실행 거절 검증

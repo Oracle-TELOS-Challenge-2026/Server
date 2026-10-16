@@ -1,6 +1,6 @@
 # Search SQL 파일
 
-신규 **전체 앱 DB**는 [통합 DDL](../../infra/oracle/ddl.sql) 하나로 생성한다. 반영 내역과 Oracle 검증 결과는 [통합 DDL 안내](../unified-ddl.md)를 참고한다.
+신규 앱 DB의 기본 25개 테이블은 [통합 DDL](../../infra/oracle/ddl.sql)로 생성한다. **현재 채팅 기능을 사용하려면 그 다음에 [004-chatting.sql](../../infra/oracle/migrations/004-chatting.sql)을 같은 앱 계정에서 실행한다.** 적용 후에는 전체 27개, 채팅 4개 테이블이 된다. 반영 내역과 기존 25개 테이블의 Oracle 검증 범위는 [통합 DDL 안내](../unified-ddl.md)를 참고한다.
 
 | 파일 | 역할 |
 | --- | --- |

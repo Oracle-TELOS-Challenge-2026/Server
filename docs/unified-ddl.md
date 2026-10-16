@@ -1,19 +1,22 @@
 # 통합 Oracle DDL
 
-2026-10-16 기준. 신규 빈 앱 스키마의 전체 생성 파일은 [infra/oracle/ddl.sql](../infra/oracle/ddl.sql)이다. 기존 초기 DDL, search v2, 마이그레이션 9개의 **최종 스키마**를 한 파일에 반영했다. 외부 SQL 파일을 불러오는 `@`/`@@` 명령 없이 단독 실행한다.
+2026-10-16 기준. [infra/oracle/ddl.sql](../infra/oracle/ddl.sql)은 신규 빈 앱 계정에 **25개 기본 테이블**을 생성한다. 기존 초기 DDL, search v2, 마이그레이션 9개(notification 003까지)의 결과를 한 파일에 반영했다. 외부 SQL 파일을 불러오는 `@`/`@@` 명령 없이 단독 실행한다.
+
+**현재 채팅 기능까지 실행하려면 통합 DDL 다음에 [004-chatting.sql](../infra/oracle/migrations/004-chatting.sql)을 추가 실행해야 한다.** 통합본에는 채팅 v1의 상태·최근 메시지 시각 컬럼과 읽음·HTTP 멱등성 테이블이 포함되어 있지 않다. 004 적용 후에는 전체 **27개 테이블**, 채팅 **4개 테이블**이 된다. 기존 OCI 공유 DB처럼 이미 004를 적용한 환경에는 통합 DDL을 다시 실행하지 않는다.
 
 ## 실행 대상과 방법
 
 1. 환경에 맞는 앱 계정·기본 테이블스페이스·quota·권한을 준비한다. 로컬은 [01-app-user.sh](../infra/oracle/local-setup/01-app-user.sh), Autonomous DB는 [app-user-grants.sql](../infra/oracle/app-user-grants.sql)을 참고한다. 계정명과 테이블스페이스는 환경마다 다르므로 통합 DDL에 하드코딩하지 않는다.
 2. DataGrip/IntelliJ에서 **테이블이 없는 앱 계정**에 접속해 `infra/oracle/ddl.sql` 전체를 스크립트로 실행한다. SQL*Plus에서는 호출 측에 `SET DEFINE OFF`, `WHENEVER SQLERROR EXIT SQL.SQLCODE`를 설정한다.
 3. 마지막 `COMMIT;`까지 실행한다. search 잠금 버킷 0~255 외에 사용자·매장·예약 등의 시연 데이터는 넣지 않는다.
-4. 애플리케이션은 기존 `ddl-auto=validate`를 유지한다. 앱의 search 시작 검증도 그대로 사용한다.
+4. `infra/oracle/migrations/004-chatting.sql` 전체를 같은 앱 계정에서 실행한다. 실행 중에는 채팅 쓰기를 중지한다. [verify-chatting.sql](../infra/oracle/verify-chatting.sql)로 채팅 v1을 확인한다.
+5. 애플리케이션은 기존 `ddl-auto=validate`를 유지한다. 앱의 search 시작 검증도 그대로 사용한다.
 
-통합본 실행 후 `local-setup/01ddl.sql`, `docs/sql/search-oracle*.sql`, 마이그레이션을 추가 실행하지 않는다. 기존 DB 업데이트에는 현재 적용 상태에 맞는 마이그레이션을 사용한다. 통합본은 DROP/초기화/기존 데이터 이전 스크립트가 아니며 재실행용 조건부 DDL도 아니다.
+통합본 실행 후 `local-setup/01ddl.sql`, `docs/sql/search-oracle*.sql`과 이미 반영된 마이그레이션은 추가 실행하지 않는다. **통합본에 포함되지 않은 채팅 004는 위 순서대로 별도 적용한다.** 기존 DB 업데이트에는 현재 적용 상태에 맞는 마이그레이션을 사용한다. 통합본은 DROP/초기화/기존 데이터 이전 스크립트가 아니며 재실행용 조건부 DDL도 아니다.
 
 로컬 Docker의 기존 startup 마운트와 과거 QA 로더는 이번 작업에서 변경하지 않았다. 컨테이너 시작만으로 통합 DDL이 앱 계정에 자동 적용되는 것으로 간주하지 않는다. 기존 분산 SQL은 변경 이력 및 대조 검증을 위해 보존한다.
 
-시연용 데이터가 필요하면 통합본 실행 후 [더미 INSERT](../infra/oracle/dummy-data.sql)를 실행한다. 데이터 건수·기준 좌표·시나리오·별도 Oracle 검증은 [더미데이터 안내](demo-data.md)를 따른다.
+시연용 데이터가 필요하면 통합본과 채팅 004 적용 후 [더미 INSERT](../infra/oracle/dummy-data.sql)를 실행한다. 데이터 건수·기준 좌표·시나리오·별도 Oracle 검증은 [더미데이터 안내](demo-data.md)를 따른다.
 
 ## 원본 파일별 반영 내역
 
@@ -35,7 +38,7 @@
 
 `infra/oracle/app-user-grants.sql`과 `local-setup/01-app-user.sh`는 계정/권한/테이블스페이스 준비용이다. 앱 데이터 모델 DDL과 실행 주체가 다르므로 통합 파일에 섞지 않았다. 시퀀스는 원본 앱 스키마에서 사용하지 않으며 기존 ID 기본값인 `LOWER(RAWTOHEX(SYS_GUID()))`를 유지했다.
 
-## 최종 테이블 목록
+## 통합 DDL 자체의 테이블 목록 (25개)
 
 | 영역 | 개수 | 테이블 |
 | --- | --- | --- |
@@ -46,6 +49,8 @@
 | notification | 7 | `notification_alerts`, `notification_subscriptions`, `notification_subscription_sessions`, `notification_dedup`, `notification_events`, `notification_deliveries`, `notification_delivery_clock` |
 | chatting | 2 | `chatting_rooms`, `chatting_messages` |
 | 합계 | **25** | 기존 대기 호환 테이블과 v2 대기를 모두 유지 |
+
+`004-chatting.sql`을 별도 적용하면 `chatting_read_positions`, `chatting_idempotency`가 추가되어 채팅은 4개, 전체는 27개 테이블이 된다. 아래 통합 DDL 비교·검증 수치는 004 적용 전의 25개 기본 테이블에 대한 기록이다.
 
 생성하지 않는 v1 테이블은 `search_consent`, `search_vector`, `search_preference_revision`, `search_vector_generation`, `search_match_job`, `search_store_projection`이다. 현재 동의는 intent, 매칭 job 식별자는 work, 사용자 벡터·revision·lease는 user_vector, 매장 벡터 캐시는 store_vector에 반영한다.
 
@@ -83,6 +88,8 @@
 `03-user-vector-generation.sql`의 “신규 DDL에 이 테이블 포함” 주석은 v1 당시의 설명이다. 최신 v2에서는 해당 테이블이 제거되며 생성 lease는 `search_user_vector`에 있다. 신규 통합본 뒤에 03을 실행하지 않는다.
 
 ## 실제 Oracle 검증
+
+아래는 **채팅 004 이전의 25개 기본 테이블**을 비교한 기존 검증 범위와 실행 기록이다. 현재 `verify-unified-ddl.py`의 마이그레이션 목록에는 004가 없어 파일 목록 검사에서 `Update verification for added/removed migrations`로 중단된다. 검증기 목록·비교 경로를 갱신하기 전에는 현재 채팅까지 검증한 결과로 해석하지 않는다. 이 작업에서는 기존 SQL·검증 스크립트를 변경하지 않았으며 채팅 004는 [별도 검증 SQL](../infra/oracle/verify-chatting.sql)을 사용한다.
 
 [verify-unified-ddl.py](../infra/oracle/verify-unified-ddl.py)는 앱 DB에 접근하지 않고 로컬 Oracle 컨테이너 안에 매번 새 임시 계정을 생성한다. 다음 세 경로를 비교하고 생성한 계정은 종료 시 제거한다.
 

@@ -108,7 +108,7 @@ SELECT SYS_CONTEXT('USERENV', 'SESSION_USER') AS login_user,
 FROM dual;
 ```
 
-**신규 빈 스키마에는 [oracle/ddl.sql](oracle/ddl.sql)만 실행한다.** 기본 도메인·search v2·사용자 프로필·FCM 구독·알림 전달·store 카탈로그/이벤트 변경과 잠금 256행을 포함하고 마지막에 `COMMIT;`을 실행한다. 기존 `local-setup/01ddl.sql`, `docs/sql/search-oracle.sql`, 마이그레이션은 추가 실행하지 않는다. 생성된 앱 계정의 기본 테이블스페이스와 권한을 사용하므로 환경별 계정 준비는 먼저 수행한다. 로컬 계정 준비는 `local-setup/01-app-user.sh`, Autonomous DB 권한 준비는 `app-user-grants.sql`을 참고한다.
+**신규 빈 스키마에는 [oracle/ddl.sql](oracle/ddl.sql) 실행 후 [migrations/004-chatting.sql](oracle/migrations/004-chatting.sql)을 적용한다.** 기본 도메인·search v2·사용자 프로필·FCM 구독·알림 전달·store 카탈로그/이벤트 변경과 잠금 256행을 포함하고 마지막에 `COMMIT;`을 실행한다. 통합본에 없는 채팅 v1 컬럼과 읽음·멱등성 테이블은 004로 추가한다. 이미 반영된 `local-setup/01ddl.sql`, `docs/sql/search-oracle.sql`, 다른 마이그레이션은 중복 실행하지 않는다. 생성된 앱 계정의 기본 테이블스페이스와 권한을 사용하므로 환경별 계정 준비는 먼저 수행한다. 로컬 계정 준비는 `local-setup/01-app-user.sh`, Autonomous DB 권한 준비는 `app-user-grants.sql`을 참고한다.
 
 통합 DDL은 IDE/JDBC용 일반 Oracle SQL이며 SQL*Plus 지시문과 환경별 계정 생성은 포함하지 않는다. SQL*Plus 호출 스크립트에서는 `SET DEFINE OFF`와 `WHENEVER SQLERROR EXIT SQL.SQLCODE`를 설정한다. 기존 DB에는 적용 상태별 마이그레이션을 사용한다. 과거 분산 설치 경로는 QA 비교용으로 보존하며, 전체 반영표와 재검증 방법은 [통합 DDL 안내](../docs/unified-ddl.md)를 참고한다.
 
@@ -135,7 +135,7 @@ Oracle Free와 Autonomous DB는 관리 기능·접속 방식 등이 다르므로
 docker compose -f compose.yaml -f compose.fcm.yaml up --detach --no-build --wait
 ```
 
-현재 `deploy.sh`는 이 선택 파일이나 키를 전송하지 않는다. 배포에서 FCM을 사용할 때는 선택 파일과 키를 서버에 별도 준비하고 위 Compose 조합을 유지한다. 키나 프로젝트 설정만으로 전송을 검증할 수는 없으며 로그인한 브라우저에서 등록한 FID가 필요하다. 테스트는 대체 FCM 서버를 사용한다.
+`deploy.sh`는 `compose.fcm.yaml`도 서버에 전송한다. 서버 `.env`의 `FCM_CREDENTIALS_FILE`이 비어 있지 않으면 이 선택 파일을 자동으로 포함해 FCM을 활성화하고, 없거나 빈 값이면 기본 Compose만 사용한다. 서비스 계정 JSON과 서버 환경변수는 스크립트가 전송하지 않으므로 별도로 준비해야 한다. JSON은 앱 사용자 UID `10001`이 읽을 수 있어야 한다. 키나 프로젝트 설정만으로 전송을 검증할 수는 없으며 로그인한 브라우저에서 등록한 FID가 필요하다. 테스트는 대체 FCM 서버를 사용한다.
 
 알림은 현재 앱 프로세스의 유효한 로그인 세션에 연결된 FID만 대상으로 한다. 로그아웃·세션 만료·앱 재시작 후에는 브라우저가 다시 등록해야 한다. FCM 수락은 사용자 화면 표시나 수신 완료를 뜻하지 않는다. 전송 결과가 불명확한 네트워크 장애 후 재시도에서는 외부 전송을 정확히 한 번으로 보장할 수 없으며, 알림 저장은 사용자·슬롯별로 중복 방지한다.
 
@@ -153,10 +153,12 @@ Spring의 `prod` 프로필은 로컬 `.env`를 직접 읽지 않는다. 서버�
 `.env`는 Git·Docker 이미지에 포함하지 않는다.
 
 필요할 때 저장소 루트에서 `bash deploy.sh`를 실행한다. Docker Desktop과 Java 21이 필요하다.
-스크립트는 서버 인증서 존재 확인, 빌드·테스트, ARM64 이미지와 인프라 설정 전송, 자동 갱신 타이머 활성화, 컨테이너 실행, Nginx 검증·리로드, 내부·외부 HTTPS 상태 확인을 수행한다.
+스크립트는 서버 인증서 존재 확인, 빌드·테스트, ARM64 이미지와 인프라 설정 전송, 자동 갱신 타이머 활성화, 서버 설정에 따른 FCM 선택, Compose 설정 검증, 컨테이너 실행, Nginx 검증·리로드, 내부·외부 HTTPS 상태 확인을 수행한다.
+DB 마이그레이션과 Elasticsearch 최초 색인은 자동 실행하지 않는다. 앱 쓰기를 중지하고 백업한 뒤 해당 환경에 필요한 SQL을 먼저 적용한다. search v1 환경은 [v2 전환 절차](../docs/search-schema-v2.md), store는 migration `06`·`07`, FCM은 `002`·`003`, 채팅은 [채팅 DB 안내](../docs/chatting-db.md)를 확인한다. 최초 ES 인덱스/alias 생성은 [초기 색인 안내](../docs/search.md#store-카탈로그-연결-및-초기-색인)에 따라 별도 수행한다.
 최초 인증서 발급을 마친 서버를 대상으로 한다. 인증서가 없으면 설정을 덮어쓰기 전에 중단한다.
 SSH 키 기본 경로는 `~/Downloads/team3/team-3-1.key`이며 다른 PC에서는 `BINTIME_SSH_KEY=/키/경로 bash deploy.sh`로 지정한다.
 Git 푸시로 자동 배포되지는 않는다. 아래는 같은 과정을 개별 명령으로 실행하는 예다.
+아래 수동 Compose 예시는 FCM을 사용하지 않는 경우다. FCM 운영 설정이 있으면 `docker compose -f compose.yaml -f compose.fcm.yaml` 조합을 사용한다.
 
 ```sh
 ./gradlew build
