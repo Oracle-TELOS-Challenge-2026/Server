@@ -1,7 +1,7 @@
 -- JDBC/IDE-compatible SQL. Connect as the application user; do not select PUBLIC.
 -- SQL*Plus callers must configure SET/WHENEVER in their wrapper.
 -- BinTime HACKATHON MVP / Oracle Autonomous Database / 19c+ SQL subset
--- 13 tables, 5 domains. Web push is REQUIRED. One owner and one concurrent appointment per store.
+-- 15 tables, 5 domains. Web push is REQUIRED. One owner and one concurrent appointment per store.
 -- Run ONCE in an EMPTY application schema. Not a migration from the 30-table draft.
 
 --------------------------------------------------------------------------------
@@ -258,17 +258,20 @@ CREATE TABLE chatting_rooms (
                                 room_id       VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                                 customer_id   VARCHAR2(64 BYTE) NOT NULL,
                                 store_id      VARCHAR2(64 BYTE) NOT NULL,
+                                status_code   VARCHAR2(9 BYTE) DEFAULT 'OPEN' NOT NULL,
                                 last_sequence NUMBER(16,0) DEFAULT 0 NOT NULL,
+                                last_message_at TIMESTAMP(6) WITH TIME ZONE,
                                 created_at    TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
                                 CONSTRAINT pk_chatting_rooms PRIMARY KEY (room_id),
                                 CONSTRAINT uq_room_pair UNIQUE (customer_id, store_id),
                                 CONSTRAINT fk_room_customer FOREIGN KEY (customer_id) REFERENCES user_accounts(user_id),
                                 CONSTRAINT fk_room_store FOREIGN KEY (store_id) REFERENCES store_shops(store_id),
+                                CONSTRAINT ck_chat_room_status CHECK (status_code IN ('OPEN','READ_ONLY')),
                                 CONSTRAINT ck_room_sequence CHECK (last_sequence BETWEEN 0 AND 9007199254740991)
 );
 
 --------------------------------------------------------------------------------
--- 10. CHATTING: text messages; no attachments/read receipts/member table
+-- 10. CHATTING: text messages; no attachments or per-message read receipts
 --------------------------------------------------------------------------------
 CREATE TABLE chatting_messages (
                                    message_id       VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
@@ -284,6 +287,35 @@ CREATE TABLE chatting_messages (
                                    CONSTRAINT fk_message_room FOREIGN KEY (room_id) REFERENCES chatting_rooms(room_id),
                                    CONSTRAINT fk_message_sender FOREIGN KEY (sender_id) REFERENCES user_accounts(user_id),
                                    CONSTRAINT ck_message_sequence CHECK (message_sequence BETWEEN 1 AND 9007199254740991)
+);
+
+-- A missing participant cursor means unread (sequence 0); this is not a membership table.
+CREATE TABLE chatting_read_positions (
+    room_id VARCHAR2(64 BYTE) NOT NULL,
+    user_id VARCHAR2(64 BYTE) NOT NULL,
+    last_read_sequence NUMBER(16,0) DEFAULT 0 NOT NULL,
+    read_at TIMESTAMP(6) WITH TIME ZONE,
+    CONSTRAINT pk_chat_read_positions PRIMARY KEY (room_id,user_id),
+    CONSTRAINT fk_chat_read_room FOREIGN KEY (room_id) REFERENCES chatting_rooms(room_id),
+    CONSTRAINT fk_chat_read_user FOREIGN KEY (user_id) REFERENCES user_accounts(user_id),
+    CONSTRAINT ck_chat_read_sequence CHECK (last_read_sequence BETWEEN 0 AND 9007199254740991),
+    CONSTRAINT ck_chat_read_time CHECK (last_read_sequence=0 OR read_at IS NOT NULL)
+);
+
+-- HTTP request replay is separate from the permanent clientMessageId deduplication.
+CREATE TABLE chatting_idempotency (
+    actor_id VARCHAR2(64 BYTE) NOT NULL,
+    operation VARCHAR2(200 BYTE) NOT NULL,
+    key_value VARCHAR2(200 BYTE) NOT NULL,
+    fingerprint VARCHAR2(64 BYTE) NOT NULL,
+    result_json CLOB NOT NULL,
+    http_status NUMBER(3,0) NOT NULL,
+    expires_at TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+    CONSTRAINT pk_chat_idempotency PRIMARY KEY (actor_id,operation,key_value),
+    CONSTRAINT fk_chat_idem_actor FOREIGN KEY (actor_id) REFERENCES user_accounts(user_id),
+    CONSTRAINT ck_chat_idem_hash CHECK (LENGTH(fingerprint)=64),
+    CONSTRAINT ck_chat_idem_status CHECK (http_status IN (200,201)),
+    CONSTRAINT ck_chat_idem_json CHECK (result_json IS JSON (STRICT))
 );
 
 -- Core list, timetable and FK access paths only.
@@ -305,6 +337,16 @@ CREATE INDEX ix_alert_waitlist ON notification_alerts(waitlist_id, user_id);
 CREATE INDEX ix_alert_slot ON notification_alerts(slot_id);
 CREATE INDEX ix_room_store ON chatting_rooms(store_id);
 CREATE INDEX ix_message_sender ON chatting_messages(sender_id);
+CREATE INDEX ix_chat_room_customer_time ON chatting_rooms(customer_id,last_message_at DESC,room_id);
+CREATE INDEX ix_chat_room_store_time ON chatting_rooms(store_id,last_message_at DESC,room_id);
+CREATE INDEX ix_chat_read_user ON chatting_read_positions(user_id);
+CREATE INDEX ix_chat_idem_expiry ON chatting_idempotency(expires_at);
+
+COMMENT ON TABLE chatting_rooms IS 'chatting schema v1: one customer-store room; owner comes from store_shops';
+COMMENT ON COLUMN chatting_rooms.last_sequence IS 'Allocate under a room row lock in the same transaction as the message';
+COMMENT ON COLUMN chatting_rooms.last_message_at IS 'Server timestamp of the message at last_sequence; NULL for an empty room';
+COMMENT ON TABLE chatting_read_positions IS 'Participant read cursor; absent row means sequence 0; service verifies membership and monotonicity';
+COMMENT ON TABLE chatting_idempotency IS '24-hour HTTP replay; operation is POST: plus the concrete request path';
 
 COMMENT ON TABLE store_slots IS '해커톤: 일반 슬롯과 취소표 통합. DRAFT 발행 시 AVAILABLE';
 COMMENT ON TABLE search_waitlists IS 'search: 자연어에서 추출하고 사용자가 확인한 예약 희망 조건';
