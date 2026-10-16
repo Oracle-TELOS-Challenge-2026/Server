@@ -11,6 +11,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.bintime.chatting.dto.ChatBookingProposalResponse;
 import com.bintime.chatting.dto.ChatMessageResponse;
 import com.bintime.chatting.dto.ChatReadResponse;
 import com.bintime.chatting.dto.SendChatMessageRequest;
@@ -24,6 +25,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -295,6 +297,152 @@ class ChatWebSocketTests {
   }
 
   @Test
+  void bookingProposalUpdatesContainTheCurrentCardAndNeverRegressItsVersion() throws Exception {
+    authenticate(socket);
+    var pending = proposalMessage("PENDING", 1);
+    persisted.add(pending);
+    latest.set(1);
+    subscribe(socket, 0);
+    var confirmed = proposalMessage("CONFIRMED", 2);
+
+    handler.messageUpdated(new ChatService.MessageUpdated(confirmed));
+    pollUntil(() -> types(socket).contains("message.updated"));
+    var checked = new AtomicInteger();
+    when(chats.latest("alice", "room"))
+        .thenAnswer(
+            invocation -> {
+              checked.incrementAndGet();
+              return latest.get();
+            });
+    handler.messageUpdated(new ChatService.MessageUpdated(pending));
+    handler.messageUpdated(new ChatService.MessageUpdated(confirmed));
+    pollUntil(() -> checked.get() >= 1);
+    // Wait for the async update's decision under the same connection lock.
+    send(socket, "ping", "proposal-version-barrier", Map.of());
+
+    var updates =
+        frames(socket).stream()
+            .filter(frame -> "message.updated".equals(frame.path("type").asText()))
+            .toList();
+    assertThat(updates)
+        .singleElement()
+        .satisfies(
+            frame ->
+                assertThat(frame.path("payload").path("message"))
+                    .isEqualTo(json.readTree(json.writeValueAsString(confirmed))));
+    assertThat(deliveredSequences(socket)).containsExactly(1L);
+  }
+
+  @Test
+  void reconnectAtTheLatestSequenceStillRestoresAChangedProposalCard() throws Exception {
+    authenticate(socket);
+    var pending = proposalMessage("PENDING", 1);
+    persisted.add(pending);
+    latest.set(1);
+    subscribe(socket, 0);
+    handler.afterConnectionClosed(socket.session, CloseStatus.NORMAL);
+    var confirmed = proposalMessage("CONFIRMED", 2);
+    when(chats.proposalSnapshots("alice", "room")).thenReturn(List.of(confirmed));
+    Socket reconnect = open("proposal-reconnect");
+    authenticate(reconnect);
+
+    subscribe(reconnect, 1);
+
+    assertThat(deliveredSequences(reconnect)).isEmpty();
+    assertThat(types(reconnect))
+        .containsExactly("connection.ready", "room.subscribed", "message.updated");
+    assertThat(lastFrame(reconnect).path("payload").path("message"))
+        .isEqualTo(json.readTree(json.writeValueAsString(confirmed)));
+  }
+
+  @Test
+  void oversizedProposalSnapshotRequestsRestCatchupWhileKeepingLiveUpdates() throws Exception {
+    authenticate(socket);
+    latest.set(1);
+    when(chats.proposalSnapshots("alice", "room"))
+        .thenReturn(Collections.nCopies(1001, proposalMessage("PENDING", 1)));
+
+    subscribe(socket, 1);
+
+    assertThat(types(socket))
+        .containsExactly("connection.ready", "room.subscribed", "room.resync_required");
+    var resync = lastFrame(socket).path("payload");
+    assertThat(resync.path("reason").asText()).isEqualTo("PROPOSAL_STATE_LIMIT");
+    assertThat(resync.path("subscriptionActive").asBoolean()).isTrue();
+    assertThat(resync.path("latestSequence").asLong()).isEqualTo(1);
+    var confirmed = proposalMessage("CONFIRMED", 2);
+    handler.messageUpdated(new ChatService.MessageUpdated(confirmed));
+    pollUntil(() -> types(socket).contains("message.updated"));
+    assertThat(lastFrame(socket).path("payload").path("message"))
+        .isEqualTo(json.readTree(json.writeValueAsString(confirmed)));
+    assertThat(socket.closeStatus).isNull();
+  }
+
+  @Test
+  void proposalBurstDuringABlockedWriteRequestsCatchupAndContinuesLiveDelivery() throws Exception {
+    authenticate(socket);
+    latest.set(1);
+    subscribe(socket, 1);
+    var blocked = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    doAnswer(
+            invocation -> {
+              WebSocketMessage<?> outgoing = invocation.getArgument(0);
+              if (outgoing instanceof TextMessage text
+                  && text.getPayload().contains("message.updated")
+                  && blocked.getCount() > 0) {
+                blocked.countDown();
+                assertThat(release.await(3, TimeUnit.SECONDS)).isTrue();
+              }
+              socket.sent.add(outgoing);
+              return null;
+            })
+        .when(socket.session)
+        .sendMessage(any());
+    handler.messageUpdated(new ChatService.MessageUpdated(proposalMessage("CONFIRMED", 2)));
+    assertThat(blocked.await(3, TimeUnit.SECONDS)).isTrue();
+    try {
+      latest.set(1002);
+      for (int id = 2; id <= 1002; id++)
+        handler.messageUpdated(new ChatService.MessageUpdated(proposalMessage(id, "CONFIRMED", 2)));
+    } finally {
+      release.countDown();
+    }
+    pollUntil(() -> types(socket).contains("room.resync_required"));
+    pollUntil(() -> types(socket).stream().filter("message.updated"::equals).count() == 1001);
+    send(socket, "ping", "proposal-overflow-barrier", Map.of());
+    var resync =
+        frames(socket).stream()
+            .filter(frame -> "room.resync_required".equals(frame.path("type").asText()))
+            .findFirst()
+            .orElseThrow()
+            .path("payload");
+    assertThat(resync.path("reason").asText()).isEqualTo("PROPOSAL_STATE_LIMIT");
+    assertThat(resync.path("subscriptionActive").asBoolean()).isTrue();
+    assertThat(resync.path("latestSequence").asLong()).isEqualTo(1002);
+    assertThat(types(socket).stream().filter("message.updated"::equals)).hasSize(1001);
+
+    var next = proposalMessage(1002, "CONFIRMED", 3);
+    handler.messageUpdated(new ChatService.MessageUpdated(next));
+    pollUntil(
+        () ->
+            frames(socket).stream()
+                .anyMatch(
+                    frame ->
+                        "message.updated".equals(frame.path("type").asText())
+                            && frame
+                                    .path("payload")
+                                    .path("message")
+                                    .path("bookingProposal")
+                                    .path("version")
+                                    .asLong()
+                                == 3));
+    assertThat(lastFrame(socket).path("payload").path("message"))
+        .isEqualTo(json.readTree(json.writeValueAsString(next)));
+    assertThat(socket.closeStatus).isNull();
+  }
+
+  @Test
   void replayBeyondOneThousandRequiresRestCatchupAndDoesNotSubscribe() throws Exception {
     authenticate(socket);
     latest.set(1001);
@@ -558,6 +706,38 @@ class ChatWebSocketTests {
         "TEXT",
         "Message " + sequence,
         OffsetDateTime.now(clock));
+  }
+
+  private ChatMessageResponse proposalMessage(String status, long version) {
+    return proposalMessage(1, status, version);
+  }
+
+  private ChatMessageResponse proposalMessage(int id, String status, long version) {
+    var start = OffsetDateTime.parse("2026-10-20T14:00:00+09:00");
+    var proposal =
+        new ChatBookingProposalResponse(
+            "proposal-" + id,
+            "source-1",
+            "service-gel",
+            "젤 네일 + 제거 + 아트 2개",
+            start,
+            start.plusMinutes(95),
+            95,
+            85000L,
+            status,
+            version,
+            "CONFIRMED".equals(status) ? "reservation-" + id : null,
+            "wait-1");
+    return new ChatMessageResponse(
+        "message-" + id,
+        "room",
+        (long) id,
+        new ChatMessageResponse.Sender("bob", "OWNER", "Owner"),
+        "proposal-" + id,
+        "BOOKING_PROPOSAL",
+        "예약 제안: 젤 네일 + 제거 + 아트 2개",
+        OffsetDateTime.now(clock),
+        proposal);
   }
 
   private static void pollUntil(BooleanSupplier condition) throws InterruptedException {

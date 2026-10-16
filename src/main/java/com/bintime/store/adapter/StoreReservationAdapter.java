@@ -37,6 +37,20 @@ public class StoreReservationAdapter implements StoreReservationPort {
                 command.expectedPrice(),
                 command.expectedSlotVersion(),
                 command.waitlistId()));
+    return confirmed(reservation);
+  }
+
+  @Override
+  public void validateProposal(ProposalCommand command) {
+    stores.validateProposal(command);
+  }
+
+  @Override
+  public ConfirmedReservation reserveProposal(ProposalCommand command) {
+    return confirmed(stores.reserveProposal(command));
+  }
+
+  private ConfirmedReservation confirmed(com.bintime.store.dto.ReservationResponse reservation) {
     return new ConfirmedReservation(
         reservation.id(),
         reservation.store().id(),

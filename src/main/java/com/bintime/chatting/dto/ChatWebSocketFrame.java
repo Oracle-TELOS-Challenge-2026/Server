@@ -21,6 +21,7 @@ public record ChatWebSocketFrame(
               "message.send",
               "message.ack",
               "message.created",
+              "message.updated",
               "room.read",
               "room.read.ack",
               "room.read.updated",
@@ -82,7 +83,16 @@ public record ChatWebSocketFrame(
   @Schema(
       name = "ChatResyncRequiredPayload",
       description = "room.resync_required: 누락 1000건 초과 시 REST 이력 조회")
-  public record ResyncRequired(String roomId, Long latestSequence) implements Payload {}
+  public record ResyncRequired(
+      String roomId,
+      Long latestSequence,
+      @Schema(allowableValues = {"MESSAGE_GAP", "PROPOSAL_STATE_LIMIT"}) String reason,
+      Boolean subscriptionActive)
+      implements Payload {
+    public ResyncRequired(String roomId, Long latestSequence) {
+      this(roomId, latestSequence, "MESSAGE_GAP", false);
+    }
+  }
 
   @Schema(name = "ChatRoomPayload", description = "room.unsubscribe / room.unsubscribed")
   public record Room(String roomId) implements Payload {}
@@ -95,7 +105,9 @@ public record ChatWebSocketFrame(
 
   @Schema(
       name = "ChatMessagePayload",
-      description = "message.ack / message.created. ACK는 영속 저장만 의미")
+      description =
+          "message.ack / message.created / message.updated. 제안 카드는 proposal.id/version으로 병합. ACK는"
+              + " 영속 저장만 의미")
   public record Message(ChatMessageResponse message) implements Payload {}
 
   @Schema(name = "ChatReadPayload", description = "room.read")

@@ -36,6 +36,13 @@ git switch -c feat/user-login
 
 ## 로컬 실행
 
+예약 제안 기능을 사용하려면 기존 DB와 새 DB 모두
+[`08-chat-booking-proposals.sql`](oracle/migrations/08-chat-booking-proposals.sql)을
+`004-chatting.sql` 이후에 적용해야 한다. 채팅·예약 쓰기를 멈춘 상태에서 로컬과 OCI를 각각
+확인하고 실행한다. 제안 테이블과 예약의 `service_description` 컬럼을 추가하며 기존 데이터는
+유지한다. 새 코드의 일반 메시지 조회도 제안 테이블을 사용하므로 **SQL 적용 후 앱을 배포**한다.
+`deploy.sh`는 이 SQL을 자동 실행하지 않는다. 기존 초기 DDL·더미데이터를 다시 넣지 않는다.
+
 Docker Desktop을 실행하고 저장소 루트에 로컬 `.env`를 만든 뒤 Oracle·Redis를 띄운다. OCI 접속 정보는 필요 없다.
 Oracle 이미지와 데이터 파일을 위해 디스크 여유 공간을 확보한다. 첫 실행은 이미지 다운로드와 DB 초기화로 몇 분 걸릴 수 있다.
 Oracle Lite 이미지의 ARM64·AMD64 태그와 Compose 설정을 사용한다. 로컬 컨테이너에서 앱 계정 생성과 SQL 로그인을 검증했다.
@@ -108,7 +115,7 @@ SELECT SYS_CONTEXT('USERENV', 'SESSION_USER') AS login_user,
 FROM dual;
 ```
 
-**신규 빈 스키마에는 [oracle/ddl.sql](oracle/ddl.sql) 실행 후 [migrations/004-chatting.sql](oracle/migrations/004-chatting.sql)을 적용한다.** 기본 도메인·search v2·사용자 프로필·FCM 구독·알림 전달·store 카탈로그/이벤트 변경과 잠금 256행을 포함하고 마지막에 `COMMIT;`을 실행한다. 통합본에 없는 채팅 v1 컬럼과 읽음·멱등성 테이블은 004로 추가한다. 이미 반영된 `local-setup/01ddl.sql`, `docs/sql/search-oracle.sql`, 다른 마이그레이션은 중복 실행하지 않는다. 생성된 앱 계정의 기본 테이블스페이스와 권한을 사용하므로 환경별 계정 준비는 먼저 수행한다. 로컬 계정 준비는 `local-setup/01-app-user.sh`, Autonomous DB 권한 준비는 `app-user-grants.sql`을 참고한다.
+**신규 빈 스키마에는 [oracle/ddl.sql](oracle/ddl.sql) → [migrations/004-chatting.sql](oracle/migrations/004-chatting.sql) → [migrations/08-chat-booking-proposals.sql](oracle/migrations/08-chat-booking-proposals.sql) 순서로 적용한다.** 기본 도메인·search v2·사용자 프로필·FCM 구독·알림 전달·store 카탈로그/이벤트 변경과 잠금 256행은 통합본에 포함되어 있다. 통합본에 없는 채팅 v1 컬럼과 읽음·멱등성 테이블은 004로, 제안 테이블과 예약 설명 컬럼은 08로 추가한다. 이미 반영된 `local-setup/01ddl.sql`, `docs/sql/search-oracle.sql`, 다른 마이그레이션은 중복 실행하지 않는다. 생성된 앱 계정의 기본 테이블스페이스와 권한을 사용하므로 환경별 계정 준비는 먼저 수행한다. 로컬 계정 준비는 `local-setup/01-app-user.sh`, Autonomous DB 권한 준비는 `app-user-grants.sql`을 참고한다.
 
 통합 DDL은 IDE/JDBC용 일반 Oracle SQL이며 SQL*Plus 지시문과 환경별 계정 생성은 포함하지 않는다. SQL*Plus 호출 스크립트에서는 `SET DEFINE OFF`와 `WHENEVER SQLERROR EXIT SQL.SQLCODE`를 설정한다. 기존 DB에는 적용 상태별 마이그레이션을 사용한다. 과거 분산 설치 경로는 QA 비교용으로 보존하며, 전체 반영표와 재검증 방법은 [통합 DDL 안내](../docs/unified-ddl.md)를 참고한다.
 

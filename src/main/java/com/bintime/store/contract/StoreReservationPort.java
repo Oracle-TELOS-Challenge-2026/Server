@@ -7,6 +7,25 @@ public interface StoreReservationPort {
   /** 별도 선점 없이 예약을 즉시 확정한다. 재시도에는 같은 키와 요청을 사용한다. */
   ConfirmedReservation reserve(Command command);
 
+  /** 제안 작성 시점의 유효성만 검사한다. 공급 슬롯을 만들거나 시간을 선점하지 않는다. */
+  void validateProposal(ProposalCommand command);
+
+  /** 서버에 저장된 제안 스냅샷으로 예약한다. 호출자 트랜잭션에 참여한다. */
+  ConfirmedReservation reserveProposal(ProposalCommand command);
+
+  record ProposalCommand(
+      String userId,
+      String ownerId,
+      String idempotencyKey,
+      String proposalId,
+      String storeId,
+      String serviceId,
+      String serviceDescription,
+      OffsetDateTime startAt,
+      Integer durationMinutes,
+      Long price,
+      String waitlistId) {}
+
   /** 가격은 사용자가 확인한 KRW 정수 원, 버전은 최신 슬롯 조회 값이다. waitlistId는 선택이다. */
   record Command(
       String userId,

@@ -28,6 +28,24 @@ public class ChatRepository {
 
   public record Replay(String fingerprint, String json, int status, OffsetDateTime expires) {}
 
+  private static final String PROPOSAL_COLUMNS =
+      """
+      , p.proposal_id as p_id,p.source_message_id as p_source,p.service_id as p_service,
+       p.service_description as p_description,p.start_at as p_start,p.end_at as p_end,
+       p.duration_minutes as p_duration,p.price as p_price,p.status_code as p_status,
+       p.version_no as p_version,p.reservation_id as p_reservation,p.waitlist_id as p_waitlist
+      """;
+
+  private static final String PROPOSAL_JOIN =
+      " left join chatting_booking_proposals p on p.card_message_id=m.message_id ";
+
+  private static final String MESSAGE_SELECT =
+      "select m.*,u.display_name,case when m.sender_id=? then 'CUSTOMER' else 'OWNER' end as"
+          + " sender_role"
+          + PROPOSAL_COLUMNS
+          + " from chatting_messages m join user_accounts u on u.user_id=m.sender_id"
+          + PROPOSAL_JOIN;
+
   public User user(String id, boolean lock) {
     return jdbc
         .query(
@@ -91,20 +109,29 @@ public class ChatRepository {
         .isEmpty();
   }
 
+  public String storeId(String roomId) {
+    return jdbc.queryForObject(
+        "select store_id from chatting_rooms where room_id=?", String.class, roomId);
+  }
+
   private static final String VIEW =
       """
       select r.*,s.owner_user_id,s.name as store_name,s.image_url,c.display_name as customer_name,
-       coalesce(p.last_read_sequence,0) as read_sequence,
+       coalesce(rp.last_read_sequence,0) as read_sequence,
        (select count(*) from chatting_messages x where x.room_id=r.room_id
-         and x.sender_id<>? and x.message_sequence>coalesce(p.last_read_sequence,0)) as unread_count,
+         and x.sender_id<>? and x.message_sequence>coalesce(rp.last_read_sequence,0)) as unread_count,
        m.message_id as last_id,m.sender_id as last_sender,m.client_message_id as last_client,
        m.content_text as last_content,m.created_at as last_created,sender.display_name as last_sender_name
-      from chatting_rooms r join store_shops s on s.store_id=r.store_id
-      join user_accounts c on c.user_id=r.customer_id
-      left join chatting_read_positions p on p.room_id=r.room_id and p.user_id=?
-      left join chatting_messages m on m.room_id=r.room_id and m.message_sequence=r.last_sequence
-      left join user_accounts sender on sender.user_id=m.sender_id
-      """;
+      """
+          + PROPOSAL_COLUMNS
+          + """
+          from chatting_rooms r join store_shops s on s.store_id=r.store_id
+          join user_accounts c on c.user_id=r.customer_id
+          left join chatting_read_positions rp on rp.room_id=r.room_id and rp.user_id=?
+          left join chatting_messages m on m.room_id=r.room_id and m.message_sequence=r.last_sequence
+          left join user_accounts sender on sender.user_id=m.sender_id
+          """
+          + PROPOSAL_JOIN;
 
   public ChatRoomResponse view(String user, String room) {
     return jdbc
@@ -144,9 +171,10 @@ public class ChatRepository {
                     customer.equals(r.getString("last_sender")) ? "CUSTOMER" : "OWNER",
                     r.getString("last_sender_name")),
                 r.getString("last_client"),
-                "TEXT",
+                r.getString("p_id") == null ? "TEXT" : "BOOKING_PROPOSAL",
                 r.getString("last_content"),
-                time(r, "last_created"));
+                time(r, "last_created"),
+                proposalValue(r));
     var response =
         new ChatRoomResponse(
             r.getString("room_id"),
@@ -166,9 +194,7 @@ public class ChatRepository {
       Room room, Long before, long after, long through, int limit, boolean ascending) {
     var args = new ArrayList<Object>(List.of(room.customer(), room.id(), after, through));
     String sql =
-        "select m.*,u.display_name,case when m.sender_id=? then 'CUSTOMER' else 'OWNER' end as"
-            + " sender_role from chatting_messages m join user_accounts u on u.user_id=m.sender_id"
-            + " where m.room_id=? and m.message_sequence>? and m.message_sequence<=?";
+        MESSAGE_SELECT + " where m.room_id=? and m.message_sequence>? and m.message_sequence<=?";
     if (before != null) {
       sql += " and m.message_sequence<?";
       args.add(before);
@@ -185,11 +211,7 @@ public class ChatRepository {
   public ChatMessageResponse duplicate(Room room, String user, String clientId) {
     return jdbc
         .query(
-            """
-            select m.*,u.display_name,case when m.sender_id=? then 'CUSTOMER' else 'OWNER' end as sender_role
-            from chatting_messages m join user_accounts u on u.user_id=m.sender_id
-            where m.room_id=? and m.sender_id=? and m.client_message_id=?
-            """,
+            MESSAGE_SELECT + " where m.room_id=? and m.sender_id=? and m.client_message_id=?",
             this::message,
             room.customer(),
             room.id(),
@@ -198,6 +220,111 @@ public class ChatRepository {
         .stream()
         .findFirst()
         .orElse(null);
+  }
+
+  public ChatMessageResponse message(Room room, String messageId) {
+    return jdbc
+        .query(
+            MESSAGE_SELECT + " where m.room_id=? and m.message_id=?",
+            this::message,
+            room.customer(),
+            room.id(),
+            messageId)
+        .stream()
+        .findFirst()
+        .orElse(null);
+  }
+
+  public long latestCustomerSequence(Room room) {
+    return jdbc.queryForObject(
+        "select coalesce(max(message_sequence),0) from chatting_messages where room_id=? and"
+            + " sender_id=?",
+        Long.class,
+        room.id(),
+        room.customer());
+  }
+
+  public ChatMessageResponse proposal(Room room, String proposalId) {
+    return jdbc
+        .query(
+            MESSAGE_SELECT + " where m.room_id=? and p.proposal_id=?",
+            this::message,
+            room.customer(),
+            room.id(),
+            proposalId)
+        .stream()
+        .findFirst()
+        .orElse(null);
+  }
+
+  public List<ChatMessageResponse> proposalMessages(Room room, int limit) {
+    return jdbc.query(
+        MESSAGE_SELECT
+            + " where m.room_id=? and p.proposal_id is not null order by m.message_sequence asc"
+            + " fetch first "
+            + limit
+            + " rows only",
+        this::message,
+        room.customer(),
+        room.id());
+  }
+
+  public void insertProposal(ChatMessageResponse message) {
+    var p = message.bookingProposal();
+    jdbc.update(
+        "insert into"
+            + " chatting_booking_proposals(proposal_id,room_id,card_message_id,source_message_id,service_id,service_description,start_at,end_at,duration_minutes,price,status_code,version_no,reservation_id,waitlist_id,updated_at)"
+            + " values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        p.id(),
+        message.roomId(),
+        message.id(),
+        p.sourceMessageId(),
+        p.serviceId(),
+        p.serviceDescription(),
+        p.startAt(),
+        p.endAt(),
+        p.durationMinutes(),
+        p.price(),
+        p.status(),
+        p.version(),
+        p.reservationId(),
+        p.waitlistId(),
+        message.createdAt());
+  }
+
+  public void confirmProposal(String id, String reservationId, OffsetDateTime now) {
+    jdbc.update(
+        "update chatting_booking_proposals set"
+            + " status_code='CONFIRMED',version_no=version_no+1,reservation_id=?,updated_at=? where"
+            + " proposal_id=?",
+        reservationId,
+        now,
+        id);
+  }
+
+  public List<ChatMessageResponse> invalidateProposals(
+      Room room, String state, List<String> previous, OffsetDateTime now) {
+    var args = new ArrayList<Object>();
+    args.add(room.id());
+    args.addAll(previous);
+    String predicate =
+        "room_id=? and status_code in ("
+            + String.join(",", Collections.nCopies(previous.size(), "?"))
+            + ")";
+    var ids =
+        jdbc.queryForList(
+            "select card_message_id from chatting_booking_proposals where " + predicate,
+            String.class,
+            args.toArray());
+    if (ids.isEmpty()) return List.of();
+    args.addFirst(now);
+    args.addFirst(state);
+    jdbc.update(
+        "update chatting_booking_proposals set status_code=?,version_no=version_no+1,updated_at=?"
+            + " where "
+            + predicate,
+        args.toArray());
+    return ids.stream().map(id -> message(room, id)).toList();
   }
 
   public void insertMessage(ChatMessageResponse message) {
@@ -318,9 +445,27 @@ public class ChatRepository {
         new ChatMessageResponse.Sender(
             r.getString("sender_id"), r.getString("sender_role"), r.getString("display_name")),
         r.getString("client_message_id"),
-        "TEXT",
+        r.getString("p_id") == null ? "TEXT" : "BOOKING_PROPOSAL",
         r.getString("content_text"),
-        time(r, "created_at"));
+        time(r, "created_at"),
+        proposalValue(r));
+  }
+
+  private ChatBookingProposalResponse proposalValue(ResultSet r) throws SQLException {
+    if (r.getString("p_id") == null) return null;
+    return new ChatBookingProposalResponse(
+        r.getString("p_id"),
+        r.getString("p_source"),
+        r.getString("p_service"),
+        r.getString("p_description"),
+        time(r, "p_start"),
+        time(r, "p_end"),
+        r.getInt("p_duration"),
+        r.getLong("p_price"),
+        r.getString("p_status"),
+        r.getLong("p_version"),
+        r.getString("p_reservation"),
+        r.getString("p_waitlist"));
   }
 
   private static OffsetDateTime time(ResultSet r, String name) throws SQLException {

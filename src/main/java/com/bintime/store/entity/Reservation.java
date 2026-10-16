@@ -28,6 +28,9 @@ public class Reservation {
   @Column(name = "service_name", nullable = false)
   public String serviceName;
 
+  @Column(name = "service_description", length = 1000)
+  public String serviceDescription;
+
   @Column(name = "duration_minutes", nullable = false)
   public Integer duration;
 

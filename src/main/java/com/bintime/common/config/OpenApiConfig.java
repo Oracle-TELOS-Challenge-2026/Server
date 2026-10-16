@@ -30,7 +30,7 @@ import org.springframework.context.annotation.Configuration;
             version = "v0.1-contract",
             description =
                 "user U-01~09, store ST-01~20, search S-01~08, notification N-01~06, chatting"
-                    + " C-01~05는 구현된 API입니다. store·search는 세션 쿠키와 설정된 Bearer JWT 인증을 지원합니다. search"
+                    + " C-01~07는 구현된 API입니다. store·search는 세션 쿠키와 설정된 Bearer JWT 인증을 지원합니다. search"
                     + " 미연결 외부 의존 기능은 503, 알림은 세션에 연결한 Firebase Installation ID를 사용합니다. C-WS는 HTTP"
                     + " operation이 아닌 ChatWebSocketFrame 스키마와 docs/contracts/realtime.md를 참고하세요."))
 @SecurityScheme(
@@ -86,7 +86,8 @@ public class OpenApiConfig {
         ModelConverters.getInstance()
             .resolveAsResolvedSchema(new AnnotatedType(type))
             .referencedSchemas
-            .forEach(api.getComponents()::addSchemas);
+            // HTTP에서 발견한 nullable 등 필드 계약을 별도 프레임 탐색 결과로 덮어쓰지 않는다.
+            .forEach((name, schema) -> api.getComponents().getSchemas().putIfAbsent(name, schema));
       }
       Set<Schema<?>> visited = Collections.newSetFromMap(new IdentityHashMap<>());
       api.getComponents()

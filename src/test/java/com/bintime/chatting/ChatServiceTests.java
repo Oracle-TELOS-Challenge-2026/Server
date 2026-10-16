@@ -55,7 +55,14 @@ class ChatServiceTests {
     repository = new ChatRepository(db);
     tx = new TransactionTemplate(new DataSourceTransactionManager(source));
     clock = new MutableClock(Instant.parse("2026-10-16T10:00:00.123456789Z"));
-    chats = new ChatService(repository, tx, clock, json, publisher);
+    chats =
+        new ChatService(
+            repository,
+            tx,
+            clock,
+            json,
+            publisher,
+            org.mockito.Mockito.mock(com.bintime.store.contract.StoreReservationPort.class));
     committed.clear();
     for (String user : List.of("customer", "customer2", "outsider"))
       db.update("insert into user_accounts values(?,?, 'CUSTOMER')", user, user + " 이름");
@@ -269,7 +276,14 @@ class ChatServiceTests {
             throw new IllegalStateException("cannot save replay");
           }
         };
-    var failingService = new ChatService(failingRepository, tx, clock, json, publisher);
+    var failingService =
+        new ChatService(
+            failingRepository,
+            tx,
+            clock,
+            json,
+            publisher,
+            org.mockito.Mockito.mock(com.bintime.store.contract.StoreReservationPort.class));
     assertThatThrownBy(() -> failingService.send("customer", room, "key", message("rollback")))
         .isInstanceOf(IllegalStateException.class);
     assertThat(chats.latest("owner", room)).isZero();

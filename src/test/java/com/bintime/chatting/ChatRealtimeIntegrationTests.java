@@ -330,6 +330,11 @@ class ChatRealtimeIntegrationTests {
   })
   static class Application {
     @Bean
+    com.bintime.store.contract.StoreReservationPort storeReservations() {
+      return org.mockito.Mockito.mock(com.bintime.store.contract.StoreReservationPort.class);
+    }
+
+    @Bean
     Clock clock() {
       return Clock.systemUTC();
     }
