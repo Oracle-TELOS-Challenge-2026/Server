@@ -10,13 +10,13 @@
 2. 사용자에게 조건을 확인받고 명시적 동의 후 예약 대기를 활성화한다.
 3. 매장 관리자가 취소 슬롯을 직접 등록한다.
 4. 시간·서비스·거리·가격·매장 조건을 필터링한 뒤 개인화 점수로 순위를 정한다.
-5. 상위 5명에게 알림을 보내고, 최초로 유효한 예약 요청을 완료한 고객의 예약을 확정한다.
+5. 필수 조건에 일치하는 고객 전원에게 알림을 보내고, 최초로 유효한 예약 요청을 완료한 고객의 예약을 확정한다.
 
 `ReservationIntent`는 고객의 수요, `ReservationSlot`은 실제 예약 가능한 공급이다. 두 데이터를 분리하고 매칭 결과·알림·예약을 구분한다.
 
 MVP는 결제 없이 예약 확정까지 구현한다. 외부 예약 시스템 연동, 백그라운드 위치 추적, 행동 기반 선호 학습, 자동 할인율 결정은 기본 구현 범위에 포함하지 않는다.
 
-현재 저장소에는 Spring Boot 4.1.1·Java 21·Gradle 설정과 도메인별 Controller·DTO 및 Swagger 계약 골격이 있다. `user`, `notification`, `search`, `store`, `chatting` 도메인을 나누고, 전통적인 MVC 구조(Controller → Service → Repository)를 기본으로 한다. 외부 연동이 필요한 경계에는 Port 인터페이스와 이를 구현하는 Adapter를 적용한다. 실제 비즈니스 로직은 아직 구현하지 않았다. 도메인 책임과 실행 방법은 `README.md`, API 이름과 명세 간 정책 차이는 `docs/contracts/api.md`를 참고한다. 다른 프로젝트의 아키텍처를 그대로 적용하지 않는다.
+현재 저장소에는 Spring Boot 4.1.1·Java 21·Gradle 설정과 도메인별 Controller·DTO 및 Swagger 계약 골격이 있다. `user`, `notification`, `search`, `store`, `chatting` 도메인을 나누고, 전통적인 MVC 구조(Controller → Service → Repository)를 기본으로 한다. 외부 연동이 필요한 경계에는 Port 인터페이스와 이를 구현하는 Adapter를 적용한다. search는 S-01~08의 비즈니스 로직과 연동 계약을 구현했다. 상대 도메인 연결은 docs/search.md를 참고한다. 도메인 책임과 실행 방법은 `README.md`, API 이름과 명세 간 정책 차이는 `docs/contracts/api.md`를 참고한다. 다른 프로젝트의 아키텍처를 그대로 적용하지 않는다.
 
 ## Core Principles
 

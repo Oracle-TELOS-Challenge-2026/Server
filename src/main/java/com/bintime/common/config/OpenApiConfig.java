@@ -25,9 +25,9 @@ import org.springframework.context.annotation.Configuration;
             title = "BinTime API",
             version = "v0.1-contract",
             description =
-                "Notion 명세 기반 계약 골격. 성공 응답은 향후 구현할 계약이며 Controller는 501을 반환합니다. 인증·검증·비즈니스 로직은"
-                    + " 미구현입니다. C-WS는 HTTP operation이 아닌 ChatWebSocketFrame 스키마와"
-                    + " docs/contracts/realtime.md를 참고하세요."))
+                "store ST-01~17과 등록 API 3개, search S-01~08은 구현된 API입니다. search 미연결 의존 기능은 503, 나머지"
+                    + " 도메인 골격은 501을 반환합니다. 공통 인증은 별도 연결이 필요합니다. C-WS는 HTTP operation이 아닌"
+                    + " ChatWebSocketFrame 스키마와 docs/contracts/realtime.md를 참고하세요."))
 @SecurityScheme(
     name = "sessionCookie",
     type = SecuritySchemeType.APIKEY,

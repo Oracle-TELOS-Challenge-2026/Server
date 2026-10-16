@@ -98,6 +98,20 @@ DataGrip의 개발 DB 연결은 `.env` 값에 맞춘다. 아래는 템플릿 기
 Redis는 `localhost:6379`, 비밀번호는 `BinTimeRedisLocal123`이다.
 Spring은 `localhost:8080`에서 실행된다. 연결 확인은 `curl --fail http://localhost:8080/actuator/health/readiness`로 한다.
 
+### IDE에서 DDL 실행
+
+SQL 콘솔의 대상 스키마는 `PUBLIC`이 아니라 실제 앱 계정으로 선택한다. 로컬 템플릿은 `BINTIME_APP`이며 다른 DB는 해당 접속 계정을 사용한다. `ALTER SESSION SET CURRENT_SCHEMA = PUBLIC`은 실행하지 않는다. 현재 접속 계정과 스키마는 다음으로 확인한다.
+
+```sql
+SELECT SYS_CONTEXT('USERENV', 'SESSION_USER') AS login_user,
+       SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AS current_schema
+FROM dual;
+```
+
+`01ddl.sql`, `02-store-api.sql`, `docs/sql/search-oracle.sql`은 IDE/JDBC에서 실행할 일반 Oracle SQL이다. `SET DEFINE OFF`, `WHENEVER SQLERROR EXIT SQL.SQLCODE`는 DDL 파일에서 제외했다. SQL*Plus로 실행할 때는 호출 스크립트에서 해당 옵션을 설정한다. `verify-store.py`는 이미 이를 설정한다.
+
+빈 스키마의 전체 초기화는 `01ddl.sql`, 기존 초기 스키마의 store 변경은 `02-store-api.sql`을 사용하며 두 파일을 같은 스키마에 연속 적용하지 않는다. search 테이블 추가는 `docs/sql/search-oracle.sql`을 별도로 적용한다. IDE의 자동 커밋이 꺼져 있으면 search 잠금 행 INSERT 뒤에 `COMMIT;`을 실행한다.
+
 ### 테이블 변경과 데이터 보존
 
 `ddl-auto=validate`이므로 엔티티를 추가하면 로컬 DB에 적용할 SQL도 함께 관리한다.

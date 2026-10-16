@@ -1,5 +1,6 @@
 package com.bintime.store.controller;
 
+import com.bintime.store.dto.ReservationSlotResponse;
 import com.bintime.store.dto.StoreDetailResponse;
 import com.bintime.store.dto.StoreServiceResponse;
 import com.bintime.store.dto.TimetableResponse;
@@ -14,7 +15,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,7 +29,17 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "store")
 public class OwnerStoreController {
 
-  // 실제 처리 전까지 성공으로 오인되지 않도록 모든 요청에 501을 반환한다.
+  private final com.bintime.store.service.StoreApplicationService svc;
+  private final com.bintime.common.auth.CurrentActor actor;
+
+  public OwnerStoreController(
+      @org.springframework.context.annotation.Lazy
+          com.bintime.store.service.StoreApplicationService svc,
+      com.bintime.common.auth.CurrentActor actor) {
+    this.svc = svc;
+    this.actor = actor;
+  }
+
   @Operation(
       operationId = "updateStore",
       summary = "ST-10 · 매장 운영 정보 수정",
@@ -37,13 +47,13 @@ public class OwnerStoreController {
           "description 또는 openingHours 중 하나 이상. 해당 매장 사장님만 변경.\n\n"
               + "- OWNER — 해당 매장 소유자\n"
               + "- X-CSRF-Token 필수\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "Oracle 영속 데이터와 도메인 규칙을 검증합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481aab1edf442cb8b4f32"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -90,7 +100,11 @@ public class OwnerStoreController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "404", description = "리소스 없음")
+  @ApiResponse(responseCode = "409", description = "상태·버전·시간·가격 충돌")
   @PatchMapping(
       value = "/api/v1/owner/stores/{storeId}",
       produces = MediaType.APPLICATION_JSON_VALUE,
@@ -99,7 +113,10 @@ public class OwnerStoreController {
       @PathVariable("storeId") String storeId,
       @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestBody UpdateStoreRequest request) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok()
+        .body(
+            com.bintime.common.dto.ApiResponse.success(
+                svc.updateStore(actor.get(), storeId, request)));
   }
 
   @Operation(
@@ -108,13 +125,13 @@ public class OwnerStoreController {
       description =
           "주간 UI에서 선택한 날짜를 조회. 배열 예시는 구조 설명용. 일별 최대 500개 예약.\n\n"
               + "- OWNER — 해당 매장 소유자\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "Oracle 영속 데이터와 도메인 규칙을 검증합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48108a991f06efbee9ea2"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -229,7 +246,11 @@ public class OwnerStoreController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "404", description = "리소스 없음")
+  @ApiResponse(responseCode = "409", description = "상태·버전·시간·가격 충돌")
   @GetMapping(
       value = "/api/v1/owner/stores/{storeId}/timetable",
       produces = MediaType.APPLICATION_JSON_VALUE)
@@ -237,7 +258,9 @@ public class OwnerStoreController {
       @PathVariable("storeId") String storeId,
       @RequestParam(value = "date", required = true) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
           LocalDate date) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok()
+        .body(
+            com.bintime.common.dto.ApiResponse.success(svc.timetable(actor.get(), storeId, date)));
   }
 
   @Operation(
@@ -247,13 +270,13 @@ public class OwnerStoreController {
           "name/basePrice/active 수정. durationMinutes 변경 제외. 기존 예약 가격 스냅샷 유지.\n\n"
               + "- OWNER — 해당 매장 소유자\n"
               + "- X-CSRF-Token 필수\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "Oracle 영속 데이터와 도메인 규칙을 검증합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48183a811dd12c2cac293"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -285,7 +308,11 @@ public class OwnerStoreController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "404", description = "리소스 없음")
+  @ApiResponse(responseCode = "409", description = "상태·버전·시간·가격 충돌")
   @PatchMapping(
       value = "/api/v1/owner/stores/{storeId}/services/{serviceId}",
       produces = MediaType.APPLICATION_JSON_VALUE,
@@ -295,6 +322,79 @@ public class OwnerStoreController {
       @PathVariable("serviceId") String serviceId,
       @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestBody UpdateStoreServiceRequest request) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok()
+        .body(
+            com.bintime.common.dto.ApiResponse.success(
+                svc.updateService(actor.get(), storeId, serviceId, request)));
+  }
+
+  @Operation(
+      operationId = "createStore",
+      summary = "ST-18 · 매장 등록",
+      description = "OWNER 인증 및 Idempotency-Key 필수. 성공 응답은 24시간 재사용합니다.")
+  @SecurityRequirement(name = "sessionCookie")
+  @ApiResponse(responseCode = "201", description = "생성 완료", useReturnTypeSchema = true)
+  @ApiResponse(responseCode = "400", description = "입력 오류")
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "매장 소유자 권한 필요")
+  @ApiResponse(responseCode = "409", description = "멱등 키 또는 시간 충돌")
+  @org.springframework.web.bind.annotation.PostMapping(
+      value = "/api/v1/owner/stores",
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<com.bintime.common.dto.ApiResponse<StoreDetailResponse>> createStore(
+      @RequestHeader("Idempotency-Key") String idempotencyKey,
+      @RequestBody com.bintime.store.dto.CreateStoreRequest request) {
+    return ResponseEntity.status(201)
+        .body(
+            com.bintime.common.dto.ApiResponse.success(
+                svc.createStore(actor.get(), idempotencyKey, request)));
+  }
+
+  @Operation(
+      operationId = "createService",
+      summary = "ST-19 · 시술 등록",
+      description = "OWNER 인증 및 Idempotency-Key 필수. 성공 응답은 24시간 재사용합니다.")
+  @SecurityRequirement(name = "sessionCookie")
+  @ApiResponse(responseCode = "201", description = "생성 완료", useReturnTypeSchema = true)
+  @ApiResponse(responseCode = "400", description = "입력 오류")
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "매장 소유자 권한 필요")
+  @ApiResponse(responseCode = "409", description = "멱등 키 또는 시간 충돌")
+  @ApiResponse(responseCode = "404", description = "매장 또는 시술 없음")
+  @org.springframework.web.bind.annotation.PostMapping(
+      value = "/api/v1/owner/stores/{storeId}/services",
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<com.bintime.common.dto.ApiResponse<StoreServiceResponse>> createService(
+      @PathVariable("storeId") String storeId,
+      @RequestHeader("Idempotency-Key") String idempotencyKey,
+      @RequestBody com.bintime.store.dto.CreateStoreServiceRequest request) {
+    return ResponseEntity.status(201)
+        .body(
+            com.bintime.common.dto.ApiResponse.success(
+                svc.createService(actor.get(), storeId, idempotencyKey, request)));
+  }
+
+  @Operation(
+      operationId = "createSlot",
+      summary = "ST-20 · 일반 슬롯 등록",
+      description = "OWNER 인증 및 Idempotency-Key 필수. 성공 응답은 24시간 재사용합니다.")
+  @SecurityRequirement(name = "sessionCookie")
+  @ApiResponse(responseCode = "201", description = "생성 완료", useReturnTypeSchema = true)
+  @ApiResponse(responseCode = "400", description = "입력 오류")
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "매장 소유자 권한 필요")
+  @ApiResponse(responseCode = "409", description = "멱등 키 또는 시간 충돌")
+  @ApiResponse(responseCode = "404", description = "매장 또는 시술 없음")
+  @org.springframework.web.bind.annotation.PostMapping(
+      value = "/api/v1/owner/stores/{storeId}/slots",
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<com.bintime.common.dto.ApiResponse<ReservationSlotResponse>> createSlot(
+      @PathVariable("storeId") String storeId,
+      @RequestHeader("Idempotency-Key") String idempotencyKey,
+      @RequestBody com.bintime.store.dto.CreateSlotRequest request) {
+    return ResponseEntity.status(201)
+        .body(
+            com.bintime.common.dto.ApiResponse.success(
+                svc.createSlot(actor.get(), storeId, idempotencyKey, request)));
   }
 }

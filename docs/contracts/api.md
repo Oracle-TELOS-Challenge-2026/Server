@@ -2,7 +2,7 @@
 
 출처: [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4) 및 [공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 2026-10-16 조회 기준의 구현 제안 계약이다.
 
-45개 HTTP 경로(REST·SSE)와 별도 WebSocket 계약을 정의한다. Controller와 DTO는 계약 골격이며 Service, Repository, Port/Adapter 구현, 인증, 비즈니스 검증, 예약, AI 호출 및 이벤트 전송 로직은 포함하지 않는다. Controller에 도달한 요청은 공통 실패 JSON과 501 상태를 반환한다. 성공 응답 스키마는 향후 구현할 계약이다.
+48개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~17 및 등록 API 3개는 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. 나머지 미구현 도메인의 Controller는 공통 실패 JSON과 501 상태를 반환한다.
 
 개발 단계에서는 Spring Security 의존성을 제외하고 CSRF 헤더 바인딩을 선택으로 두었다. 명세의 인증·권한·CSRF 요구는 향후 구현할 계약이며 현재 런타임에서 적용되지 않는다.
 
@@ -18,7 +18,7 @@
 
 ## 명세 간 차이
 
-Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며, 기존 AGENTS.md의 HELD/CONFIRMED와 다르다. 알림도 조건 일치자 전원 대상으로 기존의 상위 5명 정책과 다르다. 이번 변경에서는 API 상태값을 Notion에 맞추고 두 정책의 실제 동작은 구현하지 않는다. 도메인 구현 전 정책 문서를 정합화해야 한다.
+Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며, 기존 AGENTS.md의 HELD/CONFIRMED와 다르다. 알림 정책은 search 구현에서 **필수 조건 일치 고객 전원**으로 확정했다. 벡터 top-k/유사도 임계값으로 고객을 제외하지 않는다. 시간 조건은 시술 시작부터 종료까지 전체 포함이다. 슬롯 선점/예약 상태는 store 책임으로 유지한다.
 
 ## API 이름 매핑
 
@@ -71,3 +71,13 @@ Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며
 | C-05 | chatting | PUT `/api/v1/chatting/rooms/{roomId}/read` | ChatRoomController.updateReadPosition | UpdateChatReadRequest | ChatReadResponse |
 
 실시간 프레임은 [realtime.md](realtime.md)를 참고한다.
+
+## 추가 store 등록 API
+
+| 구분 | 도메인 | 메서드·경로 | Controller | 요청 DTO | 응답 DTO |
+| --- | --- | --- | --- | --- | --- |
+| ST-18 | store | POST `/api/v1/owner/stores` | OwnerStoreController.createStore | CreateStoreRequest | StoreDetailResponse |
+| ST-19 | store | POST `/api/v1/owner/stores/{storeId}/services` | OwnerStoreController.createService | CreateStoreServiceRequest | StoreServiceResponse |
+| ST-20 | store | POST `/api/v1/owner/stores/{storeId}/slots` | OwnerStoreController.createSlot | CreateSlotRequest | ReservationSlotResponse |
+
+store MVP는 하나의 DB 트랜잭션에서 AVAILABLE → BOOKED로 확정하며 별도 HELD API를 도입하지 않는다. 예약 상태는 CONFIRMED와 후속 최종 상태로 구분한다. 한 매장의 동시 예약 자원은 1개다. store의 입력·권한·멱등성·마이그레이션·영속 작업·운영 인증 조건은 [store.md](../store.md)를 따른다.

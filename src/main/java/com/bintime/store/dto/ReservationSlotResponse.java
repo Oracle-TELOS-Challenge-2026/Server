@@ -21,9 +21,12 @@ public record ReservationSlotResponse(
             example = "svc_nail_01")
         String serviceId,
     @Schema(
-            description = "resourceId",
-            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "사장님 응답에서만 제공하는 단일 예약 자원",
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+            nullable = true,
             example = "staff_01")
+        @com.fasterxml.jackson.annotation.JsonInclude(
+            com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
         String resourceId,
     @Schema(
             description = "startAt",
@@ -83,7 +86,8 @@ public record ReservationSlotResponse(
               example = "35000")
           Long payable,
       @Schema(
-              description = "discountPercent",
+              description = "등록한 정률 할인율. 정액 할인가 발행은 null, 할인 없는 일반 슬롯은 0",
+              nullable = true,
               requiredMode = Schema.RequiredMode.REQUIRED,
               example = "30")
           Integer discountPercent,

@@ -10,7 +10,6 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,20 +23,30 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "store")
 public class OwnerReservationController {
 
-  // 실제 처리 전까지 성공으로 오인되지 않도록 모든 요청에 501을 반환한다.
+  private final com.bintime.store.service.StoreApplicationService svc;
+  private final com.bintime.common.auth.CurrentActor actor;
+
+  public OwnerReservationController(
+      @org.springframework.context.annotation.Lazy
+          com.bintime.store.service.StoreApplicationService svc,
+      com.bintime.common.auth.CurrentActor actor) {
+    this.svc = svc;
+    this.actor = actor;
+  }
+
   @Operation(
       operationId = "getOwnerReservation",
       summary = "ST-12 · 사장님 예약 상세 조회",
       description =
           "본인 매장 예약만 조회. 고객 표시 이름과 자원 ID 포함.\n\n"
               + "- OWNER — 해당 매장 소유자\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "Oracle 영속 데이터와 도메인 규칙을 검증합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4817c8755dc27b321fa8c"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -95,7 +104,9 @@ public class OwnerReservationController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "404", description = "리소스 없음")
   @GetMapping(
       value = "/api/v1/owner/stores/{storeId}/reservations/{reservationId}",
       produces = MediaType.APPLICATION_JSON_VALUE)
@@ -103,7 +114,10 @@ public class OwnerReservationController {
       getReservation(
           @PathVariable("storeId") String storeId,
           @PathVariable("reservationId") String reservationId) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok()
+        .body(
+            com.bintime.common.dto.ApiResponse.success(
+                svc.ownerReservation(actor.get(), storeId, reservationId)));
   }
 
   @Operation(
@@ -115,13 +129,13 @@ public class OwnerReservationController {
               + "- OWNER — 해당 매장 소유자\n"
               + "- X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "Oracle 영속 데이터와 도메인 규칙을 검증합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481d7a2e4fba29a1d7554"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -182,7 +196,11 @@ public class OwnerReservationController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "404", description = "리소스 없음")
+  @ApiResponse(responseCode = "409", description = "상태·버전·시간·가격 충돌")
   @PostMapping(
       value = "/api/v1/owner/stores/{storeId}/reservations/{reservationId}/status",
       produces = MediaType.APPLICATION_JSON_VALUE,
@@ -194,6 +212,9 @@ public class OwnerReservationController {
           @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
           @RequestHeader("Idempotency-Key") String idempotencyKey,
           @RequestBody UpdateReservationStatusRequest request) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok()
+        .body(
+            com.bintime.common.dto.ApiResponse.success(
+                svc.updateStatus(actor.get(), storeId, reservationId, idempotencyKey, request)));
   }
 }

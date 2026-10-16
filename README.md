@@ -10,7 +10,7 @@
 - **예약 실패 기반 대기:** 빈틈 내부에서 특정 매장 예약에 실패하면 해당 매장 취소 알림을 등록한다.
 - **취소 슬롯 등록:** 매장 관리자가 실제 예약 가능한 취소 시간과 가격을 직접 등록한다.
 - **개인화 매칭:** 필수 조건을 먼저 검증한 후 벡터 유사도 등으로 고객의 우선순위를 산정한다.
-- **실시간 알림과 예약:** 상위 5명에게 알림을 보내고 최초 유효 요청의 예약을 확정한다. 동시 요청에도 한 슬롯은 한 고객만 예약할 수 있다.
+- **실시간 알림과 예약:** 필수 조건 일치 고객 전원에게 알림을 보내고 최초 유효 요청의 예약을 확정한다. 동시 요청에도 한 슬롯은 한 고객만 예약할 수 있다.
 - **매장 채팅:** 고객과 매장 사장님이 WebSocket으로 대화한다. 예약 조건을 분석하는 AI 대화와는 역할을 구분한다.
 
 초기 MVP는 네일숍과 결제 없는 예약 확정에 집중한다. 외부 예약 시스템 자동 연동은 이후 확장 범위다.
@@ -38,10 +38,10 @@
 | Spring / Spring Boot | 백엔드 애플리케이션, API, 도메인 유스케이스 |
 | Redis | 캐시, 실시간 전달 및 비동기 이벤트 처리 보조. Pub/Sub·Streams 등의 사용 경계는 구현 시 결정 |
 | Elasticsearch | 매장·예약 조건 검색 및 임베딩 벡터 검색용 인덱스 |
-| Autonomous DB | 사용자·예약·채팅 등 영속 데이터 저장 후보. 정확한 제품과 연결 방식은 확인 필요 |
+| Oracle | 예약 대기·동의·매칭 작업 등 원본 데이터 저장. 로컬 Oracle Free 및 Oracle JDBC 사용 |
 | Nginx | 리버스 프록시와 실시간 연결 라우팅 |
 | Docker | 애플리케이션 및 인프라 실행 환경 컨테이너화 |
-| OpenAI API | 자연어 예약 조건 분석과 사용자별 선호 벡터 생성. 사용할 모델과 벡터 차원은 미정 |
+| OpenAI API | 자연어 예약 조건 분석과 사용자별 선호 벡터 생성. 임베딩 기본값 text-embedding-3-small, 1536차원 |
 
 Elasticsearch는 검색용 파생 인덱스로 사용하고, 예약 확정 여부의 원본 저장소로 사용하지 않는다. Redis의 캐시나 전달 상태만으로 최종 예약을 확정하지 않는다.
 
@@ -77,7 +77,7 @@ Controller마다 입력 Port를 만들거나 모든 Service에 인터페이스�
 
 ## 파일 구조
 
-현재는 Spring 부트스트랩과 도메인별 Controller·DTO 계약 골격이 있다. Service·Repository·Port·Adapter는 실제 기능을 구현할 때 필요한 범위만 추가한다.
+store·search는 실제 기능에 필요한 Service·Repository 및 연동 경계를 구현했다. user·notification·chatting의 Controller·DTO 계약 골격은 유지한다.
 
 ```text
 src/main/java/com/bintime/
@@ -94,11 +94,11 @@ src/main/java/com/bintime/
 
 ```text
 <domain>/
-├── controller/     # 현재: HTTP 매핑, Swagger 문서, 501 스텁
+├── controller/     # HTTP 매핑·Swagger, 미구현 도메인만 501 스텁
 ├── dto/            # 현재: 요청·응답 및 실시간 프레임 계약
-├── service/        # 추후 구현
-├── repository/     # 추후 구현
-├── entity/         # 추후 구현
+├── service/        # 필요한 도메인부터 구현
+├── repository/     # 필요한 도메인부터 구현
+├── entity/         # 영속 원장 모델
 ├── port/           # 외부 기능 인터페이스가 필요할 때 추가
 └── adapter/        # 해당 Port의 외부 연동 구현
 ```
@@ -120,13 +120,13 @@ IntelliJ에서도 Working directory를 저장소 루트로 지정하면 동일�
 
 ## API 계약 및 Swagger
 
-[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 이름과 요청·응답 스키마를 맞췄으며 실제 처리 로직은 아직 없다.
+[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 계약을 정의했다. search의 S-01~08은 실제 처리 로직을 제공하며 실행·의존 계약·복구 방법은 [search 안내](docs/search.md)를 참고한다.
 
 - [API별 Controller·DTO 이름 매핑](docs/contracts/api.md)
 - [SSE·WebSocket 계약](docs/contracts/realtime.md)
 - Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-- 기본 선택 `all`: `/v3/api-docs/all` (전체 45개 operation)
-- 외부 API OpenAPI: `/v3/api-docs/public` (43개 operation)
+- 기본 선택 `all`: `/v3/api-docs/all` (전체 48개 operation)
+- 외부 API OpenAPI: `/v3/api-docs/public` (46개 operation)
 - 내부 계약 OpenAPI: `/v3/api-docs/internal` (2개 operation)
 
 DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 명령을 실행한다. Gradle toolchain은 Java 21을 사용한다.
@@ -135,9 +135,9 @@ DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 �
 ./gradlew bootRun --args='--spring.profiles.active=api-docs'
 ```
 
-개발 단계에서는 Spring Security와 OAuth2 Client 의존성을 제외했다. API와 Swagger는 로그인 없이 접근하며 CSRF 헤더도 런타임에서 요구하지 않는다. Swagger의 세션 쿠키와 인증·CSRF 설명은 향후 구현할 API 계약이다. `api-docs` 프로필은 문서 검토용이며 Swagger의 API 실행 기능은 비활성화한다.
+개발 단계에서는 Spring Security와 OAuth2 Client 의존성을 제외했다. Swagger와 미구현 도메인의 골격 API는 로그인 없이 접근한다. store는 공개 조회를 제외한 API에 요청자 경계와 권한 검증을 적용한다. search의 보호 API는 user 공개 인증 계약과 CSRF 검증 연결을 요구하며, 미연결 상태에서는 접근을 거절한다. Swagger의 세션 쿠키와 인증·CSRF 설명은 향후 구현할 API 계약이다. `api-docs` 프로필은 문서 검토용이며 Swagger의 API 실행 기능은 비활성화한다.
 
-Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 문서의 200·201 등은 향후 구현할 성공 계약이다. 필수 입력에 대한 요청 바인딩은 그 전에 요청을 거절할 수 있다. 인증·권한·CSRF 검증, 비즈니스 검증, 예약, AI 호출, SSE/WS 전송은 구현하지 않았다.
+store·search 이외의 골격 Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 미구현 도메인의 200·201 등은 향후 구현할 성공 계약이다. 필수 입력에 대한 요청 바인딩은 그 전에 요청을 거절할 수 있다. 로그인과 실제 SSE/WS 전송은 별도 구현이다. store 보호 API는 검증된 인증·CSRF 연결 전에는 운영에서 닫혀 있으며, 명시적 local/test 대체 식별만 제공한다.
 
 ### 공통 JSON 응답
 
@@ -190,4 +190,10 @@ Notion v0.1의 알림 대상·슬롯 상태 정책은 기존 기획과 차이가
 ./gradlew build
 ```
 
-`format`은 API 골격의 Java 코드를 포맷한다. 기존 부트스트랩 파일은 대상에서 제외한다. 계약 테스트는 Notion에서 조회한 요청·응답 예시와 전체 경로를 Swagger에 대조하고 DTO 역직렬화와 501 스텁을 검증한다. 테스트는 H2와 문서용 프로필을 사용하며 외부 AI·DB·Redis 연결이 필요하지 않다.
+`format`은 API 골격의 Java 코드를 포맷한다. 기존 부트스트랩 파일은 대상에서 제외한다. 계약 테스트는 요청·응답 예시와 전체 경로를 Swagger에 대조하고 DTO 역직렬화와 미구현 도메인의 501 스텁을 검증한다. store는 실제 API·정합성 테스트를 별도로 수행한다. 테스트는 H2와 문서용 프로필을 사용하며 외부 AI·DB·Redis 연결이 필요하지 않다.
+
+### Store DB 반영 및 검증
+
+기존 초기 DB에는 `infra/oracle/migrations/02-store-api.sql`을 1회 적용하고 배포한다. 빈 DB는 최신 `infra/oracle/local-setup/01ddl.sql`만 실행한다. 기존 데이터는 보존하며 영업시간 미상 매장은 휴무로 보정한다. `ddl-auto=validate`를 유지한다. 새 search 대기 연동을 위한 SQL은 `docs/sql/search-oracle.sql`이다.
+
+`StoreApiTests`는 H2에서 API·동시성·멱등성·시간·대기 연동을 검증한다. `python3 infra/oracle/verify-store.py`는 로컬 Oracle의 격리 스키마에서 초기/변경 SQL·기존 데이터 보존·같은 API 및 경합 테스트를 실행한다. 인증 연결 조건, 테스트 실행 옵션, 후속 작업 소비 계약은 [store.md](docs/store.md)에 정리했다.
