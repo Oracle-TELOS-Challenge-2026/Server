@@ -139,3 +139,34 @@ select user_id, lease_until from search_user_vector where lease_owner is not nul
 2026-10-16 검증: `.env`의 실제 키로 합성 한국어 선호 JSON을 임베딩하고, 별도 Oracle 스키마의 당시 `search_vector`(v1) CLOB에 실제 응답을 저장·조회했다. 동일 Oracle 스키마에서 선호 저장/outbox 롤백·동시 호출 방지·lease 회수·오래된 응답 차단 테스트도 통과했으며 임시 스키마는 정리했다. 이 검증에서는 기존 앱 스키마를 변경하지 않았다. 이후 같은 날 로컬 `FREEPDB1/BINTIME_APP`에 전체 search DDL을 별도로 적용했다. 기존 13개 테이블의 행 수를 유지하면서 search 테이블 11개와 잠금 버킷 256개를 추가했으며, 상세 반영 범위는 [진행 문서](search-progress.md#4-영속화와-db-반영)에 기록했다.
 
 2026-10-16 v2 전환: 로컬 `FREEPDB1/BINTIME_APP`에 migration 04·05를 적용해 search를 7개로 단순화했다. 기존 13개 테이블과 행 수, 잠금 256행을 유지했으며 최종 테이블은 20개다. Java/JDBC·worker·테스트도 v2로 전환했고 전체 format/test/build와 격리 Oracle의 대기·벡터 테스트를 통과했다.
+
+## Docker 실행과 운영 ES 연결
+
+로컬은 `docker compose -f compose.search.yaml up -d --wait`로 실행한다. `http://localhost:9200`을 사용하며 인증 없이 localhost에서만 접근한다. 데이터 볼륨은 기존 `search-es`를 유지한다.
+
+운영은 `compose.yaml`의 `elasticsearch` 서비스를 사용한다. 앱과 ES는 같은 서버의 비공개 `search` Docker 네트워크에 연결되고, ES의 9200 포트는 호스트에 공개하지 않는다. `application-prod.properties`의 기본 URL은 `http://elasticsearch:9200`이다. HTTP는 이 단일 호스트 내부 네트워크에 한정한다. 다른 서버의 ES를 사용하면 해당 환경의 신뢰 가능한 HTTPS URL과 인증 정보를 설정한다.
+
+서버 `.env`에 [.env.prod.example](../.env.prod.example)을 참고해 `ELASTIC_PASSWORD`를 추가한다. 예를 들어 `openssl rand -hex 32`로 별도 비밀번호를 생성한다. 기존 데이터 볼륨의 초기 비밀번호를 설정하는 값이므로, 이미 초기화한 ES의 비밀번호 변경은 ES 계정 변경 절차로 수행하고 앱 설정도 함께 갱신한다.
+
+```bash
+# 운영 서버에서 실행. 로컬 개발 .env를 그대로 사용하지 않는다.
+docker compose -f compose.yaml up -d --wait elasticsearch
+# 기존 배포 절차에 따라 새 JAR/이미지를 준비한 후 앱도 배포한다.
+docker compose -f compose.yaml up -d --build app nginx
+```
+
+| 환경변수 | 의미 |
+| --- | --- |
+| `ELASTIC_PASSWORD` | 운영 Compose ES의 초기 elastic 비밀번호이자 앱에 전달하는 기본 접속 비밀번호. 필수 |
+| `SEARCH_ELASTICSEARCH_URL` | 기본 `http://elasticsearch:9200` |
+| `SEARCH_ELASTICSEARCH_ALIAS` | 기본 `bintime-stores` |
+| `SEARCH_ELASTICSEARCH_USERNAME` | 기본 `elastic` |
+| `SEARCH_ELASTICSEARCH_AUTHORIZATION` | 선택적 전체 Authorization 헤더. 설정하면 Basic 계정보다 우선. 별도 계정의 ApiKey도 가능 |
+| `ES_JAVA_OPTS` | 기본 `-Xms512m -Xmx512m` |
+| `ES_MEMORY_LIMIT` | ES 컨테이너 메모리 상한, 기본 `1g` |
+
+Compose는 `ELASTIC_PASSWORD`를 앱의 `SEARCH_ELASTICSEARCH_PASSWORD`로 전달한다. Compose 밖에서 JAR를 실행하거나 별도 ES 계정을 사용하면 `SEARCH_ELASTICSEARCH_USERNAME/PASSWORD`를 프로세스 환경변수로 제공한다. 별도 서버 설정에 맞춰 Compose의 앱 비밀번호 매핑을 바꾸거나 Authorization 헤더를 사용한다. 자체 서명 인증서는 JVM 신뢰 저장소 설정이 별도로 필요하며 인증서 검증을 해제하지 않는다.
+
+운영은 ES 영속 볼륨·재시작 정책·인증된 상태 확인을 사용하며 ES healthy 이후 앱을 시작한다. 초기 `elastic` 계정은 설정 단순화를 위한 기본값이며, 운영 계정 정책에 따라 필요한 인덱스/alias/PIT 권한의 전용 계정이나 API 키로 전환할 수 있다. ES 프로세스가 정상이어도 인덱스 생성·store 데이터 연결은 별도다. 초기 데이터 공급은 `SearchIndexService.rebuild()`와 store 공개 계약 연결이 필요하다.
+
+설정 참고: [Elastic Docker 설정](https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-configure), [보안 최소 설정](https://www.elastic.co/guide/en/elasticsearch/reference/current/security-minimal-setup.html).

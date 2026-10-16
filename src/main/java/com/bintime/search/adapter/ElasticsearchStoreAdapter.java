@@ -24,11 +24,23 @@ public class ElasticsearchStoreAdapter implements StoreIndexPort {
       JsonMapper json,
       @Value("${search.elasticsearch.url:http://localhost:9200}") String base,
       @Value("${search.elasticsearch.alias:bintime-stores}") String alias,
-      @Value("${search.elasticsearch.authorization:}") String authorization) {
+      @Value("${search.elasticsearch.authorization:}") String authorization,
+      @Value("${search.elasticsearch.username:}") String username,
+      @Value("${search.elasticsearch.password:}") String password) {
     this.json = json;
     this.base = base;
     this.alias = alias;
-    this.authorization = authorization;
+    // 전체 헤더는 ApiKey 인증도 지원한다. 없으면 운영 Compose의 계정으로 Basic 인증한다.
+    this.authorization =
+        !authorization.isBlank()
+            ? authorization
+            : !username.isBlank() && !password.isBlank()
+                ? "Basic "
+                    + Base64.getEncoder()
+                        .encodeToString(
+                            (username + ":" + password)
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                : "";
     if (!alias.matches("[a-z0-9_-]+")) throw new IllegalArgumentException("Invalid index alias");
   }
 
