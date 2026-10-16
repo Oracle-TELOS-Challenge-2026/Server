@@ -39,7 +39,7 @@ public class StoreController {
   @GetMapping(value = "/api/v1/stores/categories", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<CategoryListResponse>> getCategories() {
 
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -56,7 +56,7 @@ public class StoreController {
   @GetMapping(value = "/api/v1/stores/{storeId}", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<StoreDetailResponse>> getStore(
       @PathVariable("storeId") String storeId) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -80,7 +80,7 @@ public class StoreController {
               schema = @io.swagger.v3.oas.annotations.media.Schema(minimum = "1", maximum = "100"))
           @RequestParam(value = "limit", required = false, defaultValue = "20")
           Integer limit) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -111,7 +111,7 @@ public class StoreController {
                       @io.swagger.v3.oas.annotations.media.Schema(minimum = "1", maximum = "100"))
               @RequestParam(value = "limit", required = false, defaultValue = "20")
               Integer limit) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -130,6 +130,6 @@ public class StoreController {
       produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<ReservationSlotResponse>> getSlot(
       @PathVariable("storeId") String storeId, @PathVariable("slotId") String slotId) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

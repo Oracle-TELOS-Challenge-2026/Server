@@ -48,10 +48,10 @@ public class WaitlistController {
       produces = MediaType.APPLICATION_JSON_VALUE,
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<WaitlistResponse>> createWaitlist(
-      @RequestHeader("X-CSRF-Token") String csrfToken,
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestHeader("Idempotency-Key") String idempotencyKey,
       @RequestBody CreateWaitlistRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -79,7 +79,7 @@ public class WaitlistController {
               schema = @io.swagger.v3.oas.annotations.media.Schema(minimum = "1", maximum = "100"))
           @RequestParam(value = "limit", required = false, defaultValue = "20")
           Integer limit) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -99,7 +99,7 @@ public class WaitlistController {
       produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<WaitlistResponse>> getWaitlist(
       @PathVariable("waitlistId") String waitlistId) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -121,9 +121,9 @@ public class WaitlistController {
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<WaitlistResponse>> updateWaitlist(
       @PathVariable("waitlistId") String waitlistId,
-      @RequestHeader("X-CSRF-Token") String csrfToken,
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestBody UpdateWaitlistRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -146,9 +146,9 @@ public class WaitlistController {
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<WaitlistResponse>> cancelWaitlist(
       @PathVariable("waitlistId") String waitlistId,
-      @RequestHeader("X-CSRF-Token") String csrfToken,
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestHeader("Idempotency-Key") String idempotencyKey,
       @RequestBody CancelWaitlistRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

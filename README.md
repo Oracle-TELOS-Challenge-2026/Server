@@ -125,6 +125,7 @@ IntelliJ에서도 Working directory를 저장소 루트로 지정하면 동일�
 - [API별 Controller·DTO 이름 매핑](docs/contracts/api.md)
 - [SSE·WebSocket 계약](docs/contracts/realtime.md)
 - Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+- 기본 선택 `all`: `/v3/api-docs/all` (전체 45개 operation)
 - 외부 API OpenAPI: `/v3/api-docs/public` (43개 operation)
 - 내부 계약 OpenAPI: `/v3/api-docs/internal` (2개 operation)
 
@@ -134,9 +135,26 @@ DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 �
 ./gradlew bootRun --args='--spring.profiles.active=api-docs'
 ```
 
-현재 Spring Security 기본 보안을 유지한다. 문서 접근 시 사용자명 `user`와 실행 로그의 임시 생성 비밀번호로 로그인한다. 이는 문서 열람용 기본 인증이며 명세의 카카오 로그인·세션 인증 구현이 아니다. `api-docs` 프로필은 문서 검토용이며 Swagger의 API 실행 기능은 비활성화한다.
+개발 단계에서는 Spring Security와 OAuth2 Client 의존성을 제외했다. API와 Swagger는 로그인 없이 접근하며 CSRF 헤더도 런타임에서 요구하지 않는다. Swagger의 세션 쿠키와 인증·CSRF 설명은 향후 구현할 API 계약이다. `api-docs` 프로필은 문서 검토용이며 Swagger의 API 실행 기능은 비활성화한다.
 
-Controller에 도달한 유효한 요청은 본문 없는 `501 Not Implemented`를 반환한다. 문서의 200·201 등은 향후 구현할 성공 계약이다. Spring Security와 요청 바인딩은 그 전에 요청을 거절할 수 있다. 인증·권한·CSRF 검증, 비즈니스 검증, 예약, AI 호출, SSE/WS 전송은 구현하지 않았다.
+Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 문서의 200·201 등은 향후 구현할 성공 계약이다. 필수 입력에 대한 요청 바인딩은 그 전에 요청을 거절할 수 있다. 인증·권한·CSRF 검증, 비즈니스 검증, 예약, AI 호출, SSE/WS 전송은 구현하지 않았다.
+
+### 공통 JSON 응답
+
+`BaseResponse<T>`를 성공 DTO `ApiResponse<T>`와 실패 DTO `ApiErrorResponse`가 상속한다. `/api/v1/**`의 일반 응답은 자동 wrapping하며, 이미 공통 DTO인 응답은 중복으로 감싸지 않는다. `meta`는 서버가 채우며 `timestamp`(Asia/Seoul)와 `path`(쿼리 제외)만 제공한다.
+
+```json
+{
+  "resultType": "SUCCESS",
+  "success": { "data": { "id": "usr_001" } },
+  "error": null,
+  "meta": { "timestamp": "2026-07-12T07:00:00", "path": "/api/v1/users/me" }
+}
+```
+
+실패는 `resultType: "FAILURE"`, `success: null`, `error: {code, message, details, retryable}`이며 HTTP 오류 상태를 유지한다. 입력 바인딩 오류와 미구현 501도 같은 형식이다. 기존 Notion의 `data/meta(requestId, serverTime)` 응답 봉투는 이 구조로 대체했으며 각 도메인 데이터의 필드는 유지한다.
+
+204·205·리다이렉트는 본문 없이 유지하고, SSE·WebSocket은 각 전송 프레임을 유지한다. Swagger와 Actuator 응답에는 API 봉투를 적용하지 않는다. 상세 사용법은 [공통 응답 계약](docs/contracts/response.md)을 참고한다.
 
 Notion v0.1의 알림 대상·슬롯 상태 정책은 기존 기획과 차이가 있어 [계약 문서](docs/contracts/api.md)에 기록했다. 이번 변경은 해당 정책을 실행하지 않는다.
 

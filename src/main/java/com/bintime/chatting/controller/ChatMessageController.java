@@ -53,7 +53,7 @@ public class ChatMessageController {
               schema = @io.swagger.v3.oas.annotations.media.Schema(minimum = "1", maximum = "100"))
           @RequestParam(value = "limit", required = false, defaultValue = "30")
           Integer limit) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -80,9 +80,9 @@ public class ChatMessageController {
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<ChatMessageResponse>> sendMessage(
       @PathVariable("roomId") String roomId,
-      @RequestHeader("X-CSRF-Token") String csrfToken,
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestHeader("Idempotency-Key") String idempotencyKey,
       @RequestBody SendChatMessageRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

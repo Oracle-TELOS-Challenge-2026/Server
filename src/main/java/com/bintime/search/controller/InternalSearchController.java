@@ -36,6 +36,6 @@ public class InternalSearchController {
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<MatchJobResponse>> createMatchJob(
       @RequestBody CreateMatchJobRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

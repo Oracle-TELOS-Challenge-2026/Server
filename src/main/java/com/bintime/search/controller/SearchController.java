@@ -79,7 +79,7 @@ public class SearchController {
               schema = @io.swagger.v3.oas.annotations.media.Schema(minimum = "1", maximum = "50"))
           @RequestParam(value = "limit", required = false, defaultValue = "20")
           Integer limit) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -100,7 +100,8 @@ public class SearchController {
       produces = MediaType.APPLICATION_JSON_VALUE,
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<AnalyzeIntentResponse>> analyzeIntent(
-      @RequestHeader("X-CSRF-Token") String csrfToken, @RequestBody AnalyzeIntentRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
+      @RequestBody AnalyzeIntentRequest request) {
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

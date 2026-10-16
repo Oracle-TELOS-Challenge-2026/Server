@@ -55,7 +55,7 @@ public class OwnerVacancyController {
               schema = @io.swagger.v3.oas.annotations.media.Schema(minimum = "1", maximum = "100"))
           @RequestParam(value = "limit", required = false, defaultValue = "20")
           Integer limit) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -80,10 +80,10 @@ public class OwnerVacancyController {
   public ResponseEntity<com.bintime.common.dto.ApiResponse<PublishVacancyResponse>> publishVacancy(
       @PathVariable("storeId") String storeId,
       @PathVariable("vacancyId") String vacancyId,
-      @RequestHeader("X-CSRF-Token") String csrfToken,
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestHeader("Idempotency-Key") String idempotencyKey,
       @RequestBody PublishVacancyRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -108,9 +108,9 @@ public class OwnerVacancyController {
       withdrawVacancy(
           @PathVariable("storeId") String storeId,
           @PathVariable("vacancyId") String vacancyId,
-          @RequestHeader("X-CSRF-Token") String csrfToken,
+          @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
           @RequestHeader("Idempotency-Key") String idempotencyKey,
           @RequestBody WithdrawVacancyRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

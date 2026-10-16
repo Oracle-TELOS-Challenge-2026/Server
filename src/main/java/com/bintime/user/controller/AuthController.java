@@ -38,7 +38,7 @@ public class AuthController {
   @GetMapping(value = "/api/v1/auth/oauth/kakao/start")
   public ResponseEntity<Void> startKakaoLogin(
       @RequestParam(value = "returnTo", required = false) String returnTo) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -61,7 +61,7 @@ public class AuthController {
   public ResponseEntity<Void> handleKakaoCallback(
       @RequestParam(value = "code", required = true) String code,
       @RequestParam(value = "state", required = true) String state) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -78,8 +78,9 @@ public class AuthController {
   @ApiResponse(responseCode = "204", description = "204 No Content — 응답 본문 없음", content = @Content)
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PostMapping(value = "/api/v1/auth/logout")
-  public ResponseEntity<Void> logout(@RequestHeader("X-CSRF-Token") String csrfToken) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+  public ResponseEntity<Void> logout(
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken) {
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -95,6 +96,6 @@ public class AuthController {
   @GetMapping(value = "/api/v1/auth/csrf", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<CsrfTokenResponse>> getCsrfToken() {
 
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

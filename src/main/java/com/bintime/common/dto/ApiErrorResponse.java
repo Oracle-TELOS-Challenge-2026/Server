@@ -1,12 +1,15 @@
 package com.bintime.common.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import java.util.List;
 
-public record ApiErrorResponse(Error error, ResponseMeta meta) {
-  @Schema(name = "ApiError")
-  public record Error(String code, String message, List<Detail> details, Boolean retryable) {}
+@Schema(description = "JSON 실패 응답. success는 null이며 error에 오류 정보 포함")
+public final class ApiErrorResponse extends BaseResponse<Void> {
+  public ApiErrorResponse(ApiError error, ResponseMeta meta) {
+    super(ResultType.FAILURE, null, error, meta);
+  }
 
-  @Schema(name = "ApiErrorDetail")
-  public record Detail(String field, String reason) {}
+  @Override
+  public ApiErrorResponse withMeta(ResponseMeta meta) {
+    return new ApiErrorResponse(getError(), meta);
+  }
 }

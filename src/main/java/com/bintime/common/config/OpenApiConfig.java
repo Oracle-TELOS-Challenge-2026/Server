@@ -38,6 +38,15 @@ import org.springframework.context.annotation.Configuration;
 public class OpenApiConfig {
 
   @Bean
+  GroupedOpenApi allApi() {
+    return GroupedOpenApi.builder()
+        .group("all")
+        .pathsToMatch("/api/v1/**")
+        .addOpenApiCustomizer(contractSchemas())
+        .build();
+  }
+
+  @Bean
   GroupedOpenApi publicApi() {
     return GroupedOpenApi.builder()
         .group("public")
@@ -77,14 +86,15 @@ public class OpenApiConfig {
                           operation -> {
                             for (String code :
                                 new String[] {
-                                  "400", "401", "403", "404", "409", "422", "429", "503"
+                                  "400", "401", "403", "404", "409", "422", "429", "500", "501",
+                                  "503"
                                 }) {
                               operation
                                   .getResponses()
                                   .addApiResponse(
                                       code,
                                       new ApiResponse()
-                                          .description("명세상 공통 오류 (실제 처리 미구현)")
+                                          .description("공통 실패 응답 (resultType=FAILURE)")
                                           .content(
                                               new Content()
                                                   .addMediaType(

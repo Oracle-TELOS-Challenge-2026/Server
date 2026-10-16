@@ -51,7 +51,7 @@ public class NotificationController {
                       @io.swagger.v3.oas.annotations.media.Schema(minimum = "1", maximum = "100"))
               @RequestParam(value = "limit", required = false, defaultValue = "20")
               Integer limit) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -74,9 +74,9 @@ public class NotificationController {
   public ResponseEntity<com.bintime.common.dto.ApiResponse<NotificationResponse>>
       markNotificationRead(
           @PathVariable("notificationId") String notificationId,
-          @RequestHeader("X-CSRF-Token") String csrfToken,
+          @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
           @RequestBody MarkNotificationReadRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -113,6 +113,6 @@ public class NotificationController {
   public ResponseEntity<SseEmitter> streamNotifications(
       @RequestParam(value = "afterEventId", required = false) String afterEventId,
       @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

@@ -2,16 +2,18 @@
 
 출처: [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4) 및 [공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 2026-10-16 조회 기준의 구현 제안 계약이다.
 
-45개 HTTP 경로(REST·SSE)와 별도 WebSocket 계약을 정의한다. Controller와 DTO는 계약 골격이며 Service, Repository, Port/Adapter 구현, 인증, 검증, 예약, AI 호출 및 이벤트 전송 로직은 포함하지 않는다. Controller에 도달한 요청은 본문 없는 501을 반환한다. 성공 응답 스키마는 향후 구현할 계약이다.
+45개 HTTP 경로(REST·SSE)와 별도 WebSocket 계약을 정의한다. Controller와 DTO는 계약 골격이며 Service, Repository, Port/Adapter 구현, 인증, 비즈니스 검증, 예약, AI 호출 및 이벤트 전송 로직은 포함하지 않는다. Controller에 도달한 요청은 공통 실패 JSON과 501 상태를 반환한다. 성공 응답 스키마는 향후 구현할 계약이다.
+
+개발 단계에서는 Spring Security 의존성을 제외하고 CSRF 헤더 바인딩을 선택으로 두었다. 명세의 인증·권한·CSRF 요구는 향후 구현할 계약이며 현재 런타임에서 적용되지 않는다.
 
 ## 이름 및 응답 규칙
 
 - Controller는 리소스·호출 주체별로 구분한다. DTO는 `<동작><리소스>Request`, `<리소스>Response`, 목록은 `<리소스>ListResponse`를 사용한다.
 - DTO는 도메인의 `dto` 패키지에 Java record로 정의한다. 공통 HTTP 봉투만 `common.dto`에 둔다. DTO를 도메인 엔티티로 공유하지 않는다.
-- JSON 성공은 `ApiResponse<T>(data, meta)`. 목록의 items/page/counts 구조를 유지한다. 204·OAuth redirect·SSE·WebSocket은 봉투 예외다.
+- JSON 응답은 `BaseResponse<T>` 상속 기반의 `resultType/success.data/error/meta(timestamp,path)` 구조다. 기존 Notion의 최상위 data는 success.data로 이동한다. 목록의 items/page/counts 구조는 그 안에 유지한다. 204·OAuth redirect·SSE·WebSocket은 봉투 예외다. 자세한 계약은 [response.md](response.md)를 따른다.
 - ID는 String, 오프셋 포함 시각은 OffsetDateTime, 날짜는 LocalDate, 금액은 정수 원이다. Web Push expirationTime은 Unix epoch 밀리초다.
 - PATCH의 생략/명시적 null 구분, 필수 nullable 필드 존재 검사, 필드 간 조건 검증은 실제 구현 시 보완해야 한다. 현재 record와 Swagger 메타데이터만으로 런타임 검증이 구현된 것은 아니다.
-- 내부 API는 별도 Swagger 그룹으로 분리한다. 내부 인증의 구체적인 방식은 미정이며 공개 호출용으로 제공하지 않는다.
+- Swagger 첫 화면의 `all` 그룹은 전체 HTTP API 45개를 표시한다. `public`은 43개, `internal`은 2개를 표시한다. 내부 인증의 구체적인 방식은 미정이며 내부 계약은 외부 고객의 호출용이 아니다.
 - Notion 예시에서 생략된 선택 필드(reason, openingHours 등)는 공통 규약을 기준으로 포함한다. ST-08은 OWNER 조회 시 customer/resourceId가 추가된다.
 
 ## 명세 간 차이

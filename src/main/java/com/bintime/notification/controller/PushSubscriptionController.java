@@ -46,9 +46,9 @@ public class PushSubscriptionController {
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<PushSubscriptionResponse>>
       registerPushSubscription(
-          @RequestHeader("X-CSRF-Token") String csrfToken,
+          @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
           @RequestBody RegisterPushSubscriptionRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -67,7 +67,7 @@ public class PushSubscriptionController {
   @DeleteMapping(value = "/api/v1/notifications/push-subscriptions/{subscriptionId}")
   public ResponseEntity<Void> deletePushSubscription(
       @PathVariable("subscriptionId") String subscriptionId,
-      @RequestHeader("X-CSRF-Token") String csrfToken) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken) {
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

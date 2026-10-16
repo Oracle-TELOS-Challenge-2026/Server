@@ -43,7 +43,7 @@ public class UserController {
   @GetMapping(value = "/api/v1/users/me", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<UserProfileResponse>> getMyProfile() {
 
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -64,8 +64,9 @@ public class UserController {
       produces = MediaType.APPLICATION_JSON_VALUE,
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<UserProfileResponse>> updateMyProfile(
-      @RequestHeader("X-CSRF-Token") String csrfToken, @RequestBody UpdateProfileRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
+      @RequestBody UpdateProfileRequest request) {
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -86,8 +87,9 @@ public class UserController {
       produces = MediaType.APPLICATION_JSON_VALUE,
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<UserLocationResponse>> saveMyLocation(
-      @RequestHeader("X-CSRF-Token") String csrfToken, @RequestBody SaveLocationRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
+      @RequestBody SaveLocationRequest request) {
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -104,8 +106,9 @@ public class UserController {
   @ApiResponse(responseCode = "204", description = "204 No Content — 응답 본문 없음", content = @Content)
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @DeleteMapping(value = "/api/v1/users/me/location")
-  public ResponseEntity<Void> deleteMyLocation(@RequestHeader("X-CSRF-Token") String csrfToken) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+  public ResponseEntity<Void> deleteMyLocation(
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken) {
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -127,8 +130,8 @@ public class UserController {
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<UserPreferencesResponse>>
       saveMyPreferences(
-          @RequestHeader("X-CSRF-Token") String csrfToken,
+          @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
           @RequestBody SavePreferencesRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

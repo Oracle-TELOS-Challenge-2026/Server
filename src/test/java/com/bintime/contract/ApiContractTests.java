@@ -6,23 +6,15 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.HashSet;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-@SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {
-      "spring.security.user.name=contract-test",
-      "spring.security.user.password=contract-test-password"
-    })
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles({"test", "api-docs"})
 class ApiContractTests {
   private final JsonMapper mapper = JsonMapper.builder().build();
@@ -30,10 +22,12 @@ class ApiContractTests {
 
   @Test
   void allNotionHttpOperationsHaveMatchingSwaggerContracts() throws Exception {
+    JsonNode allDoc = getDoc("all");
     JsonNode publicDoc = getDoc("public");
     JsonNode internalDoc = getDoc("internal");
     assertThat(operationCount(publicDoc)).isEqualTo(43);
     assertThat(operationCount(internalDoc)).isEqualTo(2);
+    assertThat(operationCount(allDoc)).isEqualTo(45);
     var operationIds = new HashSet<String>();
 
     for (JsonNode contract : contracts()) {
@@ -41,6 +35,9 @@ class ApiContractTests {
       JsonNode doc = path.contains("/internal/") ? internalDoc : publicDoc;
       JsonNode operation =
           doc.path("paths").path(path).path(contract.path("method").asText().toLowerCase());
+      assertThat(
+              allDoc.path("paths").path(path).has(contract.path("method").asText().toLowerCase()))
+          .isTrue();
       assertThat(operation.isMissingNode()).as(contract.path("id").asText()).isFalse();
       assertThat(operationIds.add(operation.path("operationId").asText())).isTrue();
       assertThat(operation.path("responses").has(contract.path("status").asText())).isTrue();
@@ -75,7 +72,11 @@ class ApiContractTests {
         JsonNode envelope = resolve(doc, schema);
         assertThat(envelope.path("properties").has("meta")).isTrue();
         assertExampleFields(
-            doc, envelope.path("properties").path("data"), contract.path("responseExample"));
+            doc,
+            resolve(doc, envelope.path("properties").path("success"))
+                .path("properties")
+                .path("data"),
+            contract.path("responseExample"));
       }
     }
     assertThat(publicDoc.path("components").path("schemas").has("ChatWebSocketFrame")).isTrue();
@@ -91,6 +92,49 @@ class ApiContractTests {
                 .path("content")
                 .has("text/event-stream"))
         .isTrue();
+  }
+
+  @Test
+  void swaggerUiSelectsTheCompleteApiGroupByDefault() throws Exception {
+    JsonNode config = getDoc("swagger-config");
+    assertThat(config.path("urls.primaryName").asText()).isEqualTo("all");
+    var groups = new HashSet<String>();
+    for (JsonNode group : config.path("urls")) {
+      groups.add(group.path("name").asText());
+    }
+    assertThat(groups).contains("all", "public", "internal");
+  }
+
+  @Test
+  void developmentEndpointsDoNotRequireAuthenticationOrCsrf() throws Exception {
+    var client = HttpClient.newHttpClient();
+    var get =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/users/me"))
+            .GET()
+            .build();
+    assertThat(client.send(get, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(501);
+
+    var post =
+        HttpRequest.newBuilder(
+                URI.create("http://localhost:" + port + "/api/v1/search/intents/analyze"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString("{\"text\":\"내일 네일 예약\"}"))
+            .build();
+    assertThat(client.send(post, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(501);
+  }
+
+  @Test
+  void unmappedApiPathsReturnTheCommonFailureEnvelope() throws Exception {
+    var request =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/not-a-real-route"))
+            .GET()
+            .build();
+    var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+    assertThat(response.statusCode()).isEqualTo(404);
+    JsonNode body = mapper.readTree(response.body());
+    assertThat(body.path("resultType").asText()).isEqualTo("FAILURE");
+    assertThat(body.path("success").isNull()).isTrue();
+    assertThat(body.at("/meta/path").asText()).isEqualTo("/api/v1/not-a-real-route");
   }
 
   @Test
@@ -126,12 +170,19 @@ class ApiContractTests {
               .filter(m -> m.getName().equals(contract.path("methodName").asText()))
               .findFirst()
               .orElseThrow();
-      ResponseEntity<?> response =
-          (ResponseEntity<?>)
-              method.invoke(
-                  type.getConstructor().newInstance(), new Object[method.getParameterCount()]);
-      assertThat(response.getStatusCode().value()).isEqualTo(501);
-      assertThat(response.getBody()).isNull();
+      Object controller = type.getConstructor().newInstance();
+      try {
+        method.invoke(controller, new Object[method.getParameterCount()]);
+        org.junit.jupiter.api.Assertions.fail("Stub must throw a 501 status exception");
+      } catch (java.lang.reflect.InvocationTargetException exception) {
+        assertThat(exception.getCause())
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(
+                ((org.springframework.web.server.ResponseStatusException) exception.getCause())
+                    .getStatusCode()
+                    .value())
+            .isEqualTo(501);
+      }
     }
   }
 
@@ -142,13 +193,8 @@ class ApiContractTests {
   }
 
   private JsonNode getDoc(String group) throws Exception {
-    String credentials =
-        Base64.getEncoder()
-            .encodeToString(
-                "contract-test:contract-test-password".getBytes(StandardCharsets.UTF_8));
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/v3/api-docs/" + group))
-            .header("Authorization", "Basic " + credentials)
             .GET()
             .build();
     var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());

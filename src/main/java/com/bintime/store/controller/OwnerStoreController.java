@@ -48,9 +48,9 @@ public class OwnerStoreController {
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<StoreDetailResponse>> updateStore(
       @PathVariable("storeId") String storeId,
-      @RequestHeader("X-CSRF-Token") String csrfToken,
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestBody UpdateStoreRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -72,7 +72,7 @@ public class OwnerStoreController {
       @PathVariable("storeId") String storeId,
       @RequestParam(value = "date", required = true) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
           LocalDate date) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -95,8 +95,8 @@ public class OwnerStoreController {
   public ResponseEntity<com.bintime.common.dto.ApiResponse<StoreServiceResponse>> updateService(
       @PathVariable("storeId") String storeId,
       @PathVariable("serviceId") String serviceId,
-      @RequestHeader("X-CSRF-Token") String csrfToken,
+      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestBody UpdateStoreServiceRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

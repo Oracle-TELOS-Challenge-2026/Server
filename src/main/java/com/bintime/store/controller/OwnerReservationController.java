@@ -43,7 +43,7 @@ public class OwnerReservationController {
       getReservation(
           @PathVariable("storeId") String storeId,
           @PathVariable("reservationId") String reservationId) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 
   @Operation(
@@ -69,9 +69,9 @@ public class OwnerReservationController {
       updateReservationStatus(
           @PathVariable("storeId") String storeId,
           @PathVariable("reservationId") String reservationId,
-          @RequestHeader("X-CSRF-Token") String csrfToken,
+          @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
           @RequestHeader("Idempotency-Key") String idempotencyKey,
           @RequestBody UpdateReservationStatusRequest request) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 }

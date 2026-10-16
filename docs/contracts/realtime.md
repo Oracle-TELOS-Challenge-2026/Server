@@ -16,7 +16,7 @@ data: {"notification":{"id":"noti_001","type":"VACANCY_MATCHED"}}
 : heartbeat
 ```
 
-위 notification은 축약 예시이며 전체 필드는 Swagger의 `NotificationResponse`를 따른다. JSON data는 `NotificationStreamPayload`로 표현하며 HTTP 응답의 data/meta 봉투를 씌우지 않는다.
+위 notification은 축약 예시이며 전체 필드는 Swagger의 `NotificationResponse`를 따른다. JSON data는 `NotificationStreamPayload`로 표현하며 HTTP 응답의 resultType/success/error/meta 봉투를 씌우지 않는다. 스트림 시작 전의 HTTP 오류 응답은 공통 실패 봉투를 사용한다.
 
 | event | data DTO | 의미 |
 | --- | --- | --- |
