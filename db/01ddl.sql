@@ -1,0 +1,312 @@
+-- BinTime HACKATHON MVP / Oracle Autonomous Database / 19c+ SQL subset
+-- 10 tables, 5 domains. Web push is REQUIRED. One owner and one concurrent appointment per store.
+-- Run ONCE in an EMPTY application schema. Not a migration from the 30-table draft.
+SET DEFINE OFF
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+
+--------------------------------------------------------------------------------
+-- 1. USER: login identity, role, location and preferences in one table
+--------------------------------------------------------------------------------
+CREATE TABLE user_accounts (
+                               user_id          VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
+                               kakao_subject    VARCHAR2(100 BYTE),
+                               display_name     VARCHAR2(30 CHAR) NOT NULL,
+                               role_code        VARCHAR2(8 BYTE) DEFAULT 'CUSTOMER' NOT NULL,
+                               latitude         NUMBER(9,6),
+                               longitude        NUMBER(10,6),
+                               location_at      TIMESTAMP(6) WITH TIME ZONE,
+                               preferences_json CLOB DEFAULT '{"categories":[],"keywords":[],"maxPrice":null}' NOT NULL,
+                               created_at       TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+                               CONSTRAINT pk_user_accounts PRIMARY KEY (user_id),
+                               CONSTRAINT uq_user_kakao UNIQUE (kakao_subject),
+                               CONSTRAINT ck_user_name CHECK (TRIM(display_name) IS NOT NULL),
+                               CONSTRAINT ck_user_role CHECK (role_code IN ('CUSTOMER','OWNER')),
+                               CONSTRAINT ck_user_location CHECK (
+                                   (latitude IS NULL AND longitude IS NULL AND location_at IS NULL)
+                                       OR (latitude IS NOT NULL AND longitude IS NOT NULL AND location_at IS NOT NULL
+                                       AND latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180)),
+                               CONSTRAINT ck_user_preferences CHECK (preferences_json IS JSON (STRICT))
+);
+
+--------------------------------------------------------------------------------
+-- 2. STORE: one owner, one reservable resource per store
+--------------------------------------------------------------------------------
+CREATE TABLE store_shops (
+                             store_id      VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
+                             owner_user_id VARCHAR2(64 BYTE) NOT NULL,
+                             name          VARCHAR2(100 CHAR) NOT NULL,
+                             category_code VARCHAR2(12 BYTE) NOT NULL,
+                             address       VARCHAR2(300 CHAR) NOT NULL,
+                             latitude      NUMBER(9,6) NOT NULL,
+                             longitude     NUMBER(10,6) NOT NULL,
+                             description   VARCHAR2(1000 CHAR),
+                             image_url     VARCHAR2(2048 BYTE),
+                             created_at    TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+                             CONSTRAINT pk_store_shops PRIMARY KEY (store_id),
+                             CONSTRAINT fk_shop_owner FOREIGN KEY (owner_user_id) REFERENCES user_accounts(user_id),
+                             CONSTRAINT ck_shop_name CHECK (TRIM(name) IS NOT NULL),
+                             CONSTRAINT ck_shop_category CHECK (category_code IN ('NAIL','HAIR','EYELASH','SKIN')),
+                             CONSTRAINT ck_shop_lat CHECK (latitude BETWEEN -90 AND 90),
+                             CONSTRAINT ck_shop_lon CHECK (longitude BETWEEN -180 AND 180)
+);
+
+--------------------------------------------------------------------------------
+-- 3. STORE: seeded services; no management CRUD in the hackathon scope
+--------------------------------------------------------------------------------
+CREATE TABLE store_services (
+                                service_id       VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
+                                store_id         VARCHAR2(64 BYTE) NOT NULL,
+                                name             VARCHAR2(100 CHAR) NOT NULL,
+                                duration_minutes NUMBER(3,0) NOT NULL,
+                                base_price       NUMBER(10,0) NOT NULL,
+                                CONSTRAINT pk_store_services PRIMARY KEY (service_id),
+                                CONSTRAINT uq_service_store UNIQUE (store_id, service_id),
+                                CONSTRAINT fk_service_store FOREIGN KEY (store_id) REFERENCES store_shops(store_id),
+                                CONSTRAINT ck_service_name CHECK (TRIM(name) IS NOT NULL),
+                                CONSTRAINT ck_service_duration CHECK (duration_minutes BETWEEN 15 AND 480
+                                    AND MOD(duration_minutes,5) = 0),
+                                CONSTRAINT ck_service_price CHECK (base_price BETWEEN 0 AND 10000000)
+);
+
+--------------------------------------------------------------------------------
+-- 4. STORE: regular slots AND cancellation/no-show tickets in the same table
+-- source_reservation_id FK is added after reservations have been created.
+--------------------------------------------------------------------------------
+CREATE TABLE store_slots (
+                             slot_id               VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
+                             store_id              VARCHAR2(64 BYTE) NOT NULL,
+                             service_id            VARCHAR2(64 BYTE) NOT NULL,
+                             start_at              TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+                             end_at                TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+                             available_from        TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+                             available_until       TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+                             original_price        NUMBER(10,0) NOT NULL,
+                             payable_price         NUMBER(10,0) NOT NULL,
+                             status_code           VARCHAR2(10 BYTE) DEFAULT 'AVAILABLE' NOT NULL,
+                             source_type           VARCHAR2(12 BYTE) DEFAULT 'REGULAR' NOT NULL,
+                             source_reservation_id VARCHAR2(64 BYTE),
+                             publication_version   NUMBER(10,0),
+                             version_no            NUMBER(10,0) DEFAULT 1 NOT NULL,
+                             created_at            TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+                             CONSTRAINT pk_store_slots PRIMARY KEY (slot_id),
+                             CONSTRAINT uq_slot_store UNIQUE (slot_id, store_id),
+                             CONSTRAINT uq_slot_source UNIQUE (source_reservation_id),
+                             CONSTRAINT fk_slot_service FOREIGN KEY (store_id, service_id)
+                                 REFERENCES store_services(store_id, service_id),
+                             CONSTRAINT ck_slot_time CHECK (available_from <= start_at AND start_at < end_at
+                                 AND end_at <= available_until),
+                             CONSTRAINT ck_slot_price CHECK (original_price BETWEEN 0 AND 10000000
+                                 AND payable_price BETWEEN 0 AND original_price),
+                             CONSTRAINT ck_slot_status CHECK (status_code IN ('DRAFT','AVAILABLE','BOOKED','CLOSED','EXPIRED')),
+                             CONSTRAINT ck_slot_source CHECK (
+                                 (source_type = 'REGULAR' AND source_reservation_id IS NULL AND publication_version IS NULL)
+                                     OR (source_type IN ('CANCELLATION','NO_SHOW') AND source_reservation_id IS NOT NULL)),
+                             CONSTRAINT ck_slot_publication CHECK (source_type = 'REGULAR'
+                                 OR status_code IN ('DRAFT','EXPIRED') OR publication_version IS NOT NULL),
+                             CONSTRAINT ck_slot_pubver CHECK (publication_version BETWEEN 1 AND version_no),
+                             CONSTRAINT ck_slot_version CHECK (version_no >= 1)
+);
+
+--------------------------------------------------------------------------------
+-- 5. SEARCH: confirmed structured conditions, not raw AI conversations
+--------------------------------------------------------------------------------
+CREATE TABLE search_waitlists (
+                                  waitlist_id   VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
+                                  user_id       VARCHAR2(64 BYTE) NOT NULL,
+                                  store_id      VARCHAR2(64 BYTE),
+                                  service_id    VARCHAR2(64 BYTE),
+                                  category_code VARCHAR2(12 BYTE) NOT NULL,
+                                  window_start  TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+                                  window_end    TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+                                  latitude      NUMBER(9,6),
+                                  longitude     NUMBER(10,6),
+                                  radius_meters NUMBER(5,0),
+                                  max_price     NUMBER(10,0),
+                                  keywords_json CLOB DEFAULT '[]' NOT NULL,
+                                  status_code   VARCHAR2(10 BYTE) DEFAULT 'ACTIVE' NOT NULL,
+                                  version_no    NUMBER(10,0) DEFAULT 1 NOT NULL,
+                                  created_at    TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+                                  CONSTRAINT pk_search_waitlists PRIMARY KEY (waitlist_id),
+                                  CONSTRAINT uq_waitlist_user UNIQUE (waitlist_id, user_id),
+                                  CONSTRAINT fk_waitlist_user FOREIGN KEY (user_id) REFERENCES user_accounts(user_id),
+                                  CONSTRAINT fk_waitlist_store FOREIGN KEY (store_id) REFERENCES store_shops(store_id),
+                                  CONSTRAINT fk_waitlist_service FOREIGN KEY (store_id, service_id)
+                                      REFERENCES store_services(store_id, service_id),
+                                  CONSTRAINT ck_waitlist_service CHECK (service_id IS NULL OR store_id IS NOT NULL),
+                                  CONSTRAINT ck_waitlist_category CHECK (category_code IN ('NAIL','HAIR','EYELASH','SKIN')),
+                                  CONSTRAINT ck_waitlist_time CHECK (window_start < window_end
+                                      AND window_end <= window_start + INTERVAL '7' DAY),
+                                  CONSTRAINT ck_waitlist_location CHECK (
+                                      (store_id IS NOT NULL AND latitude IS NULL AND longitude IS NULL AND radius_meters IS NULL)
+                                          OR (latitude IS NOT NULL AND longitude IS NOT NULL AND radius_meters IS NOT NULL
+                                          AND latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180
+                                          AND radius_meters BETWEEN 100 AND 10000)),
+                                  CONSTRAINT ck_waitlist_price CHECK (max_price BETWEEN 0 AND 10000000),
+                                  CONSTRAINT ck_waitlist_keywords CHECK (keywords_json IS JSON (STRICT)),
+                                  CONSTRAINT ck_waitlist_status CHECK (status_code IN ('ACTIVE','FULFILLED','CANCELED','EXPIRED')),
+                                  CONSTRAINT ck_waitlist_version CHECK (version_no >= 1)
+);
+
+--------------------------------------------------------------------------------
+-- 6. STORE: reservation snapshots survive later publication/price changes
+--------------------------------------------------------------------------------
+CREATE TABLE store_reservations (
+                                    reservation_id  VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
+                                    user_id         VARCHAR2(64 BYTE) NOT NULL,
+                                    store_id        VARCHAR2(64 BYTE) NOT NULL,
+                                    slot_id         VARCHAR2(64 BYTE) NOT NULL,
+                                    waitlist_id     VARCHAR2(64 BYTE),
+                                    service_name    VARCHAR2(100 CHAR) NOT NULL,
+                                    start_at        TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+                                    end_at          TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+                                    original_price  NUMBER(10,0) NOT NULL,
+                                    payable_price   NUMBER(10,0) NOT NULL,
+                                    status_code     VARCHAR2(10 BYTE) DEFAULT 'CONFIRMED' NOT NULL,
+                                    version_no      NUMBER(10,0) DEFAULT 1 NOT NULL,
+                                    created_at      TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+                                    CONSTRAINT pk_store_reservations PRIMARY KEY (reservation_id),
+                                    CONSTRAINT uq_reservation_store UNIQUE (reservation_id, store_id),
+                                    CONSTRAINT uq_reservation_waitlist UNIQUE (waitlist_id),
+                                    CONSTRAINT fk_reservation_user FOREIGN KEY (user_id) REFERENCES user_accounts(user_id),
+                                    CONSTRAINT fk_reservation_slot FOREIGN KEY (slot_id, store_id) REFERENCES store_slots(slot_id, store_id),
+                                    CONSTRAINT fk_reservation_waitlist FOREIGN KEY (waitlist_id, user_id)
+                                        REFERENCES search_waitlists(waitlist_id, user_id),
+                                    CONSTRAINT ck_reservation_time CHECK (start_at < end_at),
+                                    CONSTRAINT ck_reservation_price CHECK (original_price BETWEEN 0 AND 10000000
+                                        AND payable_price BETWEEN 0 AND original_price),
+                                    CONSTRAINT ck_reservation_status CHECK (status_code IN ('CONFIRMED','CANCELED','COMPLETED','NO_SHOW')),
+                                    CONSTRAINT ck_reservation_version CHECK (version_no >= 1)
+);
+
+CREATE UNIQUE INDEX ux_reservation_confirmed_slot ON store_reservations (
+                                                                         CASE WHEN status_code = 'CONFIRMED' THEN slot_id END
+    );
+
+ALTER TABLE store_slots ADD CONSTRAINT fk_slot_source
+    FOREIGN KEY (source_reservation_id, store_id)
+        REFERENCES store_reservations(reservation_id, store_id);
+
+--------------------------------------------------------------------------------
+-- 7. NOTIFICATION: saved alerts plus aggregate web-push delivery status
+--------------------------------------------------------------------------------
+CREATE TABLE notification_alerts (
+                                     notification_id    VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
+                                     user_id            VARCHAR2(64 BYTE) NOT NULL,
+                                     waitlist_id        VARCHAR2(64 BYTE) NOT NULL,
+                                     slot_id            VARCHAR2(64 BYTE) NOT NULL,
+                                     publication_version NUMBER(10,0) NOT NULL,
+                                     title              VARCHAR2(100 CHAR) NOT NULL,
+                                     body_text          VARCHAR2(500 CHAR) NOT NULL,
+                                     expires_at         TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+                                     push_status        VARCHAR2(10 BYTE) DEFAULT 'PENDING' NOT NULL,
+                                     push_attempts      NUMBER(4,0) DEFAULT 0 NOT NULL,
+                                     push_attempted_at  TIMESTAMP(6) WITH TIME ZONE,
+                                     push_accepted_at   TIMESTAMP(6) WITH TIME ZONE,
+                                     push_error_code    VARCHAR2(100 BYTE),
+                                     read_at            TIMESTAMP(6) WITH TIME ZONE,
+                                     created_at         TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+                                     CONSTRAINT pk_notification_alerts PRIMARY KEY (notification_id),
+                                     CONSTRAINT uq_alert_match UNIQUE (user_id, slot_id, publication_version),
+                                     CONSTRAINT fk_alert_user FOREIGN KEY (user_id) REFERENCES user_accounts(user_id),
+                                     CONSTRAINT fk_alert_waitlist FOREIGN KEY (waitlist_id, user_id)
+                                         REFERENCES search_waitlists(waitlist_id, user_id),
+                                     CONSTRAINT fk_alert_slot FOREIGN KEY (slot_id) REFERENCES store_slots(slot_id),
+                                     CONSTRAINT ck_alert_pubver CHECK (publication_version >= 1),
+                                     CONSTRAINT ck_alert_expires CHECK (expires_at > created_at),
+                                     CONSTRAINT ck_alert_push_status CHECK (
+                                         push_status IN ('PENDING','SENT','PARTIAL','FAILED','NO_SUB','EXPIRED')),
+                                     CONSTRAINT ck_alert_attempts CHECK (push_attempts >= 0)
+);
+
+--------------------------------------------------------------------------------
+-- 8. NOTIFICATION: browser PushSubscription data; multiple devices per user
+-- endpoint_hash = SHA-256(endpoint), calculated by the application.
+--------------------------------------------------------------------------------
+CREATE TABLE notification_subscriptions (
+                                            subscription_id VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
+                                            user_id         VARCHAR2(64 BYTE) NOT NULL,
+                                            endpoint        VARCHAR2(2048 BYTE) NOT NULL,
+                                            endpoint_hash   RAW(32) NOT NULL,
+                                            p256dh_key      VARCHAR2(200 BYTE) NOT NULL,
+                                            auth_secret     VARCHAR2(100 BYTE) NOT NULL,
+                                            active_yn       CHAR(1 BYTE) DEFAULT 'Y' NOT NULL,
+    expires_at      TIMESTAMP(6) WITH TIME ZONE,
+    created_at      TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+    updated_at      TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+    CONSTRAINT pk_notification_subscriptions PRIMARY KEY (subscription_id),
+    CONSTRAINT fk_subscription_user FOREIGN KEY (user_id) REFERENCES user_accounts(user_id),
+    CONSTRAINT ck_subscription_endpoint CHECK (SUBSTR(endpoint,1,8) = 'https://'),
+    CONSTRAINT ck_subscription_hash CHECK (LENGTH(RAWTOHEX(endpoint_hash)) = 64),
+    CONSTRAINT ck_subscription_active CHECK (active_yn IN ('Y','N'))
+);
+
+-- An ACTIVE endpoint belongs to one account; deactivation permits reassignment.
+CREATE UNIQUE INDEX ux_subscription_endpoint ON notification_subscriptions (
+                                                                            CASE WHEN active_yn = 'Y' THEN endpoint_hash END
+    );
+
+--------------------------------------------------------------------------------
+-- 9. CHATTING: one customer-store room; store owner is the other participant
+--------------------------------------------------------------------------------
+CREATE TABLE chatting_rooms (
+                                room_id       VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
+                                customer_id   VARCHAR2(64 BYTE) NOT NULL,
+                                store_id      VARCHAR2(64 BYTE) NOT NULL,
+                                last_sequence NUMBER(16,0) DEFAULT 0 NOT NULL,
+                                created_at    TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+                                CONSTRAINT pk_chatting_rooms PRIMARY KEY (room_id),
+                                CONSTRAINT uq_room_pair UNIQUE (customer_id, store_id),
+                                CONSTRAINT fk_room_customer FOREIGN KEY (customer_id) REFERENCES user_accounts(user_id),
+                                CONSTRAINT fk_room_store FOREIGN KEY (store_id) REFERENCES store_shops(store_id),
+                                CONSTRAINT ck_room_sequence CHECK (last_sequence BETWEEN 0 AND 9007199254740991)
+);
+
+--------------------------------------------------------------------------------
+-- 10. CHATTING: text messages; no attachments/read receipts/member table
+--------------------------------------------------------------------------------
+CREATE TABLE chatting_messages (
+                                   message_id       VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
+                                   room_id          VARCHAR2(64 BYTE) NOT NULL,
+                                   sender_id        VARCHAR2(64 BYTE) NOT NULL,
+                                   message_sequence NUMBER(16,0) NOT NULL,
+                                   client_message_id VARCHAR2(64 BYTE) NOT NULL,
+                                   content_text     CLOB NOT NULL,
+                                   created_at       TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+                                   CONSTRAINT pk_chatting_messages PRIMARY KEY (message_id),
+                                   CONSTRAINT uq_message_sequence UNIQUE (room_id, message_sequence),
+                                   CONSTRAINT uq_message_client UNIQUE (room_id, sender_id, client_message_id),
+                                   CONSTRAINT fk_message_room FOREIGN KEY (room_id) REFERENCES chatting_rooms(room_id),
+                                   CONSTRAINT fk_message_sender FOREIGN KEY (sender_id) REFERENCES user_accounts(user_id),
+                                   CONSTRAINT ck_message_sequence CHECK (message_sequence BETWEEN 1 AND 9007199254740991)
+);
+
+-- Core list, timetable and FK access paths only.
+CREATE INDEX ix_shop_owner ON store_shops(owner_user_id);
+CREATE INDEX ix_slot_service ON store_slots(store_id, service_id);
+CREATE INDEX ix_slot_public ON store_slots(store_id, status_code, start_at);
+CREATE INDEX ix_slot_source ON store_slots(source_reservation_id, store_id);
+CREATE INDEX ix_waitlist_user ON search_waitlists(user_id, status_code, created_at);
+CREATE INDEX ix_waitlist_service ON search_waitlists(store_id, service_id);
+CREATE INDEX ix_waitlist_matching ON search_waitlists(status_code, category_code, window_end);
+CREATE INDEX ix_reservation_user ON store_reservations(user_id, status_code, start_at);
+CREATE INDEX ix_reservation_slot ON store_reservations(slot_id, store_id);
+CREATE INDEX ix_reservation_waitlist ON store_reservations(waitlist_id, user_id);
+CREATE INDEX ix_reservation_timetable ON store_reservations(store_id, status_code, start_at, end_at);
+CREATE INDEX ix_alert_user ON notification_alerts(user_id, created_at);
+CREATE INDEX ix_alert_push ON notification_alerts(push_status, created_at);
+CREATE INDEX ix_subscription_user ON notification_subscriptions(user_id, active_yn);
+CREATE INDEX ix_alert_waitlist ON notification_alerts(waitlist_id, user_id);
+CREATE INDEX ix_alert_slot ON notification_alerts(slot_id);
+CREATE INDEX ix_room_store ON chatting_rooms(store_id);
+CREATE INDEX ix_message_sender ON chatting_messages(sender_id);
+
+COMMENT ON TABLE store_slots IS '해커톤: 일반 슬롯과 취소표 통합. DRAFT 발행 시 AVAILABLE';
+COMMENT ON TABLE search_waitlists IS 'search: 자연어에서 추출하고 사용자가 확인한 예약 희망 조건';
+COMMENT ON TABLE notification_alerts IS '필수 웹 푸시 알림. 저장 후 발송하며 집계 상태와 시도 횟수 기록';
+COMMENT ON COLUMN store_slots.source_reservation_id IS '취소/노쇼 원예약. 원예약당 취소표 1개';
+COMMENT ON COLUMN store_slots.available_until IS '노쇼 시작시각 조정 때도 유지하는 원래 빈 구간 종료';
+COMMENT ON COLUMN notification_alerts.waitlist_id IS '같은 사용자의 복수 조건 일치 시 대표 대기 1개';
+COMMENT ON TABLE notification_subscriptions IS 'notification: 웹 푸시 구독 endpoint/p256dh/auth, 계정당 여러 브라우저';
+COMMENT ON COLUMN notification_alerts.push_status IS 'SENT는 푸시 서비스 접수 성공, 기기 도착/읽음 보장은 아님';
+COMMENT ON COLUMN notification_alerts.expires_at IS '제안 유효기한. 일반적으로 슬롯 시작 시각';
+COMMENT ON COLUMN notification_subscriptions.auth_secret IS '브라우저 PushSubscription auth 값. VAPID 개인키가 아님';
