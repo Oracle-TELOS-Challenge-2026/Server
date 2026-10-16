@@ -4,6 +4,10 @@
 
 이 문서는 구현 범위와 진행 상황을 관리한다. 세부 정책·설정·실행 명령·복구 SQL은 [Search 구현 및 운영](search.md), store 측 진행 상황은 [Store 구현 현황](store-progress.md)을 참고한다.
 
+## 추가 결정: DB 단순화
+
+대기·자동 알림 유지, Oracle 벡터 캐시 유지, 현재 동의만 저장하는 [v2 7개 테이블 구조](search-schema-v2.md)로 DDL·서비스·worker·시작 검증·테스트를 전환했다. 사용자 벡터 상태 3개를 하나로 합치고, 매칭 이벤트는 work로 통합하며, 매장 캐시는 벡터만 저장한다. 실제 store 조회·인증·알림 연결은 여전히 아래 P0 작업이다.
+
 ## 1. 현재 상태
 
 **S-01~08의 Controller·Service·Repository와 OpenAI/Elasticsearch Adapter는 구현되어 있다. 사용자 선호 JSON으로 실제 OpenAI 임베딩을 생성하고 Oracle에 저장하는 경로도 검증했다. 실제 사용자 인증부터 매장 검색·매칭·알림 수신까지 이어지는 통합 흐름은 아직 미완료다.**
@@ -56,7 +60,7 @@ S-08 HTTP는 내부 토큰 미설정 시 403이다. 단일 애플리케이션의
 2. search가 같은 트랜잭션에 선호 revision과 VECTOR 작업을 저장한다. 작업 저장 실패 시 선호 변경도 롤백한다.
 3. worker가 `SearchUserAccess.explicitPreferences`로 원문을 읽는다. 동일 입력·모델·차원의 정상 벡터는 재사용한다.
 4. `.env`의 `OPENAI_API_KEY`로 `POST /v1/embeddings`를 호출한다. 기본 모델은 `text-embedding-3-small`, 차원은 1,536이다.
-5. 응답 검증 후 원문 해시·revision·lease owner를 다시 확인하고 Oracle `search_vector`에 저장한다. 검색에서는 이 벡터를 Elasticsearch에 전달한다.
+5. 응답 검증 후 원문 해시·revision·lease owner를 다시 확인하고 Oracle `search_user_vector`에 저장한다. 검색에서는 이 벡터를 Elasticsearch에 전달한다.
 
 빈 선호는 기존 벡터를 제거한다. UTF-8 8,000바이트 초과 입력은 자르지 않고 거절한다. 사용자별 30초 생성 lease로 동시 호출을 제어하며, 외부 API 호출 동안 DB 잠금을 유지하지 않는다. 영구 오류와 일시 오류의 재시도를 구분한다. 키·선호 원문·벡터는 로그에 출력하지 않는다.
 
@@ -68,23 +72,15 @@ Oracle이 원본이고 Elasticsearch는 재구축 가능한 검색 인덱스다.
 
 | 테이블 | 책임 |
 | --- | --- |
-| `search_user_lock` | 사용자별 대기 변경 직렬화를 위한 256개 잠금 버킷 |
-| `search_intent` | 대기 조건·상태·동의 시각·버전·예약 연결 |
-| `search_consent` | 조건 버전별 동의 이력 |
-| `search_idempotency` | 생성·취소 요청의 24시간 결과 재생 |
-| `search_work` | 후속 작업·재시도·worker lease |
-| `search_match_job` | 슬롯 발행 이벤트 중복 제거와 매칭 작업 상태 |
+| `search_user_lock` | 대기 변경 직렬화용 256개 잠금 버킷 |
+| `search_intent` | 현재 조건·동의 시각/버전·상태·예약 연결 |
+| `search_idempotency` | 생성·취소의 24시간 최초 응답 재생 |
+| `search_work` | 영속 작업·재시도·lease·슬롯 이벤트 중복 제거·공개 jobId |
 | `search_offer` | 대기 버전별 슬롯 제안 |
-| `search_vector` | 사용자 임베딩과 모델·차원·입력 해시·원본 revision |
-| `search_preference_revision` | 사용자 선호 변경 순서 |
-| `search_store_projection` | 검색용 매장 원문과 매장 벡터 |
-| `search_vector_generation` | 사용자 벡터 생성 lease와 owner fencing |
+| `search_user_vector` | 사용자 벡터 캐시·현재 선호 revision·생성 lease |
+| `search_store_vector` | 매장 설명 벡터 캐시 |
 
-2026-10-16 로컬 `localhost:1521/FREEPDB1`의 `BINTIME_APP`에 [search-oracle.sql](sql/search-oracle.sql)을 적용했다. 기존 앱에는 새 search 테이블이 하나도 없어 전체 search DDL이 필요했다. 기존 13개 테이블을 유지하고 11개를 추가해 총 24개이며, 기존 테이블별 행 수가 동일하고 잠금 버킷 0~255가 256개임을 확인했다. 새 테이블 모두 조회 가능한 것도 확인했다. 이번 확인은 스키마 반영 검증이며 실제 서버 전체 흐름 검증은 아니다.
-
-`search_vector_generation`만 없는 기존 search 스키마에는 [03-user-vector-generation.sql](../infra/oracle/migrations/03-user-vector-generation.sql)을 사용한다. 이번 로컬 DB에는 전체 DDL에 이미 포함되어 있으므로 추가 실행하지 않는다. 운영·다른 개발자 DB 반영은 별도로 확인해야 한다.
-
-기존 `search_waitlists`는 유지했다. `WaitlistReservationService`가 기존 대기와 새 `search_intent` 양쪽의 조건 검증·완료를 지원한다. 이번 DDL 작업은 업무용 테스트 고객·매장·슬롯 데이터를 넣지 않았으며, 잠금 버킷만 초기화했다.
+신규 환경은 [search-oracle.sql](sql/search-oracle.sql)을 사용한다. 기존 v1의 11개 테이블은 [전환 절차](search-schema-v2.md)에 따라 데이터 복사 후 7개로 전환한다. 기존 `search_waitlists`는 별도로 유지하며 예약 협력 서비스가 지원한다. 최종 앱 테이블은 기존 13개 + search 7개 = 20개다. 업무용 테스트 데이터는 이번 전환에서 추가하지 않는다.
 
 ## 5. 검증 현황
 
@@ -92,14 +88,14 @@ Oracle이 원본이고 Elasticsearch는 재구축 가능한 검색 인덱스다.
 
 | 검증 | 확인된 결과 | 범위·제한 |
 | --- | --- | --- |
-| `./gradlew format test build --console=plain` | 기존 구현 단계에서 성공 | 현재 보관된 기본 테스트 XML은 70건 중 실패 0, 외부 검증 3건 skip |
+| `./gradlew format test build --console=plain` | 기존 구현 단계와 v2 코드 전환 후 성공 | v1 당시 기본 테스트는 70건 중 실패 0, 외부 검증 3건 skip. v2 코드 전환 후 전체 테스트·빌드도 재실행해 통과 |
 | `SearchBehaviorTests` | 서비스·HTTP 동작 검증 | 동의/시간/가격/소유권/중복/20개 경쟁/멱등/만료/7명 전원/다중 대기 통합/취소 후 발송 차단 등, 도메인 연동은 테스트 대역 |
 | `OpenAiIntentAdapterTests` | 외부 프로토콜·오류 검증 | 구조화 출력·임베딩 응답·키 누락·시간 초과, 실제 자연어 품질 평가는 아님 |
 | `UserVectorFlowTests` | H2 및 격리 Oracle에서 검증 | JSON 원문·재사용·롤백·동시 생성·lease 회수·오래된 응답 차단·오류 분류 |
 | `SearchOracleTests` | 별도 Oracle 23 Free 스키마에서 검증 | CLOB·잠금·20개 경쟁·멱등·이벤트 제약, 기본 실행에서는 skip |
 | `SearchElasticsearchTests` | 실제 Elasticsearch 8.19.6에서 검증 | nested 조건·가격/벡터 정렬·PIT/커서·마감 슬롯 재검증, 기본 실행에서는 skip |
 | `testOpenAi` | 실제 키로 합성 선호 JSON 임베딩 1건 성공 | H2 및 별도 Oracle에서 실제 벡터 저장 확인, 유료 호출을 기본 테스트에서 제외 |
-| 이번 로컬 DB 반영 | 기존 행 수 보존·11개 신규 테이블·잠금 256행 확인 | 문서와 DB만 변경하여 Java 포맷·테스트·빌드는 다시 실행하지 않음 |
+| v2 로컬 DB 전환 | 24개 → 20개, search 7개·잠금 256행, 기존 13개 테이블 행 수 보존 | 코드 전환 후 format/test/build 및 격리 Oracle 대기·벡터 테스트 통과 |
 
 아직 실제 로그인 → 선호 저장 → 대기 등록 → 매장 빈자리 발행 → 전원 매칭 → 실제 알림 → 예약 확정까지의 통합 검증은 하지 않았다. 실제 Responses API의 한국어 분석 품질, 다중 인스턴스 강제 종료 복구, 운영 부하도 별도 검증 대상이다.
 

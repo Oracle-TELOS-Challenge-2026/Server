@@ -38,7 +38,7 @@ public class MatchService {
           var rows =
               db.jdbc()
                   .queryForList(
-                      "select job_id,slot_id,publication_version from search_match_job where"
+                      "select job_id,slot_id,publication_version from search_work where"
                           + " event_id=?",
                       r.eventId());
           if (!rows.isEmpty()) {
@@ -55,13 +55,16 @@ public class MatchService {
           String id = UUID.randomUUID().toString();
           db.jdbc()
               .update(
-                  "insert into search_match_job(event_id,job_id,slot_id,publication_version,status)"
-                      + " values(?,?,?,?,'QUEUED')",
+                  "insert into"
+                      + " search_work(id,kind,payload,status,attempts,available_at,event_id,job_id,slot_id,publication_version)"
+                      + " values(?,'SLOT',?,'QUEUED',0,?,?,?,?,?)",
+                  UUID.randomUUID().toString(),
+                  db.encode(r),
+                  clock.millis(),
                   r.eventId(),
                   id,
                   r.slotId(),
                   r.publicationVersion());
-          db.enqueue("SLOT", db.encode(r), clock.millis());
           return new MatchJobResponse(id, "QUEUED");
         });
   }

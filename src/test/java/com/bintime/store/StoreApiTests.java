@@ -64,7 +64,7 @@ class StoreApiTests {
   void setup() {
     when(clock.instant()).thenReturn(NOW);
     when(clock.getZone()).thenReturn(ZoneOffset.UTC);
-    for (String table : List.of("search_work", "search_consent", "search_intent", "search_offer"))
+    for (String table : List.of("search_work", "search_intent", "search_offer"))
       db.update("delete from " + table);
     db.update("delete from store_events");
     // 슬롯과 원예약의 순환 FK를 테스트 전용 스키마 안에서만 해제한 뒤 정리한다.
@@ -703,8 +703,8 @@ class StoreApiTests {
             List.of());
     db.update(
         "insert into"
-            + " search_intent(id,user_id,source,conditions_json,status,resource_version,created_at,consent_at,window_end)"
-            + " values(?,?,'MANUAL',?,'ACTIVE',1,?,?,?)",
+            + " search_intent(id,user_id,source,conditions_json,status,resource_version,created_at,consent_at,window_end,consent_version)"
+            + " values(?,?,'MANUAL',?,'ACTIVE',1,?,?,?,1)",
         id,
         user,
         json.writeValueAsString(c),

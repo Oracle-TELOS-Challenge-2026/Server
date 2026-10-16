@@ -2,6 +2,10 @@
 
 구현 완료 범위·미연결 의존성·검증 이력·다음 작업 우선순위는 [Search 구현 현황과 후속 작업](search-progress.md)에 정리한다.
 
+## DB 구성
+
+대기·자동 알림과 Oracle 벡터 캐시는 유지하고, 동의는 현재 조건만 저장한다. [7개 테이블 DDL 및 전환 절차](search-schema-v2.md)를 따른다. 사용자 벡터·선호 revision·생성 lease는 `search_user_vector`에 통합했고, 매장 전체 문서를 Oracle에 복제하지 않고 `search_store_vector`에 벡터만 캐시한다. 슬롯 이벤트의 중복 제거와 공개 jobId는 `search_work`가 관리한다.
+
 ## 범위와 의존 작업
 
 S-01~08은 MVC Service/JDBC Repository와 OpenAI·Elasticsearch Adapter로 처리한다. Oracle이 원본이며 Elasticsearch는 파생 인덱스다. 인증부터 실제 알림 수신까지는 아래 공개 계약의 실제 구현 연결이 필요하다. 기본 구현은 빈 결과나 성공을 위장하지 않고 401/403/503으로 거절한다. 테스트 대역은 `src/test`에만 있다.
@@ -18,7 +22,7 @@ S-01~08은 MVC Service/JDBC Repository와 OpenAI·Elasticsearch Adapter로 처�
 - 필수 조건에 일치하는 고객 전원이 대상이다. top-5/top-k나 유사도 임계값은 없다. 여러 대기가 일치하면 N-06 matches에 ID/버전을 묶는다.
 - 시술 시작부터 종료까지 희망 구간에 포함한다. 동일 instant의 서로 다른 offset은 동일하게 판단한다. 거리 계산은 지구 반경 6,371,008.8m의 구면 직선거리다. 가격 경계는 포함하며 원 단위 KRW 정수다.
 - 매장/카테고리/시술 ID는 정확히 일치한다. keywords는 필수 필터가 아니다. 특정 매장 이외 대체 매장을 자동 추천하지 않는다.
-- **S-03/S-06에 notificationConsent=true가 필수로 추가됐다.** 기존 클라이언트 변경이 필요하다. 조건 전체 교체, 동의 시각·조건 버전을 이력으로 기록한다. WaitlistConditions의 nullable 필드와 S-08 publicationVersion도 키를 반드시 보내야 하며 null과 누락은 다르다.
+- **S-03/S-06에 notificationConsent=true가 필수로 추가됐다.** 기존 클라이언트 변경이 필요하다. 조건 전체 교체 시 동의 시각·조건 버전을 현재 대기 행에 갱신하며 과거 동의 이력은 저장하지 않는다. WaitlistConditions의 nullable 필드와 S-08 publicationVersion도 키를 반드시 보내야 하며 null과 누락은 다르다.
 - S-01 기존 query를 유지한다. 가격 상한은 없고 PRICE 정렬만 지원한다. maxPrice는 대기 조건에만 적용한다. walkingMinutes=null이다.
 - S-01은 매장 단위 nested 슬롯 필터와 PIT/search_after를 사용한다. PRICE는 필터 통과 슬롯의 최저 가격, DISTANCE는 거리, RECOMMENDED는 실제 매장·시술 설명의 벡터 유사도다. 동률은 거리, 일치 슬롯 시작 시각, 매장 ID로 정렬하고 대표 슬롯은 가격순에서는 최저 가격, 나머지는 가장 빠른 슬롯이다. 유사도는 예약 확률이 아니다.
 - 후보 슬롯은 응답 직전 store에서 일괄 재검증한다. 원장 버전이 바뀌거나 마감된 슬롯은 제거하고 다음 후보를 계속 읽는다. 마지막 확인 이후의 예약 경쟁은 store 책임이다.
@@ -39,9 +43,9 @@ OpenAI Responses의 strict JSON Schema로 부분 조건을 추출한다. 기준 
 
 키/중첩 구조는 제한하지 않지만 유효한 JSON이어야 한다. 모델 입력 상한 내에서 보수적으로 처리하기 위해 UTF-8 8,000바이트까지 허용하며, 초과 시 잘라 보내지 않고 PREFERENCES_INPUT_TOO_LARGE로 실패한다. null/공백, JSON null, 빈 객체/배열/문자열은 호출하지 않고 기존 벡터를 제거한다. JSON의 공백/키 순서도 원문대로 전송하므로 문자가 달라지면 다른 입력 해시다.
 
-`search_vector`에는 모델·차원·입력 해시·선호 revision을 기록한다. 입력 형식 식별자 `preferences-json-v1`와 모델/차원을 해시에 포함해 이전 방식의 벡터를 재사용하지 않는다. 모델을 변경할 때는 사용자·매장 벡터를 함께 재생성하고 검색 인덱스도 재구축한다. 동일 입력/모델/차원의 정상 벡터는 API를 다시 호출하지 않는다. 저장 직전에 원문 해시와 revision을 재확인해 오래된 응답을 버리고 최신 작업을 등록한다. 검색 시에도 원문 해시/revision을 확인하므로 직접 SQL로 원문을 변경한 경우에도 오래된 벡터를 사용하지 않는다. 대기 변경 작업에서 VECTOR가 등록되어도 입력이 같으면 저장된 벡터를 재사용한다.
+`search_user_vector`에는 모델·차원·입력 해시·선호 revision을 기록한다. 입력 형식 식별자 `preferences-json-v1`와 모델/차원을 해시에 포함해 이전 방식의 벡터를 재사용하지 않는다. 모델을 변경할 때는 사용자·매장 벡터를 함께 재생성하고 검색 인덱스도 재구축한다. 동일 입력/모델/차원의 정상 벡터는 API를 다시 호출하지 않는다. 저장 직전에 원문 해시와 revision을 재확인해 오래된 응답을 버리고 최신 작업을 등록한다. 검색 시에도 원문 해시/revision을 확인하므로 직접 SQL로 원문을 변경한 경우에도 오래된 벡터를 사용하지 않는다. 대기 변경 작업에서 VECTOR가 등록되어도 입력이 같으면 저장된 벡터를 재사용한다.
 
-`search_vector_generation`의 사용자별 30초 lease로 여러 인스턴스의 중복 호출을 제어한다. 외부 호출 동안 DB 트랜잭션/행 잠금을 유지하지 않는다. 이미 생성 중이면 작업을 대기시키며 외부 재시도 횟수를 차감하지 않는다. 중단된 lease는 만료 후 회수하고, lease owner가 바뀐 이전 worker는 저장하거나 새 lease를 지울 수 없다. 정상 응답은 모델명·단일 결과 index·1,536개 숫자·유한값·0이 아닌 norm을 검증한다.
+`search_user_vector`의 사용자별 30초 lease로 여러 인스턴스의 중복 호출을 제어한다. 외부 호출 동안 DB 트랜잭션/행 잠금을 유지하지 않는다. 이미 생성 중이면 작업을 대기시키며 외부 재시도 횟수를 차감하지 않는다. 중단된 lease는 만료 후 회수하고, lease owner가 바뀐 이전 worker는 저장하거나 새 lease를 지울 수 없다. 정상 응답은 모델명·단일 결과 index·1,536개 숫자·유한값·0이 아닌 norm을 검증한다.
 
 API 키 누락/401/403/할당량 소진/잘못된 요청·응답은 재시도 없이 FAILED, 일반 429/408/409/5xx/연결 실패는 기존 제한된 재시도로 처리한다. 원문, 키, Authorization 헤더, 응답 벡터는 로그에 기록하지 않는다. HTTP 503의 retryable도 오류 종류에 따라 다르다. 인증/할당량 실패 후 키나 계정 상태를 고치면 새 생성 작업을 등록한다.
 
@@ -51,7 +55,7 @@ API 키 누락/401/403/할당량 소진/잘못된 요청·응답은 재시도 �
 
 ## 설치와 설정
 
-1. 신규 Oracle 대상 스키마에 [search-oracle.sql](sql/search-oracle.sql)을 1회 적용한다. 이미 search 테이블이 있는 스키마에는 [03-user-vector-generation.sql](../infra/oracle/migrations/03-user-vector-generation.sql)만 추가로 적용한다. 운영 데이터에 테스트 초기화 SQL을 실행하지 않는다. ddl-auto=validate를 유지하며 search는 JDBC를 쓰므로 SearchSchemaVerifier도 필수 테이블/열과 잠금 행을 검사한다.
+1. 신규 Oracle 대상 스키마에 [search-oracle.sql](sql/search-oracle.sql)을 1회 적용한다. 기존 v1의 11개 search 테이블이 있는 스키마는 [전환 절차](search-schema-v2.md)에 따라 migration 04·05와 v2 코드를 함께 적용한다. 운영 데이터에 테스트 초기화 SQL을 실행하지 않는다. ddl-auto=validate를 유지하며 search는 JDBC를 쓰므로 SearchSchemaVerifier도 필수 테이블/열과 잠금 행을 검사한다.
 2. `docker compose -f compose.search.yaml up -d`로 로컬 Elasticsearch 8.19.6을 실행한다. 9200은 localhost에만 바인딩한다. 운영은 인증된 별도 Elasticsearch를 사용한다.
 3. 아래 속성을 환경별 Spring 설정에 제공하고 상대 도메인 계약 구현 Bean을 연결한다. 비밀은 저장소에 기록하지 않는다.
 
@@ -73,7 +77,7 @@ API 키 누락/401/403/할당량 소진/잘못된 요청·응답은 재시도 �
 
 ## 복구와 운영
 
-대기 변경/동의 이력/후속 작업은 같은 Oracle 트랜잭션이다. 작업은 QUEUED → RUNNING → SUCCEEDED/FAILED다. DB 조건부 갱신으로 한 worker만 claim하고 15분 lease를 순회 중 갱신한다. 프로세스 중단 시 lease 종료 후 회수한다. 임시 실패는 2/4/8/16초 후 재시도하며 최대 5회다. OpenAI의 영구 오류는 즉시 FAILED로 전환하고, 동일 사용자 생성 대기는 외부 재시도 한도에서 제외한다. 외부 전달의 중복은 N-06이 제거한다.
+대기 변경/현재 동의/후속 작업은 같은 Oracle 트랜잭션이다. 작업은 QUEUED → RUNNING → SUCCEEDED/FAILED다. DB 조건부 갱신으로 한 worker만 claim하고 15분 lease를 순회 중 갱신한다. 프로세스 중단 시 lease 종료 후 회수한다. 임시 실패는 2/4/8/16초 후 재시도하며 최대 5회다. OpenAI의 영구 오류는 즉시 FAILED로 전환하고, 동일 사용자 생성 대기는 외부 재시도 한도에서 제외한다. 외부 전달의 중복은 N-06이 제거한다.
 
 다음 SQL로 실패/재시도/지연을 확인한다. available_at은 epoch milliseconds이며 QUEUED의 실행 예정 시각, RUNNING의 lease 종료 시각이다. 로그는 작업 ID·종류·시도 횟수·실패 클래스만 남기고 AI 원문과 비밀을 기록하지 않는다.
 
@@ -81,14 +85,14 @@ API 키 누락/401/403/할당량 소진/잘못된 요청·응답은 재시도 �
 select kind, status, count(*) from search_work group by kind, status;
 select id, kind, attempts, available_at, last_error from search_work
  where status in ('FAILED','QUEUED','RUNNING') order by available_at;
-select event_id, job_id, slot_id, status from search_match_job where status <> 'SUCCEEDED';
-select store_id, source_version from search_store_projection
- where vector_hash is null or vector_hash <> input_hash;
+select event_id, job_id, slot_id, status from search_work
+ where kind='SLOT' and status <> 'SUCCEEDED';
+select store_id, source_version, model, dimensions from search_store_vector;
 ```
 
 의존 장애 원인을 고친 후 지정 작업만 `update search_work set status='QUEUED', attempts=0, available_at=<현재 epoch ms> where id='<실패 작업 ID>' and status='FAILED'`로 재처리한다. SLOT 작업은 같은 eventId/jobId를 유지한다. 활성 조건·버전·동의·슬롯은 다시 검사한다. 보관 기간이 끝난 search_idempotency, 종료된 작업/이전 제안은 운영 보관 정책을 정한 뒤 삭제한다. 자동 보관 삭제 정책은 이번 구현에서 임의로 정하지 않았다.
 
-인덱스 초기 생성/재구축은 운영 모듈에서 `SearchIndexService.rebuild()`를 호출한다. 새 버전 인덱스를 만들고 store export를 끝까지 읽은 후 alias를 원자적으로 전환한다. 재구축 중 실패하면 기존 alias를 유지한다. 재구축 중 store 변경 생산자의 재전송을 유지하고, 전환 후 해당 변경을 다시 전달해 최신 버전을 보장해야 한다. 미사용 인덱스 삭제는 운영자가 판단한다. 증분 변경은 changed(전체문서)를 재전송할 수 있으며 오래된 store 버전은 거절한다. 인덱스 변경과 알림은 예약 트랜잭션 밖의 작업이다.
+인덱스 초기 생성/재구축은 운영 모듈에서 `SearchIndexService.rebuild()`를 호출한다. 새 버전 인덱스를 만들고 store export를 끝까지 읽은 후 alias를 원자적으로 전환한다. 재구축 중 실패하면 기존 alias를 유지한다. 재구축 중 store 변경 생산자의 재전송을 유지하고, 전환 후 해당 변경을 다시 전달해 최신 버전을 보장해야 한다. 미사용 인덱스 삭제는 운영자가 판단한다. 증분 변경은 changed(전체문서)를 재전송할 수 있으며 ES의 문서 버전으로 오래된 문서가 최신 검색 결과를 덮어쓰지 못하게 한다. 작업 payload에는 전체 문서를 저장하며 매장 벡터 저장 전에는 store export 공개 계약으로 현재 설명을 다시 확인한다. v1 큐에 남은 매장 ID도 같은 공개 조회로 복구한다. 인덱스 변경과 알림은 예약 트랜잭션 밖의 작업이다.
 
 ## 검증
 
@@ -119,9 +123,9 @@ SEARCH_ORACLE_USER=<test-user> SEARCH_ORACLE_PASSWORD=<secret> \
 확인 SQL (벡터/선호 원문을 출력하지 않는다):
 
 ```sql
-select user_id, model, dimensions, source_version, input_hash from search_vector;
+select user_id, model, dimensions, source_version, input_hash from search_user_vector;
 select status, attempts, last_error from search_work where kind='VECTOR';
-select user_id, lease_until from search_vector_generation;
+select user_id, lease_until from search_user_vector where lease_owner is not null;
 ```
 
 기본 테스트는 실제 OpenAI를 호출하지 않는다. 아래 별도 작업만 `.env` 키로 합성 한국어 선호 JSON 한 건을 OpenAI에 전송한다. 임시 H2에 user 조회 → 이벤트/outbox → worker → 실제 API → 1,536차원 검증/저장을 실행하며 앱 Oracle 데이터는 변경하지 않는다. 키와 벡터를 출력하지 않는다.
@@ -132,4 +136,6 @@ select user_id, lease_until from search_vector_generation;
 
 `UserVectorFlowTests`는 자유로운 중첩 JSON, 동일 입력 재사용, 저장/outbox 롤백, 생성 중 변경, 동시 호출 방지, 중단 lease 회수, 직접 DB 변경 감지, 빈 선호 제거, 크기 제한, 영구/일시 오류를 검증한다. 동일 테스트를 실제 Oracle의 별도 스키마에서도 실행할 수 있다. 빈 전용 스키마에 초기 전체 DDL과 search DDL을 적용한 뒤 USER_VECTOR_ORACLE_URL/USER_VECTOR_ORACLE_USER/USER_VECTOR_ORACLE_PASSWORD 환경 변수를 설정하고 `./gradlew test --tests '*UserVectorFlowTests'`를 실행한다. 이 테스트는 해당 스키마의 사용자/벡터/작업 데이터를 정리하므로 앱 스키마를 사용하지 않는다.
 
-2026-10-16 검증: `.env`의 실제 키로 합성 한국어 선호 JSON을 임베딩하고, 별도 Oracle 스키마의 `search_vector` CLOB에 실제 응답을 저장·조회했다. 동일 Oracle 스키마에서 선호 저장/outbox 롤백·동시 호출 방지·lease 회수·오래된 응답 차단 테스트도 통과했으며 임시 스키마는 정리했다. 이 검증에서는 기존 앱 스키마를 변경하지 않았다. 이후 같은 날 로컬 `FREEPDB1/BINTIME_APP`에 전체 search DDL을 별도로 적용했다. 기존 13개 테이블의 행 수를 유지하면서 search 테이블 11개와 잠금 버킷 256개를 추가했으며, 상세 반영 범위는 [진행 문서](search-progress.md#4-영속화와-db-반영)에 기록했다.
+2026-10-16 검증: `.env`의 실제 키로 합성 한국어 선호 JSON을 임베딩하고, 별도 Oracle 스키마의 당시 `search_vector`(v1) CLOB에 실제 응답을 저장·조회했다. 동일 Oracle 스키마에서 선호 저장/outbox 롤백·동시 호출 방지·lease 회수·오래된 응답 차단 테스트도 통과했으며 임시 스키마는 정리했다. 이 검증에서는 기존 앱 스키마를 변경하지 않았다. 이후 같은 날 로컬 `FREEPDB1/BINTIME_APP`에 전체 search DDL을 별도로 적용했다. 기존 13개 테이블의 행 수를 유지하면서 search 테이블 11개와 잠금 버킷 256개를 추가했으며, 상세 반영 범위는 [진행 문서](search-progress.md#4-영속화와-db-반영)에 기록했다.
+
+2026-10-16 v2 전환: 로컬 `FREEPDB1/BINTIME_APP`에 migration 04·05를 적용해 search를 7개로 단순화했다. 기존 13개 테이블과 행 수, 잠금 256행을 유지했으며 최종 테이블은 20개다. Java/JDBC·worker·테스트도 v2로 전환했고 전체 format/test/build와 격리 Oracle의 대기·벡터 테스트를 통과했다.

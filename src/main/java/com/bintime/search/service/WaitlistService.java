@@ -99,7 +99,6 @@ public class WaitlistService {
                   clock.millis(),
                   null);
           db.update(changed);
-          db.consent(changed);
           followup(changed);
           return response(changed, List.of());
         });

@@ -47,7 +47,7 @@ Elasticsearch는 검색용 파생 인덱스로 사용하고, 예약 확정 여�
 
 ## 사용자별 벡터 생성
 
-`user`의 공개 서비스에서 자연어 선호가 담긴 `preferences_json` 전체를 조회하고, `search`가 JSON 문자열을 그대로 OpenAI Embeddings API에 전달한다. 고정된 선호 DTO나 ACTIVE 대기 조건은 입력에 추가하지 않는다. 사용자 벡터는 Oracle `search_vector`에 저장하고 추천 검색 시 Elasticsearch에 전달한다. 내부 `UserPreferenceService.replace`는 선호 저장과 벡터 갱신 작업을 같은 트랜잭션에 기록한다. U-08 선호 저장 API는 구현되어 있지만 이 변경 이벤트 경로와의 연결은 후속 작업이다. 동일 입력은 벡터를 재사용하고, 동시 생성 및 오래된 응답을 막는다. 시간·거리·가격 등 필수 조건은 벡터 유사도와 별도로 검증한다.
+`user`의 공개 서비스에서 자연어 선호가 담긴 `preferences_json` 전체를 조회하고, `search`가 JSON 문자열을 그대로 OpenAI Embeddings API에 전달한다. 고정된 선호 DTO나 ACTIVE 대기 조건은 입력에 추가하지 않는다. 사용자 벡터는 Oracle `search_user_vector`에 저장하고 추천 검색 시 Elasticsearch에 전달한다. 내부 `UserPreferenceService.replace`는 선호 저장과 벡터 갱신 작업을 같은 트랜잭션에 기록한다. U-08 선호 저장 API는 구현되어 있지만 이 변경 이벤트 경로와의 연결은 후속 작업이다. 동일 입력은 벡터를 재사용하고, 동시 생성 및 오래된 응답을 막는다. 시간·거리·가격 등 필수 조건은 벡터 유사도와 별도로 검증한다.
 
 벡터 생성은 자체 모델을 배포하는 대신 OpenAI의 Embeddings API를 호출하는 방식이다. 자연어 조건 추출과 벡터 생성은 별도 API 작업으로 구분한다. 참고: [OpenAI 공식 벡터 생성 문서](https://developers.openai.com/api/docs/guides/embeddings).
 
@@ -137,7 +137,7 @@ DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 �
 
 카카오 로그인 시작·콜백·로그아웃·CSRF 조회는 구현되어 있다. `/api/v1/auth/**`, `/api/v1/users/**`에는 세션 인증과 상태 변경 시 CSRF 검증을 적용한다. Swagger는 로그인 없이 접근한다. 설정과 프론트 연동은 [카카오 로그인 실행](docs/kakao-login.md)을 참고한다. `api-docs` 프로필은 DB·로그인 없이 문서를 검토하는 용도이며 API 실행 기능은 비활성화한다.
 
-store·search는 요청자·권한 검증 경계를 구현했지만 카카오 세션·CSRF와의 연결은 별도 작업이다. store 보호 API는 검증된 인증·CSRF 연결 전에는 운영에서 닫혀 있으며, 명시적 local/test 대체 식별만 제공한다. search의 보호 API도 인증 계약이 연결되지 않은 상태에서는 접근을 거절한다.
+store는 카카오 세션 쿠키·CSRF와 연결되었으며 선택적으로 Bearer JWT도 지원한다. 공개 조회와 보호 API의 구분 및 설정은 [store 인증 계약](docs/store-auth.md)을 참고한다. search의 보호 API는 별도 인증 계약이 연결되지 않은 상태에서는 접근을 거절한다.
 
 notification·chatting의 골격 Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 필수 입력 바인딩은 그 전에 요청을 거절할 수 있다. 실제 SSE/WS 전송은 후속 구현이다.
 

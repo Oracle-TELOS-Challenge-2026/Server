@@ -51,6 +51,7 @@ public class OwnerStoreController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481aab1edf442cb8b4f32"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공",
@@ -102,7 +103,7 @@ public class OwnerStoreController {
                           """)))
   @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
-  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 CSRF 토큰 없음·불일치")
   @ApiResponse(responseCode = "404", description = "리소스 없음")
   @ApiResponse(responseCode = "409", description = "상태·버전·시간·가격 충돌")
   @PatchMapping(
@@ -129,6 +130,7 @@ public class OwnerStoreController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48108a991f06efbee9ea2"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공",
@@ -248,7 +250,7 @@ public class OwnerStoreController {
                           """)))
   @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
-  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 CSRF 토큰 없음·불일치")
   @ApiResponse(responseCode = "404", description = "리소스 없음")
   @ApiResponse(responseCode = "409", description = "상태·버전·시간·가격 충돌")
   @GetMapping(
@@ -274,6 +276,7 @@ public class OwnerStoreController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48183a811dd12c2cac293"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공",
@@ -310,7 +313,7 @@ public class OwnerStoreController {
                           """)))
   @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
-  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 CSRF 토큰 없음·불일치")
   @ApiResponse(responseCode = "404", description = "리소스 없음")
   @ApiResponse(responseCode = "409", description = "상태·버전·시간·가격 충돌")
   @PatchMapping(
@@ -333,6 +336,7 @@ public class OwnerStoreController {
       summary = "ST-18 · 매장 등록",
       description = "OWNER 인증 및 Idempotency-Key 필수. 성공 응답은 24시간 재사용합니다.")
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(responseCode = "201", description = "생성 완료", useReturnTypeSchema = true)
   @ApiResponse(responseCode = "400", description = "입력 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
@@ -355,6 +359,7 @@ public class OwnerStoreController {
       summary = "ST-19 · 시술 등록",
       description = "OWNER 인증 및 Idempotency-Key 필수. 성공 응답은 24시간 재사용합니다.")
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(responseCode = "201", description = "생성 완료", useReturnTypeSchema = true)
   @ApiResponse(responseCode = "400", description = "입력 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
@@ -379,6 +384,7 @@ public class OwnerStoreController {
       summary = "ST-20 · 일반 슬롯 등록",
       description = "OWNER 인증 및 Idempotency-Key 필수. 성공 응답은 24시간 재사용합니다.")
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(responseCode = "201", description = "생성 완료", useReturnTypeSchema = true)
   @ApiResponse(responseCode = "400", description = "입력 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")

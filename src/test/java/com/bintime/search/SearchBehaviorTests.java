@@ -24,6 +24,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
 class SearchBehaviorTests {
+  java.sql.Connection schemaConnection;
   MutableClock clock;
   SearchRepository db;
   WaitlistService service;
@@ -35,12 +36,15 @@ class SearchBehaviorTests {
   List<DispatchNotificationRequest> sent;
 
   @BeforeEach
-  void setup() {
+  void setup() throws Exception {
     clock = new MutableClock();
     var source =
         new DriverManagerDataSource(
             "jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1", "sa", "");
-    new ResourceDatabasePopulator(new ClassPathResource("search-schema.sql")).execute(source);
+    // H2의 문자열 CHECK 최적화가 DDL 세션을 참조하므로 테스트 종료까지 유지한다.
+    schemaConnection = source.getConnection();
+    new ResourceDatabasePopulator(new ClassPathResource("search-schema.sql"))
+        .populate(schemaConnection);
     var json = JsonMapper.builder().build();
     db = new SearchRepository(new JdbcTemplate(source), json);
     var tx = new TransactionTemplate(new DataSourceTransactionManager(source));
@@ -73,6 +77,11 @@ class SearchBehaviorTests {
             clock,
             vectors,
             mock(SearchIndexService.class));
+  }
+
+  @AfterEach
+  void closeSchemaConnection() throws Exception {
+    schemaConnection.close();
   }
 
   WaitlistConditions conditions(int minute) {
@@ -289,7 +298,9 @@ class SearchBehaviorTests {
     db.jdbc().update("update search_work set status='RUNNING',available_at=0 where kind='SLOT'");
     doReturn(List.of(slot())).when(catalog).revalidate(any());
     worker.poll();
-    assertThat(db.jdbc().queryForObject("select status from search_match_job", String.class))
+    assertThat(
+            db.jdbc()
+                .queryForObject("select status from search_work where kind='SLOT'", String.class))
         .isEqualTo("SUCCEEDED");
   }
 
@@ -489,7 +500,11 @@ class SearchBehaviorTests {
         .when(ai)
         .embed(any());
     personalization.refresh("u");
-    assertThat(db.jdbc().queryForObject("select count(*) from search_vector", Integer.class))
+    assertThat(
+            db.jdbc()
+                .queryForObject(
+                    "select count(*) from search_user_vector where vector_json is not null",
+                    Integer.class))
         .isEqualTo(1);
     doReturn(new float[1536]).when(ai).embed(any());
     personalization.refresh("u");
@@ -498,7 +513,7 @@ class SearchBehaviorTests {
   }
 
   @Test
-  void storeProjectionIsVersionedAndDoesNotEmbedForSlotOnlyChanges() {
+  void storeCacheIsReusedForSlotChangesAndStaleDescriptionResponseIsDiscarded() {
     var tx = new TransactionTemplate(new DataSourceTransactionManager(db.jdbc().getDataSource()));
     var index = mock(StoreIndexPort.class);
     var projection =
@@ -507,48 +522,57 @@ class SearchBehaviorTests {
     var doc =
         new StoreDocument(
             "store", "매장", "NAIL", null, null, null, 37.5, 127, "원컬러", 1, List.of(slot()));
+    when(catalog.export(null, 100)).thenReturn(new StorePage(List.of(doc), null));
+    float[] vector = new float[1536];
+    vector[0] = 1;
+    doReturn(vector).when(ai).embed(any());
     projection.changed(doc);
+    projection.embed(db.encode(doc));
     var newer =
         new StoreDocument(
             "store", "매장", "NAIL", null, null, null, 37.5, 127, "원컬러", 2, List.of(slot()));
     projection.changed(newer);
-    projection.changed(doc);
-    assertThat(
-            db.jdbc()
-                .queryForObject("select source_version from search_store_projection", Long.class))
-        .isEqualTo(2);
-    assertThat(
-            db.jdbc()
-                .queryForObject(
-                    "select count(*) from search_work where kind='STORE_VECTOR'", Integer.class))
+    projection.embed(db.encode(newer));
+    verify(ai, times(1)).embed(any());
+    assertThat(db.jdbc().queryForObject("select count(*) from search_store_vector", Integer.class))
         .isEqualTo(1);
-    verify(ai, never()).embed(any());
-    doAnswer(
-            a -> {
-              projection.changed(
-                  new StoreDocument(
-                      "store",
-                      "매장",
-                      "NAIL",
-                      null,
-                      null,
-                      null,
-                      37.5,
-                      127,
-                      "변경된 설명",
-                      3,
-                      List.of(slot())));
-              float[] vector = new float[1536];
-              vector[0] = 1;
-              return vector;
-            })
-        .when(ai)
-        .embed(any());
-    projection.embed("store");
-    assertThat(
-            db.jdbc()
-                .queryForObject("select vector_hash from search_store_projection", String.class))
-        .isNull();
+    projection.sync(db.encode(newer));
+    verify(index)
+        .upsert(
+            eq("bintime-stores"),
+            argThat(
+                d ->
+                    d.id().equals(newer.id())
+                        && d.version() == 2
+                        && d.slots()
+                            .getFirst()
+                            .startAt()
+                            .toInstant()
+                            .equals(newer.slots().getFirst().startAt().toInstant())),
+            argThat(v -> v.length == 1536 && v[0] == 1));
+    var changed =
+        new StoreDocument(
+            "store", "매장", "NAIL", null, null, null, 37.5, 127, "변경된 설명", 3, List.of(slot()));
+    when(catalog.export(null, 100)).thenReturn(new StorePage(List.of(newer), null));
+    projection.embed(db.encode(changed));
+    assertThat(db.jdbc().queryForObject("select input_hash from search_store_vector", String.class))
+        .isEqualTo(WaitlistService.hash("원컬러"));
+  }
+
+  @Test
+  void onlyCurrentConsentIsKeptAndCanceledVersionDoesNotGrantNewConsent() {
+    var first =
+        service.create(
+            "u", "consent-create", new CreateWaitlistRequest("MANUAL", conditions(0), true));
+    service.update("u", first.id(), new UpdateWaitlistRequest(conditions(1), 1L, true));
+    assertThat(db.jdbc().queryForObject("select consent_version from search_intent", Long.class))
+        .isEqualTo(2);
+    service.cancel("u", first.id(), "consent-cancel", new CancelWaitlistRequest(2L));
+    assertThat(db.jdbc().queryForObject("select consent_version from search_intent", Long.class))
+        .isEqualTo(2);
+    assertThat(db.jdbc().queryForObject("select resource_version from search_intent", Long.class))
+        .isEqualTo(3);
+    assertThat(db.consented(db.find(first.id()).orElseThrow())).isFalse();
   }
 
   static class MutableClock extends Clock {
