@@ -1,30 +1,15 @@
 package com.bintime.notification.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 @Schema(description = "RegisterPushSubscriptionRequest")
 public record RegisterPushSubscriptionRequest(
     @Schema(
-            description = "endpoint",
+            description = "Firebase onRegistered가 반환한 FID. 공백·제어문자 금지",
             requiredMode = Schema.RequiredMode.REQUIRED,
-            example = "https://push.example.net/subscription/opaque")
-        String endpoint,
-    @Schema(description = "keys", requiredMode = Schema.RequiredMode.REQUIRED) Keys keys,
-    @Schema(
-            description = "미래 Unix epoch 밀리초 또는 null",
-            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
-            nullable = true)
-        Long expirationTime) {
-  @Schema(name = "RegisterPushSubscriptionRequestKeys")
-  public record Keys(
-      @Schema(
-              description = "p256dh",
-              requiredMode = Schema.RequiredMode.REQUIRED,
-              example = "base64url-key")
-          String p256dh,
-      @Schema(
-              description = "auth",
-              requiredMode = Schema.RequiredMode.REQUIRED,
-              example = "base64url-secret")
-          String auth) {}
-}
+            minLength = 1,
+            maxLength = 128,
+            example = "browser-installation-id")
+        @JsonDeserialize(using = com.bintime.user.dto.StrictStringDeserializer.class)
+        String installationId) {}

@@ -61,6 +61,8 @@ public record NotificationResponse(
       @Schema(
               description = "슬롯 발행 당시 버전. 일반 슬롯은 null",
               requiredMode = Schema.RequiredMode.REQUIRED,
+              types = {"integer", "null"},
+              format = "int64",
               example = "2")
           Long publicationVersion,
       @Schema(description = "waitlistIds", requiredMode = Schema.RequiredMode.REQUIRED)
