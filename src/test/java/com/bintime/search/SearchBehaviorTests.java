@@ -286,6 +286,45 @@ class SearchBehaviorTests {
   }
 
   @Test
+  void republishedSlotRefreshesOneOfferAndOlderPublicationCannotReplaceIt() {
+    var wait = service.create("u", "wait", request(0));
+    runKind("INTENT");
+    assertThat(service.get("u", wait.id()).offers().getFirst().publicationVersion()).isEqualTo(1L);
+    var first = slot();
+    var second =
+        new Slot(
+            first.id(),
+            first.storeId(),
+            first.storeName(),
+            first.category(),
+            first.serviceId(),
+            first.serviceName(),
+            first.latitude(),
+            first.longitude(),
+            first.startAt(),
+            first.endAt(),
+            first.originalPrice(),
+            first.payablePrice(),
+            first.source(),
+            2L,
+            2L,
+            first.imageUrl(),
+            first.description());
+    when(catalog.revalidate(any())).thenReturn(List.of(second));
+    matching.submit(new CreateMatchJobRequest("publication-two", first.id(), 2L));
+    runKind("SLOT");
+    assertThat(service.get("u", wait.id()).offers().getFirst().publicationVersion()).isEqualTo(2L);
+    assertThat(db.jdbc().queryForObject("select count(*) from search_offer", Integer.class))
+        .isEqualTo(1);
+    // 이전 발행을 읽고 지연된 작업자가 뒤늦게 실행되는 경우도 더 높은 발행 버전을 유지한다.
+    when(catalog.revalidate(any())).thenReturn(List.of(first));
+    matching.submit(new CreateMatchJobRequest("late-publication-one", first.id(), 1L));
+    runKind("SLOT");
+    when(catalog.revalidate(any())).thenReturn(List.of(second));
+    assertThat(service.get("u", wait.id()).offers().getFirst().publicationVersion()).isEqualTo(2L);
+  }
+
+  @Test
   void temporaryFailureRetriesAndCrashedLeaseIsReclaimed() {
     matching.submit(new CreateMatchJobRequest("event", "slot", 1L));
     when(catalog.revalidate(any())).thenThrow(SearchFailure.unavailable());

@@ -219,6 +219,18 @@ public class SearchWorker {
                 i.version(),
                 s.id(),
                 s.publicationVersion());
+      else if (s.publicationVersion() != null)
+        // 같은 빈자리의 재발행도 현재 제안에 반영한다. 늦게 도착한 이전 발행은 되돌리지 않는다.
+        db.jdbc()
+            .update(
+                "update search_offer set publication_version=? where intent_id=? and"
+                    + " intent_version=? and slot_id=? and (publication_version is null or"
+                    + " publication_version<?)",
+                s.publicationVersion(),
+                i.id(),
+                i.version(),
+                s.id(),
+                s.publicationVersion());
     }
     if (!matches.isEmpty())
       db.enqueue(

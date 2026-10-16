@@ -47,3 +47,9 @@ StoreApiTests에서 실제 등록·예약·취소·발행·철회·재발행·�
 `infra/oracle/verify-store.py`는 기존 스키마 변경과 신규 스키마 양쪽에서 같은 테스트를 실행하고 06 재실행도 확인한다. 검증용 BT_STORE_ 스키마만 생성하며 앱 DB를 변경하지 않는다. 실제 search 사용자 인증·알림·ES 전체 흐름은 별도 QA다.
 
 2026-10-16 최종 검증: `./gradlew format test build --no-daemon` 성공. 전체 154건 중 151건 통과, 외부 연동 3건 제외. 격리 Oracle의 기존 변경·신규 스키마 양쪽에서도 StoreApiTests 22건이 통과했다. 실제 search 대기 등록·상세 조회, 검색 버전의 경합·멱등 재생·DB 실패 롤백까지 확인했다. BINTIME_APP과 운영 DB에는 06을 적용하지 않았다.
+
+## Search 연결 확인
+
+2026-10-16 search 정상 프로필이 실제 카탈로그 Bean을 사용하도록 연결을 확인했다. api-docs에서만 대체 Bean을 사용한다. `StoreCatalogConnectionTests`는 격리 Oracle+실제 ES로 매장/시술/슬롯 등록, 대기 참조 조회, 초기 색인, S-01 HTTP 조회, 예약 후 원장 재검증과 FULFILLED를 확인했다. OpenAI는 대역을 사용했다.
+
+로컬 `BINTIME_APP`에는 06을 적용했고 현재 이벤트 엔티티 기동을 위해 07도 적용했다. 기존 20개 테이블의 행 수를 유지했다. 정상 서버 기동과 초기 alias 생성·공개 검색 HTTP 200을 확인했으며 앱 DB의 매장/슬롯 0건 상태도 유지했다. 이전 절의 앱 DB 미적용 기록은 구현 당시의 기록이다. 운영 DB에는 별도 적용이 필요하다. 초기 색인 실행 옵션은 [Search 운영 문서](search.md#store-카탈로그-연결-및-초기-색인)를 참고한다.
