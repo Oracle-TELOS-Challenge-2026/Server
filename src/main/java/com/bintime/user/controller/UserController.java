@@ -350,7 +350,9 @@ public class UserController {
       description =
           "categories·keywords·maxPrice는 전체 교체하며 expectedVersion과 함께 필수다. maxPrice:null은 상한 없음. "
               + "선택적인 text는 취향 원문 0~2000자이며 빈 문자열은 초기화, 생략은 기존 원문 유지다. 명시적 null이나 "
-              + "문자열 외 값은 400이다. AI 분석 없이 원문을 저장한다. U-04의 최상위 version을 expectedVersion으로 "
+              + "문자열 외 값은 400이다. 선호도 저장과 같은 트랜잭션으로 사용자 벡터 갱신 작업을 등록한다. "
+              + "저장 성공은 벡터 생성 완료를 의미하지 않으며 search worker가 OpenAI Embeddings로 비동기 생성한다. "
+              + "동일 입력의 벡터는 재사용하고 AI 장애는 저장을 취소하지 않는다. U-04의 최상위 version을 expectedVersion으로 "
               + "사용하며 이름·선호도가 공유한다. 버전 불일치는 409 VERSION_CONFLICT.\n\n"
               + "- 로그인 세션 — 본인 데이터\n"
               + "- X-CSRF-Token 필수\n\n"

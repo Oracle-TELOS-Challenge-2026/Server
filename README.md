@@ -47,7 +47,7 @@ Elasticsearch는 검색용 파생 인덱스로 사용하고, 예약 확정 여�
 
 ## 사용자별 벡터 생성
 
-`user`의 공개 서비스에서 자연어 선호가 담긴 `preferences_json` 전체를 조회하고, `search`가 JSON 문자열을 그대로 OpenAI Embeddings API에 전달한다. 고정된 선호 DTO나 ACTIVE 대기 조건은 입력에 추가하지 않는다. 사용자 벡터는 Oracle `search_user_vector`에 저장하고 추천 검색 시 Elasticsearch에 전달한다. 내부 `UserPreferenceService.replace`는 선호 저장과 벡터 갱신 작업을 같은 트랜잭션에 기록한다. U-08 선호 저장 API는 구현되어 있지만 이 변경 이벤트 경로와의 연결은 후속 작업이다. 동일 입력은 벡터를 재사용하고, 동시 생성 및 오래된 응답을 막는다. 시간·거리·가격 등 필수 조건은 벡터 유사도와 별도로 검증한다.
+`user`의 공개 서비스에서 자연어 선호가 담긴 `preferences_json` 전체를 조회하고, `search`가 JSON 문자열을 그대로 OpenAI Embeddings API에 전달한다. 고정된 선호 DTO나 ACTIVE 대기 조건은 입력에 추가하지 않는다. 사용자 벡터는 Oracle `search_user_vector`에 저장하고 추천 검색 시 Elasticsearch에 전달한다. 내부 `UserPreferenceService.replace`는 선호 저장과 벡터 갱신 작업을 같은 트랜잭션에 기록한다. U-08 선호 저장 API도 같은 변경 이벤트를 발행하며 선호 저장과 VECTOR 작업 등록을 함께 커밋한다. OpenAI 호출과 벡터 저장은 search worker가 비동기로 처리한다. 동일 입력은 벡터를 재사용하고, 동시 생성 및 오래된 응답을 막는다. 시간·거리·가격 등 필수 조건은 벡터 유사도와 별도로 검증한다.
 
 벡터 생성은 자체 모델을 배포하는 대신 OpenAI의 Embeddings API를 호출하는 방식이다. 자연어 조건 추출과 벡터 생성은 별도 API 작업으로 구분한다. 참고: [OpenAI 공식 벡터 생성 문서](https://developers.openai.com/api/docs/guides/embeddings).
 

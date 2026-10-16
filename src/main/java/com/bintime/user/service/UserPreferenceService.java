@@ -32,7 +32,7 @@ public class UserPreferenceService {
     return require(db.find(userId)).preferences;
   }
 
-  /** 향후 user 저장 API도 이 메서드를 사용한다. 키/필드 구조와 자연어 내용을 제한하지 않는다. */
+  /** 자유로운 JSON 저장도 프로필 API와 같은 변경 이벤트로 벡터를 갱신한다. */
   @Transactional
   public void replace(String userId, String preferencesJson) {
     try {

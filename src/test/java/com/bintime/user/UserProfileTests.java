@@ -67,6 +67,13 @@ class UserProfileTests {
   @Autowired WebApplicationContext context;
   @Autowired JdbcTemplate jdbc;
   @Autowired JsonMapper json;
+  @Autowired com.bintime.search.service.SearchWorker worker;
+  @Autowired com.bintime.search.service.PersonalizationService vectors;
+  @Autowired UserProfileService profiles;
+  @Autowired org.springframework.transaction.support.TransactionTemplate transactions;
+
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
+  com.bintime.search.port.IntentAiPort ai;
 
   private MockMvc mvc;
   private MockHttpSession session;
@@ -100,6 +107,8 @@ class UserProfileTests {
         )
         """);
     jdbc.update("DELETE FROM store_shops");
+    jdbc.update("DELETE FROM search_work");
+    jdbc.update("DELETE FROM search_user_vector");
     jdbc.update("DELETE FROM user_accounts");
     jdbc.update(
         "INSERT INTO user_accounts (user_id, kakao_subject, display_name) VALUES (?, ?, ?)",
@@ -412,7 +421,9 @@ class UserProfileTests {
     // A concurrent textB update could make this future version match after textA was read.
     when(repository.updatePreferences(anyString(), any(Preferences.class), anyLong()))
         .thenReturn(1);
-    var service = new UserProfileService(repository);
+    var service =
+        new UserProfileService(
+            repository, mock(org.springframework.context.ApplicationEventPublisher.class));
     var request = new SavePreferencesRequest(List.of(), List.of(), null, null, 2L);
 
     assertThatThrownBy(() -> service.savePreferences("user-1", request))
@@ -645,6 +656,97 @@ class UserProfileTests {
     if (body != null) request.contentType(MediaType.APPLICATION_JSON).content(body);
     if (method != HttpMethod.GET) request.header("X-CSRF-Token", csrfToken);
     return mvc.perform(request);
+  }
+
+  private float[] preferenceVector() {
+    float[] vector = new float[1536];
+    vector[0] = 1;
+    return vector;
+  }
+
+  @Test
+  void preferenceApiQueuesEmbeddingAfterCommitAndPersistsUserVector() throws Exception {
+    when(ai.embed(anyString())).thenReturn(preferenceVector());
+    perform(HttpMethod.PUT, ME + "/preferences", preferencesWithText("조용한 원컬러 네일", 1))
+        .andExpect(status().isOk());
+    org.mockito.Mockito.verifyNoInteractions(ai);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT COUNT(*) FROM search_work WHERE kind='VECTOR' AND status='QUEUED'",
+                Integer.class))
+        .isEqualTo(1);
+    assertThat(vectors.vector("user-1")).isNull();
+    String saved =
+        jdbc.queryForObject(
+            "SELECT preferences_json FROM user_accounts WHERE user_id='user-1'", String.class);
+    worker.poll();
+    verify(ai).embed(saved);
+    assertThat(vectors.vector("user-1")).containsExactly(preferenceVector());
+    assertThat(vectors.vector("user-2")).isNull();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT dimensions FROM search_user_vector WHERE user_id='user-1'", Integer.class))
+        .isEqualTo(1536);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT model FROM search_user_vector WHERE user_id='user-1'", String.class))
+        .isEqualTo("text-embedding-3-small");
+
+    perform(HttpMethod.PUT, ME + "/preferences", preferencesWithText("조용한 원컬러 네일", 2))
+        .andExpect(status().isOk());
+    worker.poll();
+    verify(ai, org.mockito.Mockito.times(1)).embed(anyString());
+    assertThat(vectors.vector("user-1")).containsExactly(preferenceVector());
+
+    perform(HttpMethod.PUT, ME + "/preferences", preferencesWithText("화려한 아트", 3))
+        .andExpect(status().isOk());
+    assertThat(vectors.vector("user-1")).isNull();
+    worker.poll();
+    verify(ai, org.mockito.Mockito.times(2)).embed(anyString());
+    assertThat(vectors.vector("user-1")).containsExactly(preferenceVector());
+  }
+
+  @Test
+  void openAiFailureDoesNotUndoSavedPreferencesAndWorkerRetries() throws Exception {
+    when(ai.embed(anyString()))
+        .thenThrow(new com.bintime.search.service.EmbeddingFailure("AI_UNAVAILABLE", true))
+        .thenReturn(preferenceVector());
+    perform(HttpMethod.PUT, ME + "/preferences", preferencesWithText("저장할 취향", 1))
+        .andExpect(status().isOk());
+    worker.poll();
+    assertThat(data(perform(HttpMethod.GET, ME, null)).at("/preferences/text").asText())
+        .isEqualTo("저장할 취향");
+    assertThat(
+            jdbc.queryForObject("SELECT status FROM search_work WHERE kind='VECTOR'", String.class))
+        .isEqualTo("QUEUED");
+    assertThat(vectors.vector("user-1")).isNull();
+    jdbc.update("UPDATE search_work SET available_at=0 WHERE kind='VECTOR'");
+    worker.poll();
+    assertThat(vectors.vector("user-1")).containsExactly(preferenceVector());
+  }
+
+  @Test
+  void preferenceWriteAndEmbeddingJobRollBackTogether() {
+    transactions.executeWithoutResult(
+        status -> {
+          profiles.savePreferences(
+              "user-1", new SavePreferencesRequest(List.of("NAIL"), List.of(), null, "롤백할 취향", 1L));
+          status.setRollbackOnly();
+        });
+    assertThat(profiles.getProfile("user-1").preferences().text()).isEmpty();
+    assertThat(profiles.getProfile("user-1").version()).isEqualTo(1);
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM search_work", Integer.class)).isZero();
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM search_user_vector", Integer.class))
+        .isZero();
+    org.mockito.Mockito.verifyNoInteractions(ai);
+  }
+
+  @Test
+  void rejectedPreferenceWriteDoesNotQueueEmbedding() throws Exception {
+    perform(HttpMethod.PUT, ME + "/preferences", preferencesWithText("오래된 요청", 99))
+        .andExpect(status().isConflict());
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM search_work", Integer.class)).isZero();
+    org.mockito.Mockito.verifyNoInteractions(ai);
   }
 
   private JsonNode data(ResultActions result) throws Exception {
