@@ -1,6 +1,6 @@
 # 실시간 전송 계약
 
-출처: [Notion 공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). DTO와 문서만 정의하며 실제 SSE 연결, WebSocket 업그레이드 및 메시지 처리는 미구현이다.
+출처: [Notion 공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 알림 SSE는 구현했으며 WebSocket은 DTO·문서 계약 단계다.
 
 ## 알림 SSE — N-03
 
@@ -25,6 +25,25 @@ data: {"notification":{"id":"noti_001","type":"VACANCY_MATCHED"}}
 | `session.expired` | `NotificationStreamPayload.SessionExpired` | 세션 만료 후 연결 종료 |
 
 최근 24시간 재생, 15초 heartbeat, 최초 연결에서는 현재 이후 이벤트를 전달한다. 너무 오래된 커서는 스트림 시작 전 410 `STREAM_CURSOR_EXPIRED`다. 연결 후 알림 목록을 조회하고 notification.id로 병합한다. 재생과 실시간 전환 사이에 누락이 없어야 한다. 응답은 `Cache-Control: no-cache` 및 프록시 버퍼링 비활성화가 필요하다.
+
+현재 단일 앱은 영속 이벤트 로그를 1초마다 최대 100건씩 읽는다. 사용자별 DB 잠금으로 이벤트 커밋 순서를 정하고 같은 로그에서 재생과 새 이벤트를 읽어 전환 누락을 방지한다. 재생 시간 경계는 연결 시 고정한다. 타인의 커서·존재하지 않는 커서는 400이며, 유효한 본인 커서 중 24시간이 지난 커서는 410이다. 세션 유휴 만료·로그아웃·계정 변경 시 `session.expired`를 보내고 종료한다. SSE heartbeat는 로그인 세션의 유휴 시간을 연장하지 않는다. 이벤트 로그의 자동 삭제는 아직 수행하지 않는다.
+
+## FCM 알림 등록·발송 — N-04~06
+
+- N-04 `POST /api/v1/notifications/push-subscriptions`는 `{"installationId":"<FID>"}`만 받는다. 문자열 1~128자이며 공백·제어문자는 허용하지 않는다. 이전 Web Push endpoint/keys 계약은 대체됐다.
+- 신규 연결은 201, 같은 사용자·FID 재등록은 같은 구독 ID와 최초 createdAt을 유지하며 200이다. `expiresAt:null`은 Firebase 만료 시각을 알 수 없다는 의미다. 다른 계정의 활성 FID는 409 `SUBSCRIPTION_IN_USE`다.
+- 한 세션의 새 FID 등록은 이전 연결을 원자적으로 교체한다. 같은 FID를 공유하는 다른 유효 세션과 다른 브라우저 FID는 유지한다.
+- N-05는 FID 대신 구독 ID로 삭제한다. 타인의 활성 구독은 404, 본인 구독·이미 비활성화된 구독·없는 ID는 204다. 본인의 해당 FID에 연결한 모든 세션을 해제한다.
+- 로그아웃은 현재 세션만 해제한다. 마지막 세션의 만료·계정 변경·서버 재시작 후에는 발송 대상에서 제외한다. 다시 로그인한 브라우저는 N-04를 호출해야 한다. 단일 프로세스 메모리 세션 구성에 맞춘 정책이며 다중 앱 서버를 지원하지 않는다.
+- 등록은 브라우저 알림 수신 동의로 사용하고, 실제 매칭 발송은 별도로 명시적 동의가 있는 ACTIVE 대기의 현재 버전·조건과 슬롯 공개 버전을 검증한다. 사용자별 별도 전역 알림 설정은 만들지 않았다. N-04 재등록은 이전에 건너뛴 푸시를 재생하거나 대기 버전을 바꾸지 않는다. 기존 슬롯 탐색은 대기 동의를 등록·수정하는 S-03/S-06 흐름에서 수행한다.
+- 접수 시 검증은 조회 시점의 스냅샷이며 이미 저장된 알림은 취소 후에도 이력으로 남는다. 매 발송 직전 조건·슬롯·세션을 다시 검사해 그 전에 완료된 취소·만료를 반영한다. 이미 시작한 외부 HTTP 요청과 취소는 원자적으로 묶지 않는다.
+- N-06의 HTTP 호출은 `X-Internal-Token`과 `notification.internal-token`이 일치해야 한다. 빈 서버 설정은 거절한다. 검색 모듈은 `SearchNotificationGateway`를 직접 호출한다. 외부 고객의 임의 발송 API는 없다.
+- 사용자+슬롯당 알림을 한 번 저장한다. 무효 후보는 200 SKIPPED, 접수·중복 접수는 202 QUEUED다. FCM 제출 직전 현재 대기·슬롯·세션 구독을 다시 확인한다. 목록의 availability도 현재 슬롯을 기준으로 계산하며 외부 확인 실패 시 UNKNOWN이다.
+- 기기별 작업을 DB에 보존하고 5초 간격으로 처리한다. 사용자당 발송 간격 기본 1초(`notification.delivery.minimum-interval-seconds`)는 지연 처리하며 알림을 버리지 않는다. FCM 429/5xx·통신 실패는 Retry-After 및 지수 지연을 적용해 최대 5회 시도한다. UNREGISTERED만 구독을 비활성화하며 일반 INVALID_ARGUMENT는 비활성화하지 않는다.
+- 발송 성공은 FCM 접수이며 기기 수신·읽음·예약 확정을 뜻하지 않는다. 통신 응답 유실·프로세스 중단 후 재시도는 같은 notificationId를 사용하지만 FCM 전송 자체의 정확히 한 번 처리를 보장하지 않는다. 클라이언트도 notificationId로 중복을 제거해야 한다.
+- FCM payload는 `message.fid`, notification title/body, 문자열 data.url=`/customer/waitlist`, data.notificationId를 포함한다. HTTPS 프론트의 동일 origin 링크만 webpush.fcm_options.link에 넣으며 로컬 HTTP에서는 해당 링크 필드를 생략한다.
+
+서버 인증·마이그레이션은 [환경 문서](../../infra/README.md#fcm-알림-설정)를 따른다. 등록·해제에는 기존 세션 쿠키와 X-CSRF-Token을 사용한다. FID는 인증 자격 증명이 아니며 서비스 계정 JSON을 브라우저에 전달하지 않는다. 공식 규격: [Firebase 웹 FID 등록](https://firebase.google.com/docs/cloud-messaging/web/get-started#access_the_firebase_installation_id), [HTTP v1 FID 예제](https://github.com/firebase/quickstart-js/blob/master/messaging/README.md#http), [FCM 오류 코드](https://firebase.google.com/docs/cloud-messaging/error-codes).
 
 ## 채팅 WebSocket — C-WS
 

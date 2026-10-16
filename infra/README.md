@@ -123,6 +123,22 @@ FROM dual;
 `down --volumes`는 로컬 Oracle·Redis 데이터를 모두 삭제하므로 초기화할 때만 사용한다.
 Oracle Free와 Autonomous DB는 관리 기능·접속 방식 등이 다르므로 Oracle 고유 기능은 배포 환경에서도 확인한다.
 
+## FCM 알림 설정
+
+기존 DB에는 `002-notification-subscriptions.sql`, `003-notification-delivery.sql`을 순서대로 적용한다. 파일은 `infra/oracle/migrations/`에 있으며 재실행할 수 있다. 기존 Web Push 구독은 비활성화되므로 프런트에서 로그인 세션으로 FID를 다시 등록해야 한다.
+
+기본값 `FCM_ENABLED=false`에서는 외부 전송을 하지 않고 발송 대기열을 보존한다. 로컬에서 실제 전송을 켤 때 `.env`의 `FCM_PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`(저장소 밖 서비스 계정 JSON의 절대 경로), `FCM_ENABLED=true`를 설정한다. Windows 경로는 `/`를 사용하고 Java Properties가 읽는 비 ASCII 문자는 Unicode escape로 작성한다. 키 파일은 Git이나 이미지에 포함하지 않는다.
+
+배포용 선택 설정은 `compose.fcm.yaml`이다. 서버 `.env`에 `FCM_CREDENTIALS_FILE`을 서버에 별도로 보관한 JSON의 절대 경로로 지정하고, `FCM_PROJECT_ID`와 강한 `NOTIFICATION_INTERNAL_TOKEN`을 설정한다. 키는 읽기 전용 Compose secret으로 앱에 전달한다. N-06 HTTP 호출은 이 내부 토큰을 요구하며 같은 앱의 검색 이벤트는 공개 Java 계약으로 연결된다.
+
+```sh
+docker compose -f compose.yaml -f compose.fcm.yaml up --detach --no-build --wait
+```
+
+현재 `deploy.sh`는 이 선택 파일이나 키를 전송하지 않는다. 배포에서 FCM을 사용할 때는 선택 파일과 키를 서버에 별도 준비하고 위 Compose 조합을 유지한다. 키나 프로젝트 설정만으로 전송을 검증할 수는 없으며 로그인한 브라우저에서 등록한 FID가 필요하다. 테스트는 대체 FCM 서버를 사용한다.
+
+알림은 현재 앱 프로세스의 유효한 로그인 세션에 연결된 FID만 대상으로 한다. 로그아웃·세션 만료·앱 재시작 후에는 브라우저가 다시 등록해야 한다. FCM 수락은 사용자 화면 표시나 수신 완료를 뜻하지 않는다. 전송 결과가 불명확한 네트워크 장애 후 재시도에서는 외부 전송을 정확히 한 번으로 보장할 수 없으며, 알림 저장은 사용자·슬롯별로 중복 방지한다.
+
 ## CI와 수동 배포
 
 - CI는 PR과 `main` 푸시에서 `./gradlew build --no-daemon`만 실행한다.

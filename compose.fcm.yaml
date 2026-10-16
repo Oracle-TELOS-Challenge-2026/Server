@@ -1,0 +1,15 @@
+# Optional production override: credentials stay outside the repository and image.
+services:
+  app:
+    environment:
+      FCM_ENABLED: 'true'
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-bintime-33512}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-admin.json
+      NOTIFICATION_INTERNAL_TOKEN: ${NOTIFICATION_INTERNAL_TOKEN:-}
+    secrets:
+      - source: firebase-admin
+        target: firebase-admin.json
+
+secrets:
+  firebase-admin:
+    file: ${FCM_CREDENTIALS_FILE:?Set an absolute path to the server service account JSON}
