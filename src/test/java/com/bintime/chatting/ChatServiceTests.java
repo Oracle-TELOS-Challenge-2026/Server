@@ -96,7 +96,14 @@ class ChatServiceTests {
   }
 
   @Test
-  void onlyCustomersCanCreateRoomsAndReadRowsDoNotGrantMembership() {
+  void ownerCanChatAsCustomerWithAnotherStore() {
+    var room = chats.create("owner", "customer-chat", new CreateChatRoomRequest("shop3"));
+    assertThat(room.status()).isEqualTo(201);
+    assertThat(room.data().customer().id()).isEqualTo("owner");
+  }
+
+  @Test
+  void ownStoreChatIsRejectedAndReadRowsDoNotGrantMembership() {
     failure(
         403, "FORBIDDEN", () -> chats.create("owner", "key", new CreateChatRoomRequest("shop")));
     failure(

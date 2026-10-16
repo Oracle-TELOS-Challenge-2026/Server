@@ -23,6 +23,8 @@ U-04~U-08을 구현한다. 모든 요청은 카카오 로그인으로 발급된 
 
 별도 선호도 GET은 추가하지 않는다. `GET /users/me`의 `success.data.preferences`로 조회한다. 초기 위치는 null, 선호도는 빈 배열과 `maxPrice:null`, `text:""`다. 기존 DB의 선호도에 원문이 없어도 `text`는 빈 문자열로 반환한다. 소유 매장 ID는 같은 애플리케이션 DB의 `store_shops.owner_user_id`로 조회하며 매장 정보는 수정하지 않는다.
 
+최초 가입은 `roles:["CUSTOMER"]`다. 매장 등록에 성공하면 `roles:["OWNER"]`로 바뀌고 `ownedStoreIds`에 등록한 매장이 포함된다. OWNER도 고객 기능을 사용할 수 있으므로 프론트는 고객 화면을 CUSTOMER 역할만으로 제한하지 않는다. 매장 등록 후 프로필을 다시 조회하며 재로그인은 필요 없다.
+
 `GET /users/me`의 **최상위 `success.data.version`**을 이름 수정과 선호도 저장의 `expectedVersion`으로 사용한다. `preferences.version`을 별도로 만들지 않는다. 선호도 저장 응답의 `success.data.version`도 같은 사용자 버전이다. 이름·선호도를 수정한 뒤에는 응답의 새 버전으로 갱신한다.
 
 프론트는 모든 요청에 `credentials: 'include'`를 설정한다. 변경 요청에는 `GET /api/v1/auth/csrf`로 받은 `success.data.csrfToken`을 필수 `X-CSRF-Token` 헤더에 보낸다. 누락·불일치는 Spring Security에서 403 `CSRF_INVALID`로 처리한다. JSON 요청은 `Content-Type: application/json`을 사용한다.

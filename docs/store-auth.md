@@ -23,11 +23,17 @@ store는 기존 카카오 로그인 세션 쿠키(`bt_session`)를 그대로 사
 | ST-15 | POST `/owner/stores/{storeId}/vacancies/{vacancyId}/publish` | OWNER, 매장 소유자 |
 | ST-16 | POST `/owner/stores/{storeId}/vacancies/{vacancyId}/withdraw` | OWNER, 매장 소유자 |
 | ST-17 | POST `/owner/stores/{storeId}/reservations/{reservationId}/status` | OWNER, 매장 소유자 |
-| ST-18 | POST `/owner/stores` | OWNER |
+| ST-18 | POST `/owner/stores` | 로그인, 등록 성공 시 OWNER 자동 부여 |
 | ST-19 | POST `/owner/stores/{storeId}/services` | OWNER, 매장 소유자 |
 | ST-20 | POST `/owner/stores/{storeId}/slots` | OWNER, 매장 소유자 |
 
 공개 조회는 매장 탐색과 예약 가능 여부 확인에 사용하므로 비로그인을 허용한다. 예약·관리 API는 개인정보 및 상태 변경을 포함하므로 인증한다. 역할·표시 이름은 JWT나 로그인 당시 역할을 신뢰하지 않고 매 요청 user 공개 서비스를 통해 현재 DB에서 읽는다. 예약 소유권·매장 소유권은 store 서비스에서 검증한다. DB에서 삭제된 사용자도 401이다. 명시적으로 제공한 JWT가 잘못되면 유효한 세션 쿠키가 함께 있어도 401이며 쿠키로 재시도하지 않는다.
+
+## 사장님 등록
+
+최초 가입 역할은 CUSTOMER다. 로그인한 CUSTOMER 또는 OWNER는 `POST /api/v1/owner/stores`로 매장을 등록할 수 있으며, 매장 소유자는 인증된 본인으로 고정한다. 매장·카탈로그 이벤트·멱등 성공 기록과 OWNER 부여는 하나의 트랜잭션으로 커밋하고 실패 시 모두 롤백한다. 같은 키의 동시 요청과 재시도는 기존 24시간 멱등 규칙을 따른다.
+
+DB는 기존 단일 `role_code`를 유지한다. OWNER는 고객 기능도 사용할 수 있으며, 다른 매장의 관리 권한은 얻지 않는다. store·search는 다음 요청에서 현재 DB 역할을 조회하므로 재로그인이 필요 없다. 프론트는 등록 성공 후 `GET /api/v1/users/me`로 `roles`와 `ownedStoreIds`를 다시 조회한다. 별도 사업자 심사나 운영자 승인 절차는 적용하지 않는다.
 
 ## 쿠키 요청
 

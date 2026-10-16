@@ -13,6 +13,10 @@ import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Set;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
@@ -84,6 +88,11 @@ public class OpenApiConfig {
             .referencedSchemas
             .forEach(api.getComponents()::addSchemas);
       }
+      Set<Schema<?>> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+      api.getComponents()
+          .getSchemas()
+          .values()
+          .forEach(schema -> nullableReferences(schema, visited));
       api.getPaths()
           .forEach(
               (path, item) ->
@@ -109,5 +118,34 @@ public class OpenApiConfig {
                                     });
                           }));
     };
+  }
+
+  private static void nullableReferences(Schema<?> schema, Set<Schema<?>> visited) {
+    if (schema == null || !visited.add(schema)) return;
+    if (schema.get$ref() != null
+        && (Boolean.TRUE.equals(schema.getNullable())
+            || (schema.getTypes() != null && schema.getTypes().contains("null"))
+            || "null".equals(schema.getType()))) {
+      // 3.1의 $ref와 type:null은 동시에 적용된다. 객체 또는 null은 별도 대안이어야 한다.
+      String ref = schema.get$ref();
+      schema.set$ref(null);
+      schema.setType(null);
+      schema.setTypes(null);
+      schema.setNullable(null);
+      Schema<?> nullSchema = new Schema<>();
+      nullSchema.setTypes(Set.of("null"));
+      schema.setOneOf(List.of(new Schema<>().$ref(ref), nullSchema));
+    }
+    if (schema.getProperties() != null)
+      schema.getProperties().values().forEach(child -> nullableReferences(child, visited));
+    nullableReferences(schema.getItems(), visited);
+    if (schema.getAdditionalProperties() instanceof Schema<?> child)
+      nullableReferences(child, visited);
+    if (schema.getOneOf() != null)
+      schema.getOneOf().forEach(child -> nullableReferences(child, visited));
+    if (schema.getAnyOf() != null)
+      schema.getAnyOf().forEach(child -> nullableReferences(child, visited));
+    if (schema.getAllOf() != null)
+      schema.getAllOf().forEach(child -> nullableReferences(child, visited));
   }
 }

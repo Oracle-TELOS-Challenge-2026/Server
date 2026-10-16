@@ -60,7 +60,8 @@ public class ChatService {
     return tx.execute(
         status -> {
           var actor = actor(user, true);
-          require("CUSTOMER".equals(actor.role()), 403, "FORBIDDEN");
+          require(
+              "CUSTOMER".equals(actor.role()) || "OWNER".equals(actor.role()), 403, "FORBIDDEN");
           String owner = db.storeOwner(request.storeId());
           require(owner != null, 404, "STORE_NOT_FOUND");
           require(!owner.equals(user), 403, "FORBIDDEN");

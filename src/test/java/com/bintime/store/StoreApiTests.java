@@ -3,6 +3,7 @@ package com.bintime.store;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
+import com.bintime.store.contract.StoreReservationPort;
 import com.bintime.store.service.StoreApplicationService;
 import java.net.URI;
 import java.net.http.*;
@@ -34,6 +35,7 @@ class StoreApiTests {
   @Autowired JdbcTemplate db;
   @Autowired JsonMapper json;
   @Autowired StoreApplicationService stores;
+  @Autowired StoreReservationPort reservations;
   @Autowired com.bintime.store.contract.SearchStoreCatalog catalog;
   @Autowired com.bintime.search.service.WaitlistService waitlists;
   @Autowired com.bintime.search.service.SearchIndexService searchIndex;
@@ -142,6 +144,13 @@ class StoreApiTests {
   }
 
   private String shop(String owner) throws Exception {
+    return ok(
+            "POST", BASE + "/owner/stores", owner, UUID.randomUUID().toString(), shopRequest(), 201)
+        .path("id")
+        .asText();
+  }
+
+  private Map<String, Object> shopRequest() {
     var hours =
         List.of("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN").stream()
             .map(
@@ -149,25 +158,101 @@ class StoreApiTests {
                     Map.of(
                         "dayOfWeek", day, "opensAt", "09:00", "closesAt", "22:00", "closed", false))
             .toList();
-    return ok(
-            "POST",
-            BASE + "/owner/stores",
-            owner,
-            UUID.randomUUID().toString(),
-            Map.of(
-                "name",
-                "매장",
-                "category",
-                "NAIL",
-                "address",
-                "서울",
-                "location",
-                Map.of("latitude", 37.5, "longitude", 127.0),
-                "openingHours",
-                hours),
-            201)
-        .path("id")
-        .asText();
+    return Map.of(
+        "name",
+        "매장",
+        "category",
+        "NAIL",
+        "address",
+        "서울",
+        "location",
+        Map.of("latitude", 37.5, "longitude", 127.0),
+        "openingHours",
+        hours);
+  }
+
+  @Test
+  void customerBecomesOwnerOnStoreCreationAndCanStillBookAsCustomer() throws Exception {
+    String own = shop("alice");
+    assertThat(
+            db.queryForObject(
+                "select role_code from user_accounts where user_id='alice'", String.class))
+        .isEqualTo("OWNER");
+    ok("GET", ownerPath(own) + "/timetable?date=2026-10-17", "alice", null, null, 200);
+    String other = shop("owner");
+    String service = service(other, 60);
+    JsonNode slot = slot(other, service, "2026-10-17T10:00:00+09:00");
+    assertThat(reserve(slot, "alice").path("status").asText()).isEqualTo("CONFIRMED");
+    assertThat(
+            call("GET", ownerPath(other) + "/timetable?date=2026-10-17", "alice", null, null)
+                .status)
+        .isEqualTo(403);
+  }
+
+  @Test
+  void failedRegistrationAndTransactionRollbackDoNotGrantOwner() throws Exception {
+    var invalid = new HashMap<>(shopRequest());
+    invalid.put("category", "INVALID");
+    assertThat(call("POST", BASE + "/owner/stores", "alice", "retry-store", invalid).status)
+        .isEqualTo(400);
+    assertThat(
+            db.queryForObject(
+                "select role_code from user_accounts where user_id='alice'", String.class))
+        .isEqualTo("CUSTOMER");
+    var request = json.convertValue(shopRequest(), com.bintime.store.dto.CreateStoreRequest.class);
+    assertThatThrownBy(
+            () ->
+                transactions.executeWithoutResult(
+                    status -> {
+                      stores.createStore(
+                          new com.bintime.common.auth.Actor("alice", "CUSTOMER", "alice"),
+                          "rollback",
+                          request);
+                      throw new IllegalStateException("rollback after registration");
+                    }))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(
+            db.queryForObject(
+                "select role_code from user_accounts where user_id='alice'", String.class))
+        .isEqualTo("CUSTOMER");
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_shops where owner_user_id='alice'", Integer.class))
+        .isZero();
+    var first = ok("POST", BASE + "/owner/stores", "alice", "retry-store", shopRequest(), 201);
+    var replay = ok("POST", BASE + "/owner/stores", "alice", "retry-store", shopRequest(), 201);
+    assertThat(replay).isEqualTo(first);
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_shops where owner_user_id='alice'", Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void concurrentFirstRegistrationReplaysOneStore() throws Exception {
+    try (var pool = Executors.newFixedThreadPool(2)) {
+      var first =
+          pool.submit(
+              () ->
+                  call("POST", BASE + "/owner/stores", "alice", "concurrent-store", shopRequest()));
+      var second =
+          pool.submit(
+              () ->
+                  call("POST", BASE + "/owner/stores", "alice", "concurrent-store", shopRequest()));
+      Result a = first.get(10, TimeUnit.SECONDS);
+      Result b = second.get(10, TimeUnit.SECONDS);
+      assertThat(a.status).isEqualTo(201);
+      assertThat(b.status).isEqualTo(201);
+      assertThat(a.data()).isEqualTo(b.data());
+    }
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_shops where owner_user_id='alice'", Integer.class))
+        .isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select role_code from user_accounts where user_id='alice'", String.class))
+        .isEqualTo("OWNER");
   }
 
   private String service(String shop, int duration) throws Exception {
@@ -209,6 +294,162 @@ class StoreApiTests {
 
   private String ownerPath(String shop) {
     return BASE + "/owner/stores/" + shop;
+  }
+
+  private StoreReservationPort.Command reservationCommand(JsonNode slot, String user, String key) {
+    return new StoreReservationPort.Command(
+        user,
+        key,
+        slot.path("id").asText(),
+        slot.at("/price/payable").asLong(),
+        slot.path("version").asLong(),
+        null);
+  }
+
+  @Test
+  void reservationPortConfirmsWithoutHttpContextAndSharesHttpIdempotency() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    JsonNode slot = slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    var command = reservationCommand(slot, "alice", "shared");
+    var confirmed = reservations.reserve(command);
+    assertThat(confirmed.status()).isEqualTo("CONFIRMED");
+    assertThat(confirmed.storeId()).isEqualTo(shop);
+    assertThat(confirmed.serviceId()).isEqualTo(svc);
+    assertThat(confirmed.slotId()).isEqualTo(command.slotId());
+    assertThat(confirmed.payablePrice()).isEqualTo(command.expectedPrice());
+    assertThat(confirmed.startAt()).isEqualTo(OffsetDateTime.parse("2026-10-16T12:00:00+09:00"));
+    assertThat(reservations.reserve(command)).isEqualTo(confirmed);
+    assertThat(
+            ok("POST", BASE + "/reservations", "alice", "shared", booking(slot), 201)
+                .path("id")
+                .asText())
+        .isEqualTo(confirmed.reservationId());
+    assertThat(db.queryForObject("select customer_name from store_reservations", String.class))
+        .isEqualTo("alice");
+    assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+        .isEqualTo(1);
+
+    JsonNode next = slot(shop, svc, "2026-10-16T13:00:00+09:00");
+    var http = ok("POST", BASE + "/reservations", "alice", "http-first", booking(next), 201);
+    assertThat(
+            reservations.reserve(reservationCommand(next, "alice", "http-first")).reservationId())
+        .isEqualTo(http.path("id").asText());
+    assertThatThrownBy(() -> reservations.reserve(reservationCommand(next, "alice", "shared")))
+        .hasMessage("IDEMPOTENCY_KEY_REUSED");
+  }
+
+  @Test
+  void reservationPortRejectsUnknownUsersAndStaleConditionsWithoutConsumingKey() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    JsonNode slot = slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    var command = reservationCommand(slot, "alice", "retry");
+    assertThatThrownBy(() -> reservations.reserve(null)).hasMessage("INVALID_INPUT");
+    assertThatThrownBy(() -> reservations.reserve(reservationCommand(slot, "missing", "retry")))
+        .hasMessage("UNAUTHENTICATED");
+    assertThatThrownBy(
+            () ->
+                reservations.reserve(
+                    new StoreReservationPort.Command(
+                        "alice",
+                        "retry",
+                        command.slotId(),
+                        command.expectedPrice() + 1,
+                        command.expectedSlotVersion(),
+                        null)))
+        .hasMessage("PRICE_CHANGED");
+    assertThatThrownBy(
+            () ->
+                reservations.reserve(
+                    new StoreReservationPort.Command(
+                        "alice",
+                        "retry",
+                        command.slotId(),
+                        command.expectedPrice(),
+                        command.expectedSlotVersion() + 1,
+                        null)))
+        .hasMessage("VERSION_CONFLICT");
+    assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+        .isZero();
+    assertThat(reservations.reserve(command).status()).isEqualTo("CONFIRMED");
+    assertThatThrownBy(() -> reservations.reserve(reservationCommand(slot, "bob", "another")))
+        .hasMessage("SLOT_UNAVAILABLE");
+  }
+
+  @Test
+  void reservationPortParticipatesInCallerTransactionIncludingWaitlistAndEvents() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    JsonNode slot = slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    seedIntent("port-wait", "alice", shop, svc);
+    var base = reservationCommand(slot, "alice", "rollback-port");
+    var command =
+        new StoreReservationPort.Command(
+            base.userId(),
+            base.idempotencyKey(),
+            base.slotId(),
+            base.expectedPrice(),
+            base.expectedSlotVersion(),
+            "port-wait");
+    assertThatThrownBy(
+            () ->
+                transactions.executeWithoutResult(
+                    status -> {
+                      reservations.reserve(command);
+                      throw new IllegalStateException("caller failed");
+                    }))
+        .hasMessage("caller failed");
+    assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+        .isZero();
+    assertThat(
+            db.queryForObject(
+                "select status_code from store_slots where slot_id=?", String.class, base.slotId()))
+        .isEqualTo("AVAILABLE");
+    assertThat(
+            db.queryForObject(
+                "select status from search_intent where id='port-wait'", String.class))
+        .isEqualTo("ACTIVE");
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_events where event_type='BOOKED'", Integer.class))
+        .isZero();
+    var confirmed = reservations.reserve(command);
+    assertThat(
+            db.queryForObject(
+                "select reservation_id from search_intent where id='port-wait'", String.class))
+        .isEqualTo(confirmed.reservationId());
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_events where event_type='BOOKED'", Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void concurrentReservationPortCallsConfirmOnlyOneCustomer() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    JsonNode slot = slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    var start = new CountDownLatch(1);
+    try (var pool = Executors.newFixedThreadPool(2)) {
+      var attempts = new ArrayList<Future<String>>();
+      for (String user : List.of("alice", "bob")) {
+        attempts.add(
+            pool.submit(
+                () -> {
+                  start.await();
+                  try {
+                    return reservations.reserve(reservationCommand(slot, user, "race")).status();
+                  } catch (com.bintime.common.web.ApiBusinessException failure) {
+                    return failure.code;
+                  }
+                }));
+      }
+      start.countDown();
+      assertThat(
+              List.of(
+                  attempts.get(0).get(15, TimeUnit.SECONDS),
+                  attempts.get(1).get(15, TimeUnit.SECONDS)))
+          .containsExactlyInAnyOrder("CONFIRMED", "SLOT_UNAVAILABLE");
+    }
+    assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+        .isEqualTo(1);
   }
 
   private com.bintime.search.dto.WaitlistConditions conditions(String shop, String service) {
@@ -707,7 +948,7 @@ class StoreApiTests {
   @Test
   void permissionsInputNullPatchesAndVersionsAreEnforced() throws Exception {
     assertThat(call("POST", BASE + "/owner/stores", null, "x", Map.of()).status).isEqualTo(401);
-    assertThat(call("POST", BASE + "/owner/stores", "alice", "x", Map.of()).status).isEqualTo(403);
+    assertThat(call("POST", BASE + "/owner/stores", "alice", "x", Map.of()).status).isEqualTo(400);
     String shop = shop("owner"), svc = service(shop, 60);
     assertThat(
             call(

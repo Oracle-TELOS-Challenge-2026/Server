@@ -46,7 +46,7 @@ public class ChatRoomController {
       summary = "C-01 · 매장 문의 채팅방 생성·조회",
       description =
           "고객+매장당 방 1개. 신규 201, 기존 200. Idempotency-Key 필수.\n\n"
-              + "- CUSTOMER — 본인 데이터\n"
+              + "- CUSTOMER 또는 OWNER — 본인 데이터\n"
               + "- X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)",
       externalDocs =
