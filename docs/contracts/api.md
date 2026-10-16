@@ -2,6 +2,7 @@
 
 출처: [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4) 및 [공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 2026-10-16 조회 기준의 구현 제안 계약이다.
 
+48개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~17 및 등록 API 3개는 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. 나머지 미구현 도메인의 Controller는 공통 실패 JSON과 501 상태를 반환한다.
 45개 HTTP 경로(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01·U-02·U-03·U-09는 카카오 로그인·세션·CSRF로 구현했다. 나머지는 Controller·DTO 계약 골격으로, Controller에 도달한 요청에 공통 실패 JSON과 501 상태를 반환한다.
 
 Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`의 세션 인증·CSRF를 적용한다. 다른 도메인의 인증·권한은 해당 기능 구현 시 연결한다. `api-docs` 프로필은 문서 열람용으로 보안 필터와 DB 의존성을 제외한다. 자세한 설정은 [카카오 로그인](../kakao-login.md)을 따른다.
@@ -18,7 +19,7 @@ Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`의 세션 인증·CSRF�
 
 ## 명세 간 차이
 
-Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며, 기존 AGENTS.md의 HELD/CONFIRMED와 다르다. 알림도 조건 일치자 전원 대상으로 기존의 상위 5명 정책과 다르다. 이번 변경에서는 API 상태값을 Notion에 맞추고 두 정책의 실제 동작은 구현하지 않는다. 도메인 구현 전 정책 문서를 정합화해야 한다.
+Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며, 기존 AGENTS.md의 HELD/CONFIRMED와 다르다. 알림 정책은 search 구현에서 **필수 조건 일치 고객 전원**으로 확정했다. 벡터 top-k/유사도 임계값으로 고객을 제외하지 않는다. 시간 조건은 시술 시작부터 종료까지 전체 포함이다. 슬롯 선점/예약 상태는 store 책임으로 유지한다.
 
 ## API 이름 매핑
 
@@ -71,3 +72,17 @@ Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며
 | C-05 | chatting | PUT `/api/v1/chatting/rooms/{roomId}/read` | ChatRoomController.updateReadPosition | UpdateChatReadRequest | ChatReadResponse |
 
 실시간 프레임은 [realtime.md](realtime.md)를 참고한다.
+
+## 추가 store 등록 API
+
+| 구분 | 도메인 | 메서드·경로 | Controller | 요청 DTO | 응답 DTO |
+| --- | --- | --- | --- | --- | --- |
+| ST-18 | store | POST `/api/v1/owner/stores` | OwnerStoreController.createStore | CreateStoreRequest | StoreDetailResponse |
+| ST-19 | store | POST `/api/v1/owner/stores/{storeId}/services` | OwnerStoreController.createService | CreateStoreServiceRequest | StoreServiceResponse |
+| ST-20 | store | POST `/api/v1/owner/stores/{storeId}/slots` | OwnerStoreController.createSlot | CreateSlotRequest | ReservationSlotResponse |
+
+store MVP는 하나의 DB 트랜잭션에서 AVAILABLE → BOOKED로 확정하며 별도 HELD API를 도입하지 않는다. 예약 상태는 CONFIRMED와 후속 최종 상태로 구분한다. 한 매장의 동시 예약 자원은 1개다. store의 입력·권한·멱등성·마이그레이션·영속 작업·운영 인증 조건은 [store.md](../store.md)를 따른다.
+
+### 사용자 선호 임베딩 연동
+
+사용자 벡터 입력은 `user_accounts.preferences_json`의 자유로운 JSON 문자열 전체다. user 공개 서비스가 읽기/저장과 변경 이벤트를 제공하고 search가 OpenAI 호출/비동기 갱신/Oracle 벡터 저장을 맡는다. U-08의 기존 HTTP DTO/501 상태는 유지하며 내부 `UserPreferenceService.replace`를 새 저장 API 구현에서 연결한다. 개인정보나 선호 원문/벡터를 공개하는 새 HTTP API는 추가하지 않았다. 세부 오류와 마이그레이션/운영 명령은 [search 안내](../search.md)를 따른다.

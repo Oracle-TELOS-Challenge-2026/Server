@@ -1,8 +1,8 @@
+-- JDBC/IDE-compatible SQL. Connect as the application user; do not select PUBLIC.
+-- SQL*Plus callers must configure SET/WHENEVER in their wrapper.
 -- BinTime HACKATHON MVP / Oracle Autonomous Database / 19c+ SQL subset
--- 10 tables, 5 domains. Web push is REQUIRED. One owner and one concurrent appointment per store.
+-- 13 tables, 5 domains. Web push is REQUIRED. One owner and one concurrent appointment per store.
 -- Run ONCE in an EMPTY application schema. Not a migration from the 30-table draft.
-SET DEFINE OFF
-WHENEVER SQLERROR EXIT SQL.SQLCODE
 
 --------------------------------------------------------------------------------
 -- 1. USER: login identity, role, location and preferences in one table
@@ -32,6 +32,11 @@ CREATE TABLE user_accounts (
 -- 2. STORE: one owner, one reservable resource per store
 --------------------------------------------------------------------------------
 CREATE TABLE store_shops (
+ opening_hours_json CLOB DEFAULT '[{"dayOfWeek":"MON","opensAt":null,"closesAt":null,"closed":true},{"dayOfWeek":"TUE","opensAt":null,"closesAt":null,"closed":true},{"dayOfWeek":"WED","opensAt":null,"closesAt":null,"closed":true},{"dayOfWeek":"THU","opensAt":null,"closesAt":null,"closed":true},{"dayOfWeek":"FRI","opensAt":null,"closesAt":null,"closed":true},{"dayOfWeek":"SAT","opensAt":null,"closesAt":null,"closed":true},{"dayOfWeek":"SUN","opensAt":null,"closesAt":null,"closed":true}]' NOT NULL,
+ timezone VARCHAR2(40 BYTE) DEFAULT 'Asia/Seoul' NOT NULL,
+ rating_average NUMBER(3,2) DEFAULT 0 NOT NULL,
+ rating_count NUMBER(10,0) DEFAULT 0 NOT NULL,
+ version_no NUMBER(10,0) DEFAULT 1 NOT NULL,
                              store_id      VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                              owner_user_id VARCHAR2(64 BYTE) NOT NULL,
                              name          VARCHAR2(100 CHAR) NOT NULL,
@@ -51,9 +56,10 @@ CREATE TABLE store_shops (
 );
 
 --------------------------------------------------------------------------------
--- 3. STORE: seeded services; no management CRUD in the hackathon scope
+-- 3. STORE: owner-managed services
 --------------------------------------------------------------------------------
 CREATE TABLE store_services (
+ active_yn CHAR(1 BYTE) DEFAULT 'Y' NOT NULL, version_no NUMBER(10,0) DEFAULT 1 NOT NULL,
                                 service_id       VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                                 store_id         VARCHAR2(64 BYTE) NOT NULL,
                                 name             VARCHAR2(100 CHAR) NOT NULL,
@@ -73,6 +79,7 @@ CREATE TABLE store_services (
 -- source_reservation_id FK is added after reservations have been created.
 --------------------------------------------------------------------------------
 CREATE TABLE store_slots (
+ original_service_id VARCHAR2(64 BYTE), vacancy_original_price NUMBER(10,0), published_at TIMESTAMP(6) WITH TIME ZONE, discount_type VARCHAR2(12 BYTE), discount_value NUMBER(10,0),
                              slot_id               VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                              store_id              VARCHAR2(64 BYTE) NOT NULL,
                              service_id            VARCHAR2(64 BYTE) NOT NULL,
@@ -151,6 +158,7 @@ CREATE TABLE search_waitlists (
 -- 6. STORE: reservation snapshots survive later publication/price changes
 --------------------------------------------------------------------------------
 CREATE TABLE store_reservations (
+ service_id VARCHAR2(64 BYTE), duration_minutes NUMBER(3,0), customer_name VARCHAR2(30 CHAR), cancel_reason_code VARCHAR2(20 BYTE), cancel_reason VARCHAR2(300 CHAR), canceled_at TIMESTAMP(6) WITH TIME ZONE,
                                     reservation_id  VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                                     user_id         VARCHAR2(64 BYTE) NOT NULL,
                                     store_id        VARCHAR2(64 BYTE) NOT NULL,
@@ -169,8 +177,6 @@ CREATE TABLE store_reservations (
                                     CONSTRAINT uq_reservation_waitlist UNIQUE (waitlist_id),
                                     CONSTRAINT fk_reservation_user FOREIGN KEY (user_id) REFERENCES user_accounts(user_id),
                                     CONSTRAINT fk_reservation_slot FOREIGN KEY (slot_id, store_id) REFERENCES store_slots(slot_id, store_id),
-                                    CONSTRAINT fk_reservation_waitlist FOREIGN KEY (waitlist_id, user_id)
-                                        REFERENCES search_waitlists(waitlist_id, user_id),
                                     CONSTRAINT ck_reservation_time CHECK (start_at < end_at),
                                     CONSTRAINT ck_reservation_price CHECK (original_price BETWEEN 0 AND 10000000
                                         AND payable_price BETWEEN 0 AND original_price),
@@ -310,3 +316,53 @@ COMMENT ON TABLE notification_subscriptions IS 'notification: 웹 푸시 구독 
 COMMENT ON COLUMN notification_alerts.push_status IS 'SENT는 푸시 서비스 접수 성공, 기기 도착/읽음 보장은 아님';
 COMMENT ON COLUMN notification_alerts.expires_at IS '제안 유효기한. 일반적으로 슬롯 시작 시각';
 COMMENT ON COLUMN notification_subscriptions.auth_secret IS '브라우저 PushSubscription auth 값. VAPID 개인키가 아님';
+
+-- Store API persistence extensions (included for a fresh schema).
+ALTER TABLE store_shops ADD CONSTRAINT ck_shop_hours CHECK (opening_hours_json IS JSON (STRICT));
+ALTER TABLE store_shops ADD CONSTRAINT ck_shop_timezone CHECK (timezone='Asia/Seoul');
+ALTER TABLE store_shops ADD CONSTRAINT ck_shop_summary CHECK (rating_average BETWEEN 0 AND 5 AND rating_count>=0 AND version_no>=1);
+ALTER TABLE store_services ADD CONSTRAINT ck_service_active CHECK(active_yn IN ('Y','N') AND version_no>=1);
+ALTER TABLE store_reservations MODIFY (service_id NOT NULL, duration_minutes NOT NULL, customer_name NOT NULL);
+ALTER TABLE store_reservations ADD CONSTRAINT fk_reservation_service FOREIGN KEY(store_id,service_id) REFERENCES store_services(store_id,service_id);
+ALTER TABLE store_reservations ADD CONSTRAINT ck_reservation_cancel CHECK(cancel_reason_code IN ('CUSTOMER_REQUEST','STORE_REQUEST','OTHER'));
+CREATE TABLE store_customer_locks (
+ user_id VARCHAR2(64 BYTE) NOT NULL,
+ CONSTRAINT pk_store_customer_locks PRIMARY KEY(user_id),
+ CONSTRAINT fk_customer_lock_user FOREIGN KEY(user_id) REFERENCES user_accounts(user_id)
+);
+CREATE TABLE store_idempotency (
+ request_id VARCHAR2(64 BYTE) NOT NULL,
+ actor_id VARCHAR2(64 BYTE) NOT NULL,
+ operation VARCHAR2(200 BYTE) NOT NULL,
+ key_value VARCHAR2(200 BYTE) NOT NULL,
+ fingerprint VARCHAR2(64 BYTE) NOT NULL,
+ result_json CLOB NOT NULL,
+ http_status NUMBER(3,0) NOT NULL,
+ expires_at TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+ CONSTRAINT pk_store_idempotency PRIMARY KEY(request_id),
+ CONSTRAINT uq_store_idem_key UNIQUE(actor_id, operation, key_value),
+ CONSTRAINT ck_store_idem_status CHECK(http_status IN (200,201)),
+ CONSTRAINT ck_store_idem_json CHECK(result_json IS JSON (STRICT))
+);
+CREATE INDEX ix_store_idem_expiry ON store_idempotency(expires_at);
+CREATE TABLE store_events (
+ event_id VARCHAR2(64 BYTE) NOT NULL,
+ event_type VARCHAR2(20 BYTE) NOT NULL,
+ slot_id VARCHAR2(64 BYTE) NOT NULL,
+ publication_version NUMBER(10,0),
+ slot_version NUMBER(10,0) NOT NULL,
+ payload_json CLOB NOT NULL,
+ status_code VARCHAR2(10 BYTE) DEFAULT 'QUEUED' NOT NULL,
+ created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+ CONSTRAINT pk_store_events PRIMARY KEY(event_id),
+ CONSTRAINT fk_store_event_slot FOREIGN KEY(slot_id) REFERENCES store_slots(slot_id),
+ CONSTRAINT ck_store_event_status CHECK(status_code IN ('QUEUED','PROCESSED','FAILED')),
+ CONSTRAINT ck_store_event_json CHECK(payload_json IS JSON (STRICT))
+);
+CREATE INDEX ix_store_event_queue ON store_events(status_code,created_at);
+
+ALTER TABLE store_slots ADD CONSTRAINT ck_slot_discount CHECK (
+ (discount_type IS NULL AND discount_value IS NULL)
+ OR (discount_type IS NOT NULL AND discount_value IS NOT NULL AND
+ ((discount_type='PERCENT' AND discount_value BETWEEN 0 AND 100)
+ OR (discount_type='FIXED_PRICE' AND discount_value BETWEEN 0 AND original_price))));

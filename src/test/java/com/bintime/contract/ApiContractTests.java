@@ -27,9 +27,9 @@ class ApiContractTests {
     JsonNode allDoc = getDoc("all");
     JsonNode publicDoc = getDoc("public");
     JsonNode internalDoc = getDoc("internal");
-    assertThat(operationCount(publicDoc)).isEqualTo(43);
+    assertThat(operationCount(publicDoc)).isEqualTo(46);
     assertThat(operationCount(internalDoc)).isEqualTo(2);
-    assertThat(operationCount(allDoc)).isEqualTo(45);
+    assertThat(operationCount(allDoc)).isEqualTo(48);
     var operationIds = new HashSet<String>();
 
     for (JsonNode contract : contracts()) {
@@ -44,6 +44,9 @@ class ApiContractTests {
       assertThat(operationIds.add(operation.path("operationId").asText())).isTrue();
       assertThat(operation.path("responses").has(contract.path("status").asText())).isTrue();
       assertThat(operation.path("responses").has("501"))
+          .isEqualTo(
+              !contract.path("id").asText().startsWith("S-")
+                  && !contract.path("id").asText().startsWith("ST-"));
           .isEqualTo(!IMPLEMENTED.contains(contract.path("id").asText()));
       assertThat(publicDoc.path("paths").has("/api/v1/chatting/ws")).isFalse();
 
@@ -126,6 +129,13 @@ class ApiContractTests {
             }
           }
           var expected = new HashSet<String>();
+          if (!path.getKey().contains("/search/")) expected.add("501");
+          else {
+            expected.addAll(java.util.Set.of("400", "401", "403", "404", "503"));
+            if (java.util.Set.of(
+                    "createWaitlist", "updateWaitlist", "cancelWaitlist", "createMatchJob")
+                .contains(operation.path("operationId").asText())) expected.add("409");
+          }
           for (JsonNode contract : contracts()) {
             if (contract.path("path").asText().equals(path.getKey())
                 && contract.path("method").asText().equalsIgnoreCase(method.getKey())) {
@@ -149,6 +159,34 @@ class ApiContractTests {
                   "sendMessage")
               .contains(operation.path("operationId").asText())) {
             expected.add("200");
+          }
+          if (operation.path("tags").toString().contains("store")) {
+            expected.clear();
+            String id = operation.path("operationId").asText();
+            expected.add(
+                java.util.Set.of("createStore", "createService", "createSlot", "createReservation")
+                        .contains(id)
+                    ? "201"
+                    : "200");
+            if (!java.util.Set.of(
+                    "getCategories", "getStore", "getSlot", "getReservation", "getOwnerReservation")
+                .contains(id)) expected.add("400");
+            if (!java.util.Set.of(
+                    "getCategories", "getStore", "getServices", "getAvailableSlots", "getSlot")
+                .contains(id)) expected.addAll(java.util.Set.of("401", "403"));
+            if (!java.util.Set.of("getCategories", "getMyReservations", "createStore").contains(id))
+              expected.add("404");
+            if (!java.util.Set.of(
+                    "getCategories",
+                    "getStore",
+                    "getServices",
+                    "getAvailableSlots",
+                    "getSlot",
+                    "getMyReservations",
+                    "getReservation",
+                    "getOwnerReservation",
+                    "getVacancies")
+                .contains(id)) expected.add("409");
           }
           assertThat(codes)
               .as("%s %s", group, path.getKey())
@@ -194,7 +232,7 @@ class ApiContractTests {
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString("{\"text\":\"내일 네일 예약\"}"))
             .build();
-    assertThat(client.send(post, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(501);
+    assertThat(client.send(post, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
   }
 
   @Test
@@ -233,6 +271,8 @@ class ApiContractTests {
   @Test
   void controllerSkeletonsReturnOnlyNotImplementedWithoutDependencies() throws Exception {
     for (JsonNode contract : contracts()) {
+      if (contract.path("id").asText().startsWith("S-")
+          || contract.path("id").asText().startsWith("ST-")) continue;
       if (IMPLEMENTED.contains(contract.path("id").asText())) continue;
       String name =
           "com.bintime."
