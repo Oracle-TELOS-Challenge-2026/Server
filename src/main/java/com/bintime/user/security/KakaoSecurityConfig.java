@@ -154,7 +154,8 @@ public class KakaoSecurityConfig {
       var cors = new CorsConfiguration();
       cors.setAllowedOrigins(List.of(frontend));
       cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-      cors.setAllowedHeaders(List.of("Content-Type", "X-CSRF-Token", "Last-Event-ID"));
+      cors.setAllowedHeaders(
+          List.of("Content-Type", "X-CSRF-Token", "Idempotency-Key", "Last-Event-ID"));
       cors.setAllowCredentials(true);
       http.cors(config -> config.configurationSource(request -> cors));
     }
