@@ -4,12 +4,14 @@
 
 ## 범위와 의존 작업
 
-S-01~08은 MVC Service/JDBC Repository와 OpenAI·Elasticsearch Adapter로 처리한다. Oracle이 원본이며 Elasticsearch는 파생 인덱스다. 인증부터 실제 알림 수신까지는 아래 공개 계약의 실제 구현 연결이 필요하다. 기본 구현은 빈 결과나 성공을 위장하지 않고 401/403/503으로 거절한다. 테스트 대역은 `src/test`에만 있다.
+S-01~08은 MVC Service/JDBC Repository와 OpenAI·Elasticsearch Adapter로 처리한다. Oracle이 원본이며 Elasticsearch는 파생 인덱스다. 카카오 세션 인증·구독 활성 여부·알림 접수는 아래 공개 계약으로 연결했다. 외부 서비스 설정과 전체 검색 인덱스 공급은 별도 준비가 필요하며 미연결 기능은 503으로 거절한다. 테스트 대역은 `src/test`에만 있다.
 
-- user: `SearchUserAccess.explicitPreferences`는 구현된 `UserPreferenceService`를 통해 `user_accounts.preferences_json` 전체를 조회한다. `UserPreferenceService.replace`는 자유로운 JSON 저장과 동기 `UserPreferencesChanged` 이벤트를 같은 트랜잭션에서 처리하며, search 소비자는 revision과 VECTOR 작업을 같은 트랜잭션에 기록한다. `customer`의 인증/CUSTOMER/CSRF와 `notificationsEnabled`의 실제 구현 연결은 별도 의존 작업이다. U-04~08 프로필·위치·선호 저장 HTTP API는 구현되어 있다. U-08 저장을 이 변경 이벤트 경로에 연결하는 작업은 아직 남아 있다.
+- user: `SearchUserAccess.explicitPreferences`는 구현된 `UserPreferenceService`를 통해 `user_accounts.preferences_json` 전체를 조회한다. `UserPreferenceService.replace`는 자유로운 JSON 저장과 동기 `UserPreferencesChanged` 이벤트를 같은 트랜잭션에서 처리하며, search 소비자는 revision과 VECTOR 작업을 같은 트랜잭션에 기록한다. `SessionSearchUserAccess`가 실제 세션/CUSTOMER/CSRF를 검증하고 `notificationsEnabled`는 유효한 세션에 연결된 FID 유무를 확인한다. U-04~08 프로필·위치·선호 저장 HTTP API는 구현되어 있다. U-08 저장을 이 변경 이벤트 경로에 연결하는 작업은 아직 남아 있다.
 - store: `SearchStoreCatalog.validate`는 실제 매장·카테고리·시술 관계를 검증한다. `describe`는 표시용 이름을 제공한다. `available`과 `export`는 cursor가 null일 때 첫 페이지이며 nextCursor=null까지 누락 없이 순회한다. `revalidate`는 현재 AVAILABLE이며 미래인 슬롯만 반환한다. 슬롯 start/end와 가격은 실제 원장 값이다. 문서 version은 매장·서비스·슬롯의 모든 검색 관련 변경마다 증가한다.
 - store 커밋 후 `MatchService.submit(eventId, slotId, publicationVersion)`와 `SearchIndexService.changed(전체문서)`를 생산자 outbox 등으로 재전달해야 한다. 슬롯 삭제/매장 비공개는 slots=[] tombstone을 전달한다. 예약 완료는 user/intent/version/reservationId를 담아 `WaitlistService.fulfilled`로 전달한다. 검색 도메인이 예약을 확정하지 않는다.
-- notification: `SearchNotificationGateway.dispatch`는 N-06 DTO를 접수한다. 동일 user+slot을 중복 발송하지 않고, 최종 동의·발송 제한·대기 ID/버전과 슬롯 유효성을 재확인한다. 취소와 외부 발송 사이의 경쟁은 수신자의 최종 검증 계약으로 닫는다. 검색 DB 잠금을 외부 호출 동안 유지하지 않는다.
+- notification: `NotificationService`가 `SearchNotificationGateway.dispatch`의 N-06 DTO를 접수하고 사용자·슬롯별로 알림을 한 번 저장한다. 접수 시 유효성은 조회 시점의 스냅샷이며 저장된 알림은 이후 취소해도 이력에 남는다. 매 발송 직전 활성 대기·동의에 연결된 버전·조건·슬롯 및 세션을 다시 확인한다. 이미 시작한 외부 HTTP 전송과 취소를 원자적으로 묶지는 않으며 검색 DB 잠금을 외부 호출 동안 유지하지 않는다.
+
+`notification/adapter/PublicStoreCatalog`는 매장의 공개 서비스만 호출해 `validate`, `describe`, `available`, `revalidate`를 연결한다. 초기 단일 앱에서 매장·슬롯을 순회하므로 매장이 많아지면 매장 측 일괄 조회 계약이 필요하다. 전체 미래 슬롯과 검색 문서 통합 버전을 제공하는 공개 계약은 아직 없어 `export`는 명시적으로 503을 반환한다. 이 어댑터 연결만으로 Elasticsearch 전체 인덱싱이 완료되지는 않는다.
 
 기존 JPA Waitlist(`search_waitlists`)와 새 `search_intent`는 별도 저장 모델이다. `WaitlistReservationService`는 두 모델을 지원하며 store 예약과 같은 트랜잭션에서 조건 검증과 완료 처리를 수행한다. search는 다른 도메인의 Repository를 호출하지 않는다.
 
