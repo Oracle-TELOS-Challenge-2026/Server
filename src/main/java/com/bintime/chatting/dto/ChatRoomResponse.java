@@ -32,10 +32,21 @@ public record ChatRoomResponse(
             example = "0")
         Long lastReadSequence,
     @Schema(
+            description = "상대방의 마지막 읽음 위치. 기록이 없으면 0. REST·실시간 값은 최댓값으로 병합",
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            minimum = "0",
+            example = "0")
+        Long peerReadSequence,
+    @Schema(
             description = "createdAt",
             requiredMode = Schema.RequiredMode.REQUIRED,
             example = "2026-10-16T14:00:00+09:00")
         OffsetDateTime createdAt) {
+  public ChatRoomResponse {
+    // Idempotent room creation can replay JSON saved before peerReadSequence was added.
+    if (peerReadSequence == null) peerReadSequence = 0L;
+  }
+
   @Schema(name = "ChatRoomResponseStore")
   public record Store(
       @Schema(

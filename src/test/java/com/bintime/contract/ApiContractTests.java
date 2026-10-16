@@ -14,6 +14,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.ActiveProfiles;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles({"test", "api-docs"})
@@ -64,6 +65,20 @@ class ApiContractTests {
   }
 
   @Test
+  void chatRoomsDocumentPeerReadSequenceAndItsDefaultInListExamples() throws Exception {
+    JsonNode doc = getDoc("all");
+    JsonNode schema = doc.at("/components/schemas/ChatRoomResponse");
+    assertThat(stringValues(schema.path("required"))).contains("peerReadSequence");
+    assertThat(schema.at("/properties/peerReadSequence/type").asText()).isEqualTo("integer");
+    assertThat(schema.at("/properties/peerReadSequence/minimum").asLong(-1)).isZero();
+    JsonNode example =
+        doc.at(
+            "/paths/~1api~1v1~1chatting~1rooms/get/responses/200/content/application~1json/examples/success/value");
+    JsonNode response = example.isString() ? mapper.readTree(example.asText()) : example;
+    assertThat(response.at("/success/data/items/0/peerReadSequence").asLong(-1)).isZero();
+  }
+
+  @Test
   void storeDocumentsPublicQueriesAndAlternativeAuthenticationMethods() throws Exception {
     JsonNode doc = getDoc("all");
     int protectedCount = 0;
@@ -92,13 +107,13 @@ class ApiContractTests {
   }
 
   @Test
-  void allNotionHttpOperationsHaveMatchingSwaggerContracts() throws Exception {
+  void allNotionAndLocalExtensionHttpOperationsHaveMatchingSwaggerContracts() throws Exception {
     JsonNode allDoc = getDoc("all");
     JsonNode publicDoc = getDoc("public");
     JsonNode internalDoc = getDoc("internal");
-    assertThat(operationCount(publicDoc)).isEqualTo(46);
+    assertThat(operationCount(publicDoc)).isEqualTo(48);
     assertThat(operationCount(internalDoc)).isEqualTo(2);
-    assertThat(operationCount(allDoc)).isEqualTo(48);
+    assertThat(operationCount(allDoc)).isEqualTo(50);
     var operationIds = new HashSet<String>();
 
     for (JsonNode contract : contracts()) {
@@ -218,6 +233,8 @@ class ApiContractTests {
                 case "C-01" -> expected.add("409");
                 case "C-04" -> expected.addAll(Set.of("409", "429"));
                 case "C-05" -> expected.add("400");
+                case "C-06" -> expected.addAll(Set.of("409", "429"));
+                case "C-07" -> expected.add("409");
                 case "N-01" -> expected.addAll(Set.of("400", "401"));
                 case "N-02" -> expected.addAll(Set.of("400", "401", "403", "404"));
                 case "N-03" -> expected.addAll(Set.of("400", "401"));
@@ -311,7 +328,9 @@ class ApiContractTests {
           {"patch", "/api/v1/notifications/{notificationId}/read"},
           {"post", "/api/v1/chatting/rooms"},
           {"post", "/api/v1/chatting/rooms/{roomId}/messages"},
-          {"put", "/api/v1/chatting/rooms/{roomId}/read"}
+          {"put", "/api/v1/chatting/rooms/{roomId}/read"},
+          {"post", "/api/v1/chatting/rooms/{roomId}/booking-proposals"},
+          {"post", "/api/v1/chatting/rooms/{roomId}/booking-proposals/{proposalId}/confirm"}
         }) {
       JsonNode operation = doc.path("paths").path(endpoint[1]).path(endpoint[0]);
       JsonNode csrf = parameter(operation, "X-CSRF-Token");
@@ -338,7 +357,7 @@ class ApiContractTests {
         count++;
       }
     }
-    assertThat(count).isEqualTo(5);
+    assertThat(count).isEqualTo(7);
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/chatting/rooms"))
             .GET()
@@ -348,6 +367,83 @@ class ApiContractTests {
                 .send(request, HttpResponse.BodyHandlers.ofString())
                 .statusCode())
         .isEqualTo(401);
+  }
+
+  @Test
+  void bookingProposalsDocumentStoredQuotesVersionOnlyConfirmationAndNullableCards()
+      throws Exception {
+    JsonNode doc = getDoc("public");
+    JsonNode schemas = doc.path("components").path("schemas");
+    JsonNode create = schemas.path("CreateBookingProposalRequest");
+    assertThat(create.path("properties").propertyNames())
+        .containsExactlyInAnyOrder(
+            "sourceMessageId",
+            "serviceId",
+            "serviceDescription",
+            "startAt",
+            "durationMinutes",
+            "price",
+            "waitlistId");
+    assertThat(stringValues(create.path("required")))
+        .contains(
+            "sourceMessageId",
+            "serviceId",
+            "serviceDescription",
+            "startAt",
+            "durationMinutes",
+            "price")
+        .doesNotContain("waitlistId");
+    assertThat(create.at("/properties/serviceDescription/maxLength").asInt()).isEqualTo(1000);
+    assertThat(create.at("/properties/startAt/format").asText()).isEqualTo("date-time");
+    assertThat(create.at("/properties/durationMinutes/minimum").asInt()).isEqualTo(15);
+    assertThat(create.at("/properties/durationMinutes/maximum").asInt()).isEqualTo(480);
+    assertThat(create.at("/properties/durationMinutes/multipleOf").asInt()).isEqualTo(5);
+    assertThat(create.at("/properties/price/minimum").asLong()).isZero();
+    assertThat(create.at("/properties/price/maximum").asLong()).isEqualTo(10000000L);
+
+    JsonNode confirm = schemas.path("ConfirmBookingProposalRequest");
+    assertThat(confirm.path("properties").propertyNames()).containsExactly("expectedVersion");
+    assertThat(stringValues(confirm.path("required"))).containsExactly("expectedVersion");
+    assertThat(confirm.at("/properties/expectedVersion/minimum").asLong()).isEqualTo(1L);
+
+    JsonNode message = schemas.path("ChatMessageResponse");
+    assertThat(stringValues(message.at("/properties/type/enum")))
+        .containsExactlyInAnyOrder("TEXT", "BOOKING_PROPOSAL");
+    JsonNode proposal = message.at("/properties/bookingProposal");
+    assertThat(stringValues(message.path("required"))).doesNotContain("bookingProposal");
+    assertThat(proposal.at("/oneOf/0/$ref").asText())
+        .as("nullable proposal schema: %s", proposal)
+        .isEqualTo("#/components/schemas/ChatBookingProposalResponse");
+    assertThat(proposal.at("/oneOf/1/type").asText()).isEqualTo("null");
+    JsonNode card = resolve(doc, proposal);
+    assertThat(card.path("properties").propertyNames())
+        .containsExactlyInAnyOrder(
+            "id",
+            "sourceMessageId",
+            "serviceId",
+            "serviceDescription",
+            "startAt",
+            "endAt",
+            "durationMinutes",
+            "price",
+            "status",
+            "version",
+            "reservationId",
+            "waitlistId");
+    assertThat(stringValues(card.at("/properties/status/enum")))
+        .containsExactlyInAnyOrder("PENDING", "CONFIRMED", "SUPERSEDED", "REVIEW_REQUIRED");
+
+    for (String path :
+        new String[] {
+          "/api/v1/chatting/rooms/{roomId}/booking-proposals",
+          "/api/v1/chatting/rooms/{roomId}/booking-proposals/{proposalId}/confirm"
+        }) {
+      JsonNode operation = doc.path("paths").path(path).path("post");
+      JsonNode key = parameter(operation, "Idempotency-Key");
+      assertThat(key.path("in").asText()).isEqualTo("header");
+      assertThat(key.path("required").asBoolean()).isTrue();
+      assertThat(operation.path("description").asText()).contains("24시간", "X-CSRF-Token");
+    }
   }
 
   @Test
@@ -446,7 +542,7 @@ class ApiContractTests {
   }
 
   @Test
-  void dtoTypesAcceptAllNotionRequestAndResponseExamples() throws Exception {
+  void dtoTypesAcceptAllNotionAndLocalExtensionRequestAndResponseExamples() throws Exception {
     for (JsonNode contract : contracts()) {
       for (String direction : new String[] {"request", "response"}) {
         if (!contract.path(direction).isNull()) {
@@ -496,9 +592,24 @@ class ApiContractTests {
   }
 
   private JsonNode contracts() throws Exception {
-    try (var stream = getClass().getResourceAsStream("/contracts/notion-api.json")) {
-      return mapper.readTree(stream);
+    var combined = mapper.createArrayNode();
+    // Local feature requests extend the contract without rewriting the original Notion snapshot.
+    for (String resource :
+        new String[] {"/contracts/notion-api.json", "/contracts/chat-booking-proposals.json"}) {
+      try (var stream = getClass().getResourceAsStream(resource)) {
+        assertThat(stream).as(resource).isNotNull();
+        for (JsonNode contract : mapper.readTree(stream)) {
+          // Extend old examples in memory; keep the original Notion snapshot intact.
+          if (contract.path("id").asText().equals("C-01"))
+            ((ObjectNode) contract.path("responseExample")).put("peerReadSequence", 0);
+          if (contract.path("id").asText().equals("C-02"))
+            for (JsonNode room : contract.path("responseExample").path("items"))
+              ((ObjectNode) room).put("peerReadSequence", 0);
+          combined.add(contract);
+        }
+      }
     }
+    return combined;
   }
 
   private boolean isImplemented(String id) {

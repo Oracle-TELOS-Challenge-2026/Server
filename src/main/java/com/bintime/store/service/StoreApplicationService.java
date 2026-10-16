@@ -5,6 +5,7 @@ import static com.bintime.common.web.ApiBusinessException.require;
 import com.bintime.common.auth.Actor;
 import com.bintime.common.dto.CursorPage;
 import com.bintime.search.service.WaitlistReservationService;
+import com.bintime.store.contract.StoreReservationPort.ProposalCommand;
 import com.bintime.store.dto.*;
 import com.bintime.store.entity.*;
 import com.bintime.store.repository.StoreRepository;
@@ -706,6 +707,160 @@ public class StoreApplicationService {
         });
   }
 
+  /** 제안은 공급이 아니다. 작성 단계에서는 현재 값만 검증하고 예약 원장을 변경하지 않는다. */
+  public void validateProposal(ProposalCommand r) {
+    proposalInput(r);
+    var customer = users.get(r.userId());
+    require(!customer.id().equals(r.ownerId()), 403, "RESERVATION_FORBIDDEN");
+    proposalService(r, shop(r.storeId()));
+  }
+
+  private void proposalInput(ProposalCommand r) {
+    require(r != null, 400, "INVALID_INPUT");
+    text(r.userId(), 64);
+    text(r.ownerId(), 64);
+    text(r.proposalId(), 64);
+    text(r.storeId(), 64);
+    text(r.serviceId(), 64);
+    text(r.serviceDescription(), 1000);
+    price(r.price());
+    require(
+        r.durationMinutes() != null
+            && r.durationMinutes() >= 15
+            && r.durationMinutes() <= 480
+            && r.durationMinutes() % 5 == 0,
+        400,
+        "INVALID_DURATION");
+    require(r.startAt() != null, 400, "INVALID_TIME");
+    require(r.startAt().getYear() >= 1 && r.startAt().getYear() <= 9999, 400, "INVALID_TIME");
+    require(
+        normalize(r.startAt()).plusMinutes(r.durationMinutes()).getYear() <= 9999,
+        400,
+        "INVALID_TIME");
+    if (r.waitlistId() != null) text(r.waitlistId(), 64);
+  }
+
+  private StoreService proposalService(ProposalCommand r, Shop shop) {
+    var owner = users.get(r.ownerId());
+    ownerRole(owner);
+    require(shop.ownerId.equals(owner.id()), 403, "STORE_FORBIDDEN");
+    StoreService service = service(shop.id, r.serviceId());
+    require("Y".equals(service.active), 409, "SERVICE_INACTIVE");
+    OffsetDateTime start = normalize(r.startAt());
+    require(start.isAfter(now()), 409, "SLOT_EXPIRED");
+    inHours(shop, start, start.plusMinutes(r.durationMinutes()));
+    return service;
+  }
+
+  public ReservationResponse reserveProposal(ProposalCommand r) {
+    proposalInput(r);
+    Actor customer = users.get(r.userId());
+    require(!customer.id().equals(r.ownerId()), 403, "RESERVATION_FORBIDDEN");
+    return once(
+        customer,
+        "RESERVE_PROPOSAL:" + r.proposalId(),
+        r.idempotencyKey(),
+        r,
+        201,
+        ReservationResponse.class,
+        () -> {
+          // 채팅방 잠금 뒤 다른 사용자의 계정 잠금을 잡지 않는다. 고객 → 매장 순서를 유지한다.
+          Shop shop = lockedShop(r.storeId());
+          StoreService service = proposalService(r, shop);
+          OffsetDateTime start = normalize(r.startAt()),
+              end = start.plusMinutes(r.durationMinutes());
+          require(
+              db.query(
+                      Reservation.class,
+                      "where e.status='CONFIRMED' and e.start<?1 and e.end>?2 and (e.userId=?3 or"
+                          + " e.storeId=?4)",
+                      end,
+                      start,
+                      customer.id(),
+                      shop.id)
+                  .isEmpty(),
+              409,
+              "RESERVATION_TIME_CONFLICT");
+          Slot matching =
+              db
+                  .query(
+                      Slot.class,
+                      "where e.storeId=?1 and e.serviceId=?2 and e.status='AVAILABLE' and"
+                          + " e.start=?3 and e.end=?4",
+                      shop.id,
+                      service.id,
+                      start,
+                      end)
+                  .stream()
+                  .findFirst()
+                  .orElse(null);
+          supplyConflict(shop.id, start, end, matching == null ? null : matching.id);
+          Slot slot;
+          if (matching == null) {
+            slot = new Slot();
+            slot.id = id("slot_");
+            slot.storeId = shop.id;
+            slot.serviceId = service.id;
+            slot.start = start;
+            slot.end = end;
+            slot.availableFrom = start;
+            slot.availableUntil = end;
+            slot.originalPrice = r.price();
+            slot.payable = r.price();
+            slot.source = "REGULAR";
+            slot.status = "BOOKED";
+            slot.version = 1L;
+            slot.createdAt = now();
+            db.save(slot);
+            // JPA는 문자열 FK 관계를 모른다. 예약 INSERT 전에 원슬롯을 같은 트랜잭션에 저장한다.
+            db.flush();
+          } else {
+            slot = db.lock(Slot.class, matching.id);
+            require("AVAILABLE".equals(slot.status), 409, "SLOT_UNAVAILABLE");
+            slot.status = "BOOKED";
+            slot.version++;
+          }
+          String reservationId = id("rsv_");
+          if (r.waitlistId() != null)
+            waitlists.fulfill(
+                r.waitlistId(),
+                new WaitlistReservationService.Candidate(
+                    customer.id(),
+                    shop.id,
+                    service.id,
+                    shop.category,
+                    start,
+                    end,
+                    r.price(),
+                    shop.latitude,
+                    shop.longitude),
+                now(),
+                reservationId);
+          Reservation reservation = new Reservation();
+          reservation.id = reservationId;
+          reservation.userId = customer.id();
+          reservation.customerName = customer.displayName();
+          reservation.storeId = shop.id;
+          reservation.slotId = slot.id;
+          reservation.waitlistId = r.waitlistId();
+          reservation.serviceId = service.id;
+          reservation.serviceName = service.name;
+          reservation.serviceDescription = r.serviceDescription();
+          reservation.duration = r.durationMinutes();
+          reservation.start = start;
+          reservation.end = end;
+          // 추가 옵션까지 포함한 사장님 제안 총액을 정가와 예약 금액의 스냅샷으로 보존한다.
+          reservation.originalPrice = r.price();
+          reservation.payable = r.price();
+          reservation.status = "CONFIRMED";
+          reservation.version = 1L;
+          reservation.createdAt = now();
+          db.save(reservation);
+          event(slot, "BOOKED");
+          return reservationDto(reservation, false);
+        });
+  }
+
   public ReservationResponse getReservation(Actor a, String id) {
     Reservation r = reservation(id);
     access(a, r);
@@ -1043,7 +1198,7 @@ public class StoreApplicationService {
         s.id,
         s.name,
         s.category,
-        s.description,
+        s.description == null ? "" : s.description,
         s.address,
         new StoreDetailResponse.Location(s.latitude, s.longitude),
         s.imageUrl,
@@ -1152,7 +1307,8 @@ public class StoreApplicationService {
     return new ReservationResponse(
         r.id,
         new ReservationResponse.Store(s.id, s.name, s.imageUrl),
-        new ReservationResponse.Service(r.serviceId, r.serviceName, r.duration),
+        new ReservationResponse.Service(
+            r.serviceId, r.serviceName, r.duration, r.serviceDescription),
         r.slotId,
         r.status,
         r.start,
@@ -1173,7 +1329,8 @@ public class StoreApplicationService {
     return new OwnerReservationResponse(
         r.id,
         new OwnerReservationResponse.Store(s.id, s.name, s.imageUrl),
-        new OwnerReservationResponse.Service(r.serviceId, r.serviceName, r.duration),
+        new OwnerReservationResponse.Service(
+            r.serviceId, r.serviceName, r.duration, r.serviceDescription),
         r.slotId,
         r.status,
         r.start,

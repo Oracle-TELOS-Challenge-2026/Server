@@ -6,6 +6,7 @@ import com.bintime.chatting.dto.*;
 import com.bintime.chatting.repository.ChatRepository;
 import com.bintime.common.dto.CursorPage;
 import com.bintime.common.web.ApiBusinessException;
+import com.bintime.store.contract.StoreReservationPort;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.*;
@@ -28,6 +29,7 @@ public class ChatService {
   private final Clock clock;
   private final JsonMapper json;
   private final ApplicationEventPublisher events;
+  private final StoreReservationPort reservations;
   private final Map<String, Window> rates = new ConcurrentHashMap<>();
 
   public ChatService(
@@ -35,17 +37,26 @@ public class ChatService {
       TransactionTemplate tx,
       Clock clock,
       JsonMapper json,
-      ApplicationEventPublisher events) {
+      ApplicationEventPublisher events,
+      StoreReservationPort reservations) {
     this.db = db;
     this.tx = tx;
     this.clock = clock;
-    this.json = json;
+    this.json =
+        json.rebuild()
+            .disable(tools.jackson.databind.cfg.DateTimeFeature.ADJUST_DATES_TO_CONTEXT_TIME_ZONE)
+            .build();
     this.events = events;
+    this.reservations = reservations;
   }
 
   public record Result<T>(T data, int status) {}
 
   public record MessageCommitted(ChatMessageResponse message) {}
+
+  public record MessageUpdated(ChatMessageResponse message) {}
+
+  public record PushRequested(ChatMessageResponse message, String recipientId) {}
 
   public record ReadCommitted(String userId, ChatReadResponse read) {}
 
@@ -188,7 +199,210 @@ public class ChatService {
     db.insertMessage(message);
     // Subscribers only observe this event after the message and room counter commit together.
     events.publishEvent(new MessageCommitted(message));
+    if (user.equals(room.customer())) invalidate(room, "REVIEW_REQUIRED", List.of("PENDING"));
+
+    // Pin the other participant while the room is locked; later owner changes must not retarget it.
+    events.publishEvent(
+        new PushRequested(message, user.equals(room.customer()) ? room.owner() : room.customer()));
     return new Result<>(message, 201);
+  }
+
+  public Result<ChatMessageResponse> propose(
+      String user, String id, String key, CreateBookingProposalRequest request) {
+    require(request != null, 400, "INVALID_REQUEST");
+    id(request.sourceMessageId());
+    id(request.serviceId());
+    if (request.waitlistId() != null) id(request.waitlistId());
+    require(
+        request.serviceDescription() != null
+            && !request.serviceDescription().isBlank()
+            && request.serviceDescription().length() <= 1000,
+        400,
+        "INVALID_SERVICE_DESCRIPTION");
+    require(
+        request.durationMinutes() != null
+            && request.durationMinutes() >= 15
+            && request.durationMinutes() <= 480
+            && request.durationMinutes() % 5 == 0,
+        400,
+        "INVALID_DURATION");
+    require(
+        request.price() != null && request.price() >= 0 && request.price() <= 10000000,
+        400,
+        "INVALID_PRICE");
+    require(request.startAt() != null, 400, "INVALID_TIME");
+    require(
+        request.startAt().getYear() >= 1 && request.startAt().getYear() <= 9999,
+        400,
+        "INVALID_TIME");
+    header(key);
+    id(id);
+    return tx.execute(
+        status -> {
+          actor(user, true);
+          var room = participant(user, id, true);
+          require(user.equals(room.owner()), 403, "OWNER_REQUIRED");
+          return replay(
+              user,
+              "POST:/api/v1/chatting/rooms/" + id + "/booking-proposals",
+              key,
+              request,
+              ChatMessageResponse.class,
+              () -> {
+                require("OPEN".equals(room.status()), 409, "ROOM_READ_ONLY");
+                var source = db.message(room, request.sourceMessageId());
+                require(
+                    source != null
+                        && "TEXT".equals(source.type())
+                        && room.customer().equals(source.sender().id()),
+                    404,
+                    "SOURCE_MESSAGE_NOT_FOUND");
+                require(
+                    source.sequence() == db.latestCustomerSequence(room),
+                    409,
+                    "PROPOSAL_SOURCE_OUTDATED");
+                var start =
+                    request
+                        .startAt()
+                        .atZoneSameInstant(ZoneId.of("Asia/Seoul"))
+                        .toOffsetDateTime()
+                        .truncatedTo(ChronoUnit.MICROS);
+                require(start.getYear() >= 1 && start.getYear() <= 9999, 400, "INVALID_TIME");
+                var end = start.plusMinutes(request.durationMinutes());
+                require(end.getYear() <= 9999, 400, "INVALID_TIME");
+                require(start.isAfter(now()), 409, "SLOT_EXPIRED");
+                require(room.sequence() < MAX_SEQUENCE, 409, "SEQUENCE_EXHAUSTED");
+                String proposalId = "proposal_" + UUID.randomUUID();
+                var proposal =
+                    new ChatBookingProposalResponse(
+                        proposalId,
+                        source.id(),
+                        request.serviceId(),
+                        request.serviceDescription(),
+                        start,
+                        end,
+                        request.durationMinutes(),
+                        request.price(),
+                        "PENDING",
+                        1L,
+                        null,
+                        request.waitlistId());
+                reservations.validateProposal(command(room, user, proposal));
+                rate(user);
+                invalidate(room, "SUPERSEDED", List.of("PENDING", "REVIEW_REQUIRED"));
+                var message =
+                    new ChatMessageResponse(
+                        "msg_" + UUID.randomUUID(),
+                        room.id(),
+                        room.sequence() + 1,
+                        new ChatMessageResponse.Sender(user, "OWNER", db.displayName(user)),
+                        proposalId,
+                        "BOOKING_PROPOSAL",
+                        "예약 제안: " + request.serviceDescription(),
+                        now(),
+                        proposal);
+                db.insertMessage(message);
+                db.insertProposal(message);
+                events.publishEvent(new MessageCommitted(message));
+                events.publishEvent(new PushRequested(message, room.customer()));
+                return new Result<>(message, 201);
+              });
+        });
+  }
+
+  public Result<ChatMessageResponse> confirm(
+      String user,
+      String roomId,
+      String proposalId,
+      String key,
+      ConfirmBookingProposalRequest request) {
+    require(
+        request != null
+            && request.expectedVersion() != null
+            && request.expectedVersion() >= 1
+            && request.expectedVersion() <= MAX_SEQUENCE,
+        400,
+        "INVALID_VERSION");
+    id(roomId);
+    id(proposalId);
+    header(key);
+    return tx.execute(
+        status -> {
+          actor(user, true);
+          var room = participant(user, roomId, true);
+          require(user.equals(room.customer()), 403, "CUSTOMER_REQUIRED");
+          return replay(
+              user,
+              "POST:/api/v1/chatting/rooms/"
+                  + roomId
+                  + "/booking-proposals/"
+                  + proposalId
+                  + "/confirm",
+              key,
+              request,
+              ChatMessageResponse.class,
+              () -> {
+                require("OPEN".equals(room.status()), 409, "ROOM_READ_ONLY");
+                var saved = db.proposal(room, proposalId);
+                require(saved != null, 404, "PROPOSAL_NOT_FOUND");
+                var proposal = saved.bookingProposal();
+                require(!"SUPERSEDED".equals(proposal.status()), 409, "PROPOSAL_SUPERSEDED");
+                require(
+                    !"REVIEW_REQUIRED".equals(proposal.status()), 409, "PROPOSAL_REVIEW_REQUIRED");
+                require(!"CONFIRMED".equals(proposal.status()), 409, "PROPOSAL_ALREADY_CONFIRMED");
+                require(
+                    proposal.version().equals(request.expectedVersion()),
+                    409,
+                    "PROPOSAL_VERSION_CONFLICT");
+                // The store joins this transaction. Never lock the owner's account from the
+                // customer path.
+                var booked =
+                    reservations.reserveProposal(command(room, saved.sender().id(), proposal));
+                db.confirmProposal(proposal.id(), booked.reservationId(), now());
+                var updated = db.proposal(room, proposalId);
+                events.publishEvent(new MessageUpdated(updated));
+                return new Result<>(updated, 200);
+              });
+        });
+  }
+
+  private StoreReservationPort.ProposalCommand command(
+      ChatRepository.Room room, String ownerId, ChatBookingProposalResponse proposal) {
+    return new StoreReservationPort.ProposalCommand(
+        room.customer(),
+        ownerId,
+        "chat-proposal:" + proposal.id(),
+        proposal.id(),
+        db.storeId(room.id()),
+        proposal.serviceId(),
+        proposal.serviceDescription(),
+        proposal.startAt(),
+        proposal.durationMinutes(),
+        proposal.price(),
+        proposal.waitlistId());
+  }
+
+  private void invalidate(ChatRepository.Room room, String state, List<String> previous) {
+    for (var message : db.invalidateProposals(room, state, previous, now()))
+      events.publishEvent(new MessageUpdated(message));
+  }
+
+  public List<ChatMessageResponse> proposalSnapshots(String user, String roomId) {
+    actor(user, false);
+    return db.proposalMessages(participant(user, roomId, false), 1001);
+  }
+
+  public List<ReadCommitted> readSnapshots(String user, String roomId) {
+    actor(user, false);
+    var room = participant(user, roomId, false);
+    return List.of(room.customer(), room.owner()).stream()
+        .map(
+            participant -> {
+              var read = db.read(roomId, participant);
+              return new ReadCommitted(
+                  participant, new ChatReadResponse(roomId, read.sequence(), read.at()));
+            })
+        .toList();
   }
 
   public ChatReadResponse read(String user, String id, Long sequence) {

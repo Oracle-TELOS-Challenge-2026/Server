@@ -22,7 +22,7 @@ public record ChatMessageResponse(
         Long sequence,
     @Schema(description = "sender", requiredMode = Schema.RequiredMode.REQUIRED) Sender sender,
     @Schema(
-            description = "REST·WebSocket 재전송 시 유지하는 메시지 중복 방지 ID",
+            description = "TEXT 재전송 시 유지하는 중복 방지 ID. 예약 제안 카드에서는 서버가 생성한다",
             requiredMode = Schema.RequiredMode.REQUIRED,
             example = "550e8400-e29b-41d4-a716-446655440000")
         String clientMessageId,
@@ -30,10 +30,10 @@ public record ChatMessageResponse(
             description = "type",
             requiredMode = Schema.RequiredMode.REQUIRED,
             example = "TEXT",
-            allowableValues = {"TEXT"})
+            allowableValues = {"TEXT", "BOOKING_PROPOSAL"})
         String type,
     @Schema(
-            description = "content",
+            description = "일반 메시지 내용 또는 예약 제안 카드의 텍스트 설명",
             requiredMode = Schema.RequiredMode.REQUIRED,
             example = "내일 오후 4시 예약 가능한가요?")
         String content,
@@ -41,7 +41,24 @@ public record ChatMessageResponse(
             description = "createdAt",
             requiredMode = Schema.RequiredMode.REQUIRED,
             example = "2026-10-16T14:10:00+09:00")
-        OffsetDateTime createdAt) {
+        OffsetDateTime createdAt,
+    @Schema(
+            description = "BOOKING_PROPOSAL이면 최신 제안 정보. TEXT이면 null",
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+            nullable = true)
+        ChatBookingProposalResponse bookingProposal) {
+  public ChatMessageResponse(
+      String id,
+      String roomId,
+      Long sequence,
+      Sender sender,
+      String clientMessageId,
+      String type,
+      String content,
+      OffsetDateTime createdAt) {
+    this(id, roomId, sequence, sender, clientMessageId, type, content, createdAt, null);
+  }
+
   @Schema(name = "ChatMessageResponseSender")
   public record Sender(
       @Schema(
