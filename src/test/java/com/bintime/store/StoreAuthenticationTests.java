@@ -181,6 +181,71 @@ class StoreAuthenticationTests {
   }
 
   @Test
+  void customerStoreRegistrationRequiresCsrfAndOwnerAccessWorksWithoutRelogin() throws Exception {
+    var session = session("alice");
+    var customer = new BintimePrincipal("alice", "CUSTOMER");
+    session.setAttribute(
+        HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+        new SecurityContextImpl(
+            new OAuth2AuthenticationToken(customer, customer.getAuthorities(), "kakao")));
+    String body =
+        json.writeValueAsString(
+            java.util.Map.of(
+                "name",
+                "첫 매장",
+                "category",
+                "NAIL",
+                "address",
+                "서울",
+                "location",
+                java.util.Map.of("latitude", 37.5, "longitude", 127.0),
+                "openingHours",
+                List.of("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN").stream()
+                    .map(day -> java.util.Map.of("dayOfWeek", day, "closed", true))
+                    .toList()));
+    mvc.perform(
+            post("/api/v1/owner/stores")
+                .session(session)
+                .header("Idempotency-Key", "first-store")
+                .contentType("application/json")
+                .content(body))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.error.code").value("CSRF_INVALID"));
+    assertThat(
+            db.queryForObject(
+                "select role_code from user_accounts where user_id='alice'", String.class))
+        .isEqualTo("CUSTOMER");
+    var csrfResponse =
+        mvc.perform(get("/api/v1/auth/csrf").servletPath("/api/v1/auth/csrf").session(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse();
+    String csrf =
+        json.readTree(csrfResponse.getContentAsString()).at("/success/data/csrfToken").asText();
+    var response =
+        mvc.perform(
+                post("/api/v1/owner/stores")
+                    .session(session)
+                    .header("Idempotency-Key", "first-store")
+                    .header("X-CSRF-Token", csrf)
+                    .contentType("application/json")
+                    .content(body))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse();
+    String store = json.readTree(response.getContentAsString()).at("/success/data/id").asText();
+    assertThat(
+            db.queryForObject(
+                "select role_code from user_accounts where user_id='alice'", String.class))
+        .isEqualTo("OWNER");
+    mvc.perform(
+            get("/api/v1/owner/stores/" + store + "/timetable")
+                .param("date", "2026-10-17")
+                .session(session))
+        .andExpect(status().isOk());
+  }
+
+  @Test
   void bearerUsesDatabaseRoleAndDoesNotPersistAuthenticationInSession() throws Exception {
     var response =
         mvc.perform(
@@ -229,12 +294,12 @@ class StoreAuthenticationTests {
   }
 
   @Test
-  void searchSharesBearerValidationAndChecksCurrentCustomerRole() throws Exception {
+  void searchSharesBearerValidationAndAllowsOwnersToUseCustomerEndpoints() throws Exception {
     String path = "/api/v1/search/waitlists/me";
     mvc.perform(get(path).header("Authorization", "Bearer " + token("alice")))
         .andExpect(status().isOk());
     mvc.perform(get(path).header("Authorization", "Bearer " + token("owner")))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isOk());
     mvc.perform(get(path)).andExpect(status().isUnauthorized());
     mvc.perform(get(path).session(session("alice")).header("Authorization", "Bearer broken"))
         .andExpect(status().isUnauthorized());

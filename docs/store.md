@@ -30,6 +30,28 @@ PATCH에서 생략한 필드는 유지하고 명시적 null은 `400 NULL_PATCH_F
 
 완료는 종료 시각부터, 노쇼는 시작 10분부터 가능하다. 종료한 CONFIRMED 예약도 취소할 수 있지만 빈자리는 만들지 않는다. 취소/노쇼 후 남은 시간이 있으면 원예약당 최대 하나의 DRAFT 빈자리를 만든다. 일반 원슬롯은 자동 재판매하지 않는다. 예약된 빈자리는 이후 취소되어도 해당 발행 이력은 FILLED로 유지하고 새 빈자리를 만든다.
 
+## 다른 도메인의 예약 호출
+
+다른 도메인은 [StoreReservationPort](../src/main/java/com/bintime/store/contract/StoreReservationPort.java)를 생성자 주입받아 `reserve(Command)`를 호출한다. Spring 구현체는 [StoreReservationAdapter](../src/main/java/com/bintime/store/adapter/StoreReservationAdapter.java)이며 기존 `StoreApplicationService.reserve`의 검증·잠금·멱등·이벤트 로직을 재사용한다. HTTP 요청 컨텍스트, store의 Controller·DTO·엔티티에 의존할 필요가 없다. 현재 생성과 확정은 한 작업이므로 별도 confirm 호출은 제공하지 않는다.
+
+호출 도메인은 인증과 사용자 확인을 마친 본인의 `userId`만 전달해야 한다. 포트는 인증 토큰을 검증하는 경계가 아니며 사용자 존재와 현재 이름·역할은 user 공개 서비스로 조회한다. 외부 요청 본문의 임의 userId를 그대로 전달하면 안 된다. 매칭·알림만으로 자동 예약하지 않는다.
+
+```java
+var reservation = reservations.reserve(new StoreReservationPort.Command(
+    authenticatedUserId, idempotencyKey, slotId, expectedPrice, expectedSlotVersion, waitlistId));
+```
+
+- `userId`: 인증된 사용자 ID. 존재하지 않거나 비어 있으면 `401 UNAUTHENTICATED`.
+- `idempotencyKey`: 필수 ASCII 1~200자. HTTP ST-06과 같은 사용자·RESERVE 키 공간 및 24시간 정책을 공유한다. 채널을 바꾼 재시도도 같은 키와 요청을 사용하며, 다른 요청에 키를 재사용하면 `409 IDEMPOTENCY_KEY_REUSED`다.
+- `slotId`, `expectedPrice`, `expectedSlotVersion`: 필수. 가격은 사용자가 확인한 KRW 정수 원, 버전은 최신 슬롯 조회 값이다. 가격·버전·가용성·시간 중복 검증은 HTTP와 동일하다.
+- `waitlistId`: 선택. 전달하면 대기 소유권·활성 상태·조건을 검증하고 예약과 함께 완료한다.
+
+반환값 `ConfirmedReservation`은 예약·매장·시술·슬롯 ID, `CONFIRMED` 상태, 시술 시작·종료, 정가·예약 금액, 연결 대기 ID와 예약 버전을 담는다. 시각은 오프셋을 포함하며 시술 구간은 `[startAt, endAt)`다. 멱등 재생은 최초 성공 스냅샷을 반환한다.
+
+포트는 기본 REQUIRED 트랜잭션으로 실행하며 호출자 트랜잭션이 있으면 참여한다. 최종 확정은 해당 트랜잭션 커밋 시점이다. 예약·슬롯·대기 완료·멱등 기록·후속 이벤트는 함께 커밋/롤백한다. 호출자는 대기/매장 잠금을 먼저 잡고 호출해 기존 고객 → 매장 → 대기 잠금 순서를 뒤집지 않아야 한다. 외부 AI·전송 작업을 같은 트랜잭션에서 기다리지 않는다.
+
+업무 실패는 기존 `ApiBusinessException`의 `status`·`code`로 전달한다. 대표 오류는 `SLOT_NOT_FOUND`(404), `SLOT_EXPIRED`, `SLOT_UNAVAILABLE`, `SERVICE_INACTIVE`, `VERSION_CONFLICT`, `PRICE_CHANGED`, `RESERVATION_TIME_CONFLICT`(409) 및 대기 검증 오류다. 실패는 성공 멱등 기록을 남기지 않으므로 요청을 수정해 재시도할 수 있다. 트랜잭션 안에서 실패를 잡아 계속 진행하면 rollback-only가 될 수 있으므로 재시도는 새 트랜잭션에서 수행한다.
+
 ## 빈자리 발행과 만료
 
 내부적으로 기존 store_slots에 일반 슬롯과 빈자리를 함께 저장한다. DRAFT는 외부 슬롯 BLOCKED, AVAILABLE은 빈자리 PUBLISHED, BOOKED는 FILLED, CLOSED는 WITHDRAWN으로 표현한다. vacancyId와 발행 slotId는 같은 원장 ID다.
