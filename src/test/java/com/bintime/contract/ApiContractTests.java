@@ -31,6 +31,7 @@ class ApiContractTests {
           new String[][] {
             {"UserProfileResponse", "location", "UserLocationResponse"},
             {"ChatRoomResponse", "lastMessage", "ChatMessageResponse"},
+            {"StoreSearchResponseItem", "bestSlot", "StoreSearchResponseItemBestSlot"},
             {"WaitlistResponse", "store", "WaitlistResponseStoreSummary"}
           }) {
         JsonNode parent = schemas.path(field[0]);

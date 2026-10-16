@@ -8,6 +8,14 @@
 
 ## 범위와 의존 작업
 
+### 기본 지도 매장 조회
+
+`GET /api/v1/search/stores`의 기본 조회(`sort=DISTANCE`, `vacancyOnly=false`, `from`·`to` 미지정)는 매장 등록 커밋 직후 store의 공개 `export` 계약으로 Oracle 원장을 직접 읽는다. 신규 매장이 지도에 보이기 위해 시술 활성화·미래 슬롯 등록·Elasticsearch 색인·worker 실행을 기다리게 하지 않기 위한 결정이다. 매장 등록 후 새 검색 요청으로 조회하면 된다. 기존 응답 구조를 유지하며 예약 가능한 대표 슬롯이 없으면 필수 키 `bestSlot`의 값은 null이다. 프론트는 슬롯이 null이어도 매장 마커를 표시하고 예약 가능 시간 없음으로 처리한다. 매장 노출 자체는 예약 가능을 의미하지 않는다.
+
+명시한 위치·반경·카테고리·검색어 조건과 입력 검증은 유지한다. 기본 지도 검색어는 매장명·카탈로그 설명의 대소문자를 구분하지 않는 부분 문자열로 비교한다. 카탈로그를 100개씩 끝까지 조회하고 적격 매장을 거리·ID 순으로 정렬한다. 커서는 마지막 거리·매장 ID와 검색 조건을 서명해 5분간 유지한다. 지도 커서는 ES PIT가 아닌 현재 원장을 다시 읽으므로 페이지 사이 매장 수정은 결과에 반영될 수 있다. 기본 지도와 슬롯 검색 간 커서는 호환되지 않으며 조건을 바꾸거나 새로고침할 때 커서를 제거한다.
+
+`vacancyOnly=true`, `from`·`to`, `sort=PRICE|RECOMMENDED`를 명시한 검색은 기존 ES 기반 슬롯 검색을 유지한다. 이 경우 조건에 맞는 실제 가용 슬롯이 있는 매장만 반환하며 비동기 색인이 필요하다. 예약·매칭·알림의 시간·가격·거리·권한·동의 검증도 유지한다.
+
 S-01~08은 MVC Service/JDBC Repository와 OpenAI·Elasticsearch Adapter로 처리한다. Oracle이 원본이며 Elasticsearch는 파생 인덱스다. 세션/JWT 인증·매장 카탈로그·구독 활성 여부·알림 접수는 아래 공개 계약으로 연결했다. 외부 서비스 설정은 별도 준비가 필요하며 미연결 기능은 503으로 거절한다. 테스트 대역은 `src/test`에만 있다.
 
 - user: `SearchUserAccessAdapter`는 공통 인증 경계로 세션/JWT·현재 CUSTOMER 원장 역할을 확인하고 쿠키 CSRF는 공통 보안 필터가 검증한다. `notificationsEnabled`는 `NotificationSubscriptions.hasActive`로 유효한 세션에 연결된 FID 유무를 확인한다. `explicitPreferences`는 `UserPreferenceService`를 통해 `user_accounts.preferences_json` 전체를 조회한다. `UserPreferenceService.replace`는 자유로운 JSON 저장과 동기 `UserPreferencesChanged` 이벤트를 같은 트랜잭션에서 처리하며, search 소비자는 revision과 VECTOR 작업을 같은 트랜잭션에 기록한다. U-04~08 프로필·위치·선호 저장 HTTP API는 구현되어 있다. U-08 저장을 이 변경 이벤트 경로에 연결하는 작업은 아직 남아 있다.

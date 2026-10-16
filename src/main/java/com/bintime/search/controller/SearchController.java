@@ -53,8 +53,9 @@ public class SearchController {
       operationId = "searchStores",
       summary = "S-01 · 주변 매장·빈자리 검색",
       description =
-          "거리·카테고리·시간 기반 검색. 가격은 정렬만 지원. 날짜 조건은 시술 전체가 구간 안에 포함. 지도 마커와 같은 결과. limit 최대 50, 검색 커서"
-              + " 유효 5분.\n\n"
+          "기본 거리순 지도 조회(날짜 미지정, vacancyOnly=false)는 DB의 등록 매장을 즉시 조회하며 시술·슬롯·검색 색인이 없어도 포함한다. 예약"
+              + " 가능한 슬롯이 없으면 bestSlot=null이다. 위치·반경·검색어·카테고리 조건은 적용한다. 날짜·빈자리 조건 또는 가격순·추천순을 명시하면"
+              + " 기존 슬롯 검색을 사용한다. 날짜 조건은 시술 전체가 구간 안에 포함. limit 최대 50, 검색 커서 유효 5분.\n\n"
               + "- 공개 API (OAuth 콜백은 state 검증)\n\n"
               + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =

@@ -387,6 +387,7 @@ class SearchBehaviorTests {
     beans.addBean("waitlist", service);
     beans.addBean("matching", matching);
     var index = mock(StoreIndexPort.class);
+    when(catalog.export(null, 100)).thenReturn(new StorePage(List.of(), null));
     when(index.open()).thenReturn("pit");
     when(index.search(any(), anyString(), any(), any(), anyInt()))
         .thenReturn(new StoreIndexPort.Page("pit", List.of()));
