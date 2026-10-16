@@ -6,7 +6,7 @@
 
 S-01~08은 MVC Service/JDBC Repository와 OpenAI·Elasticsearch Adapter로 처리한다. Oracle이 원본이며 Elasticsearch는 파생 인덱스다. 인증부터 실제 알림 수신까지는 아래 공개 계약의 실제 구현 연결이 필요하다. 기본 구현은 빈 결과나 성공을 위장하지 않고 401/403/503으로 거절한다. 테스트 대역은 `src/test`에만 있다.
 
-- user: `SearchUserAccess.explicitPreferences`는 구현된 `UserPreferenceService`를 통해 `user_accounts.preferences_json` 전체를 조회한다. `UserPreferenceService.replace`는 자유로운 JSON 저장과 동기 `UserPreferencesChanged` 이벤트를 같은 트랜잭션에서 처리하며, search 소비자는 revision과 VECTOR 작업을 같은 트랜잭션에 기록한다. `customer`의 인증/CUSTOMER/CSRF와 `notificationsEnabled`의 실제 구현 연결은 별도 의존 작업이다. 기존 U-08 HTTP 계약/501 골격은 변경하지 않았다. 해당 API 구현 시 `replace`를 호출한다.
+- user: `SearchUserAccess.explicitPreferences`는 구현된 `UserPreferenceService`를 통해 `user_accounts.preferences_json` 전체를 조회한다. `UserPreferenceService.replace`는 자유로운 JSON 저장과 동기 `UserPreferencesChanged` 이벤트를 같은 트랜잭션에서 처리하며, search 소비자는 revision과 VECTOR 작업을 같은 트랜잭션에 기록한다. `customer`의 인증/CUSTOMER/CSRF와 `notificationsEnabled`의 실제 구현 연결은 별도 의존 작업이다. U-04~08 프로필·위치·선호 저장 HTTP API는 구현되어 있다. U-08 저장을 이 변경 이벤트 경로에 연결하는 작업은 아직 남아 있다.
 - store: `SearchStoreCatalog.validate`는 실제 매장·카테고리·시술 관계를 검증한다. `describe`는 표시용 이름을 제공한다. `available`과 `export`는 cursor가 null일 때 첫 페이지이며 nextCursor=null까지 누락 없이 순회한다. `revalidate`는 현재 AVAILABLE이며 미래인 슬롯만 반환한다. 슬롯 start/end와 가격은 실제 원장 값이다. 문서 version은 매장·서비스·슬롯의 모든 검색 관련 변경마다 증가한다.
 - store 커밋 후 `MatchService.submit(eventId, slotId, publicationVersion)`와 `SearchIndexService.changed(전체문서)`를 생산자 outbox 등으로 재전달해야 한다. 슬롯 삭제/매장 비공개는 slots=[] tombstone을 전달한다. 예약 완료는 user/intent/version/reservationId를 담아 `WaitlistService.fulfilled`로 전달한다. 검색 도메인이 예약을 확정하지 않는다.
 - notification: `SearchNotificationGateway.dispatch`는 N-06 DTO를 접수한다. 동일 user+slot을 중복 발송하지 않고, 최종 동의·발송 제한·대기 ID/버전과 슬롯 유효성을 재확인한다. 취소와 외부 발송 사이의 경쟁은 수신자의 최종 검증 계약으로 닫는다. 검색 DB 잠금을 외부 호출 동안 유지하지 않는다.
@@ -108,7 +108,7 @@ SEARCH_ORACLE_USER=<test-user> SEARCH_ORACLE_PASSWORD=<secret> \
 
 ## 사용자 벡터 생성 실행
 
-로컬 `.env`에 `OPENAI_API_KEY=<발급한 키>`를 저장한다. 기존 local 프로필이 `.env`를 읽으며 배포는 Compose의 app environment로 키를 전달한다. 비밀을 Git이나 Docker 이미지에 넣지 않는다. user의 선호 저장 유스케이스는 `UserPreferenceService.replace(userId, json)`를 호출한다. 동기 이벤트 소비자의 작업 저장에 실패하면 선호 변경도 롤백한다. user 저장 HTTP API는 아직 501이므로 이번 변경에서 별도의 공개 벡터 API를 추가하지 않았다.
+로컬 `.env`에 `OPENAI_API_KEY=<발급한 키>`를 저장한다. 기존 local 프로필이 `.env`를 읽으며 배포는 Compose의 app environment로 키를 전달한다. 비밀을 Git이나 Docker 이미지에 넣지 않는다. 내부 선호 저장 경로는 `UserPreferenceService.replace(userId, json)`를 사용하며, 동기 이벤트 소비자의 작업 저장에 실패하면 선호 변경도 롤백한다. U-08 선호 저장 HTTP API는 구현되어 있지만 이 이벤트 경로는 아직 호출하지 않는다. 별도의 공개 벡터 API는 추가하지 않았다.
 
 이미 저장된 선호의 최초 생성/수동 갱신은 내부 `PersonalizationService.requestRefresh(userId)` 또는 아래 명령으로 작업을 등록한다. 실제 DB에 존재하는 사용자 ID를 사용하며 일반 worker가 후속 처리한다.
 

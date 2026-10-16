@@ -2,10 +2,9 @@
 
 출처: [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4) 및 [공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 2026-10-16 조회 기준의 구현 제안 계약이다.
 
-48개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~17 및 등록 API 3개는 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. 나머지 미구현 도메인의 Controller는 공통 실패 JSON과 501 상태를 반환한다.
-45개 HTTP 경로(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01·U-02·U-03·U-09는 카카오 로그인·세션·CSRF로 구현했다. 나머지는 Controller·DTO 계약 골격으로, Controller에 도달한 요청에 공통 실패 JSON과 501 상태를 반환한다.
+48개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01~09는 카카오 로그인·세션·CSRF 및 [프로필·위치·선호도](../user-profile.md)로 구현했다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~20은 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. notification·chatting의 미구현 Controller는 공통 실패 JSON과 501 상태를 반환한다.
 
-Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`의 세션 인증·CSRF를 적용한다. 다른 도메인의 인증·권한은 해당 기능 구현 시 연결한다. `api-docs` 프로필은 문서 열람용으로 보안 필터와 DB 의존성을 제외한다. 자세한 설정은 [카카오 로그인](../kakao-login.md)을 따른다.
+Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`의 세션 인증·CSRF를 적용한다. store·search의 요청자·권한 경계와 카카오 세션·CSRF 연결은 별도 작업이며, 미연결 보호 API는 접근을 거절한다. notification·chatting의 인증·권한은 해당 기능 구현 시 연결한다. `api-docs` 프로필은 문서 열람용으로 Spring Security 필터와 DB 의존성을 제외하며, search 자체의 요청자 검증은 유지한다. 자세한 로그인 설정은 [카카오 로그인](../kakao-login.md)을 따른다.
 
 ## 이름 및 응답 규칙
 
@@ -13,8 +12,8 @@ Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`의 세션 인증·CSRF�
 - DTO는 도메인의 `dto` 패키지에 Java record로 정의한다. 공통 HTTP 봉투만 `common.dto`에 둔다. DTO를 도메인 엔티티로 공유하지 않는다.
 - JSON 응답은 `BaseResponse<T>` 상속 기반의 `resultType/success.data/error/meta(timestamp,path)` 구조다. 기존 Notion의 최상위 data는 success.data로 이동한다. 목록의 items/page/counts 구조는 그 안에 유지한다. 204·OAuth redirect·SSE·WebSocket은 봉투 예외다. 자세한 계약은 [response.md](response.md)를 따른다.
 - ID는 String, 오프셋 포함 시각은 OffsetDateTime, 날짜는 LocalDate, 금액은 정수 원이다. Web Push expirationTime은 Unix epoch 밀리초다.
-- PATCH의 생략/명시적 null 구분, 필수 nullable 필드 존재 검사, 필드 간 조건 검증은 실제 구현 시 보완해야 한다. 현재 record와 Swagger 메타데이터만으로 런타임 검증이 구현된 것은 아니다.
-- Swagger 첫 화면의 `all` 그룹은 전체 HTTP API 45개를 표시한다. `public`은 43개, `internal`은 2개를 표시한다. 내부 인증의 구체적인 방식은 미정이며 내부 계약은 외부 고객의 호출용이 아니다.
+- 사용자 API는 필수값·범위와 U-08의 필수 nullable `maxPrice` 키 존재 여부를 검증한다. 나머지 골격의 PATCH 생략/명시적 null 구분 및 필드 간 검증은 실제 구현 시 보완한다.
+- Swagger 첫 화면의 `all` 그룹은 전체 HTTP API 48개를 표시한다. `public`은 46개, `internal`은 2개를 표시한다. 내부 계약은 외부 고객의 호출용이 아니며 search 내부 인증 설정은 [search.md](../search.md)를 따른다.
 - Notion 예시에서 생략된 선택 필드(reason, openingHours 등)는 공통 규약을 기준으로 포함한다. ST-08은 OWNER 조회 시 customer/resourceId가 추가된다.
 
 ## 명세 간 차이
@@ -85,4 +84,4 @@ store MVP는 하나의 DB 트랜잭션에서 AVAILABLE → BOOKED로 확정하�
 
 ### 사용자 선호 임베딩 연동
 
-사용자 벡터 입력은 `user_accounts.preferences_json`의 자유로운 JSON 문자열 전체다. user 공개 서비스가 읽기/저장과 변경 이벤트를 제공하고 search가 OpenAI 호출/비동기 갱신/Oracle 벡터 저장을 맡는다. U-08의 기존 HTTP DTO/501 상태는 유지하며 내부 `UserPreferenceService.replace`를 새 저장 API 구현에서 연결한다. 개인정보나 선호 원문/벡터를 공개하는 새 HTTP API는 추가하지 않았다. 세부 오류와 마이그레이션/운영 명령은 [search 안내](../search.md)를 따른다.
+사용자 벡터 입력은 `user_accounts.preferences_json`의 자유로운 JSON 문자열 전체다. 내부 `UserPreferenceService`가 읽기/저장과 변경 이벤트를 제공하고 search가 OpenAI 호출/비동기 갱신/Oracle 벡터 저장을 맡는다. U-08은 categories·keywords·maxPrice·text와 사용자 버전을 저장하는 HTTP API로 구현했으며, 이 저장을 변경 이벤트 경로에 연결하는 작업은 아직 남아 있다. 다른 사용자의 선호 원문이나 벡터를 공개하는 새 HTTP API는 추가하지 않았다. 세부 오류와 마이그레이션/운영 명령은 [search 안내](../search.md)를 따른다.

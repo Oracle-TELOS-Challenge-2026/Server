@@ -1,7 +1,9 @@
 package com.bintime.user.repository;
 
 import com.bintime.user.entity.UserAccount;
-import jakarta.persistence.*;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import java.util.Optional;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Profile;

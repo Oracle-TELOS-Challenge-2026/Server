@@ -3,6 +3,7 @@ package com.bintime.user.controller;
 import com.bintime.user.dto.CsrfTokenResponse;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -52,7 +53,9 @@ public class AuthController {
       operationId = "handleKakaoCallback",
       summary = "U-02 · 카카오 로그인 콜백",
       description =
-          "code·state 검증 후 최초 사용자는 생성한다. 공급자 토큰은 브라우저로 반환하지 않는다.\n\n"
+          "성공 콜백은 code·state, 동의 거절 등 실패 콜백은 error·state와 선택적인 error_description을 전달한다. "
+              + "code와 error는 서로 대체하는 값이다. 성공 시 code·state 검증 후 최초 사용자는 생성한다. "
+              + "공급자 토큰은 브라우저로 반환하지 않는다.\n\n"
               + "- 공개 API (OAuth 콜백은 state 검증)\n\n"
               + "Spring Security가 state·인가 코드를 검증하고 HttpOnly 세션 쿠키를 발급한다. "
               + "동의 거절·만료·잘못된 state는 /login?error=OAUTH_FAILED로 이동한다.",
@@ -66,8 +69,18 @@ public class AuthController {
       content = @Content)
   @GetMapping(value = "/api/v1/auth/oauth/kakao/callback")
   public ResponseEntity<Void> handleKakaoCallback(
-      @RequestParam(value = "code", required = true) String code,
-      @RequestParam(value = "state", required = true) String state) {
+      @Parameter(description = "성공 콜백에서 필수인 인가 코드. 실패 콜백에서는 생략", required = false)
+          @RequestParam(value = "code", required = false)
+          String code,
+      @Parameter(description = "성공·실패 콜백을 로그인 시작 요청과 연결하는 state. 누락·불일치는 로그인 실패", required = false)
+          @RequestParam(value = "state", required = false)
+          String state,
+      @Parameter(description = "실패 콜백의 오류 코드. 예: access_denied", required = false)
+          @RequestParam(value = "error", required = false)
+          String error,
+      @Parameter(description = "실패 콜백의 선택적 오류 설명", required = false)
+          @RequestParam(value = "error_description", required = false)
+          String errorDescription) {
     throw new org.springframework.web.server.ResponseStatusException(
         HttpStatus.SERVICE_UNAVAILABLE);
   }
@@ -88,7 +101,9 @@ public class AuthController {
   @ApiResponse(responseCode = "403", description = "CSRF 토큰 없음 또는 불일치", content = @Content)
   @PostMapping(value = "/api/v1/auth/logout")
   public ResponseEntity<Void> logout(
-      @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken) {
+      @Parameter(description = "현재 세션의 CSRF 토큰. 누락·불일치는 403 CSRF_INVALID", required = true)
+          @RequestHeader(value = "X-CSRF-Token", required = false)
+          String csrfToken) {
     throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
   }
 

@@ -45,6 +45,7 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
+      "spring.datasource.url=jdbc:h2:mem:kakao-login-test;DB_CLOSE_DELAY=-1",
       "bintime.auth.client-id=test-client",
       "bintime.auth.client-secret=test-secret",
       "bintime.auth.redirect-uri={baseUrl}/api/v1/auth/oauth/kakao/callback",

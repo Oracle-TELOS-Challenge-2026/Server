@@ -18,12 +18,8 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles({"test", "api-docs"})
 class ApiContractTests {
-  private static final Set<String> IMPLEMENTED = Set.of("U-01", "U-02", "U-03", "U-09");
-
-  private static boolean isImplemented(String id) {
-    return id.startsWith("S-") || id.startsWith("ST-") || IMPLEMENTED.contains(id);
-  }
-
+  private static final Set<String> IMPLEMENTED =
+      Set.of("U-01", "U-02", "U-03", "U-04", "U-05", "U-06", "U-07", "U-08", "U-09");
   private final JsonMapper mapper = JsonMapper.builder().build();
   @LocalServerPort private int port;
 
@@ -146,8 +142,10 @@ class ApiContractTests {
                 case "U-01" -> expected.addAll(Set.of("400", "503"));
                 case "U-03" -> expected.addAll(Set.of("401", "403"));
                 case "U-09" -> expected.add("401");
-                case "U-05", "U-06", "ST-06", "ST-16", "S-03", "N-04", "C-04" ->
-                    expected.add("409");
+                case "U-04" -> expected.add("401");
+                case "U-05", "U-06", "U-08" -> expected.addAll(Set.of("400", "401", "403", "409"));
+                case "U-07" -> expected.addAll(Set.of("401", "403"));
+                case "ST-06", "ST-16", "S-03", "N-04", "C-04" -> expected.add("409");
                 case "C-05" -> expected.add("400");
               }
             }
@@ -219,7 +217,68 @@ class ApiContractTests {
   }
 
   @Test
-  void developmentEndpointsDoNotRequireAuthenticationOrCsrf() throws Exception {
+  void implementedUserWritesDocumentTheRequiredCsrfHeader() throws Exception {
+    JsonNode doc = getDoc("public");
+    for (String[] endpoint :
+        new String[][] {
+          {"post", "/api/v1/auth/logout"},
+          {"patch", "/api/v1/users/me"},
+          {"put", "/api/v1/users/me/location"},
+          {"delete", "/api/v1/users/me/location"},
+          {"put", "/api/v1/users/me/preferences"}
+        }) {
+      JsonNode operation = doc.path("paths").path(endpoint[1]).path(endpoint[0]);
+      JsonNode csrf = parameter(operation, "X-CSRF-Token");
+      assertThat(csrf.path("in").asText()).isEqualTo("header");
+      assertThat(csrf.path("required").asBoolean())
+          .as("CSRF header for %s %s", endpoint[0], endpoint[1])
+          .isTrue();
+    }
+  }
+
+  @Test
+  void kakaoCallbackDocumentsOptionalParametersAndConditionalSuccessFailureRules()
+      throws Exception {
+    JsonNode callback =
+        getDoc("public").path("paths").path("/api/v1/auth/oauth/kakao/callback").path("get");
+    for (String name : new String[] {"code", "state", "error", "error_description"}) {
+      JsonNode parameter = parameter(callback, name);
+      assertThat(parameter.path("in").asText()).isEqualTo("query");
+      assertThat(parameter.path("required").asBoolean()).as("callback %s", name).isFalse();
+    }
+    assertThat(callback.path("description").asText())
+        .contains("성공", "code", "state", "실패", "error", "error_description");
+  }
+
+  @Test
+  void preferencesTextHasAnOptionalRequestAndRequiredResponseWithoutMovingVersion()
+      throws Exception {
+    JsonNode schemas = getDoc("public").path("components").path("schemas");
+    JsonNode request = schemas.path("SavePreferencesRequest");
+    JsonNode requestText = request.path("properties").path("text");
+    assertNonNullableString(requestText);
+    assertThat(requestText.path("maxLength").asInt()).isEqualTo(2000);
+    assertThat(stringValues(request.path("required"))).doesNotContain("text");
+    assertThat(stringValues(request.path("required")))
+        .contains("categories", "keywords", "maxPrice", "expectedVersion");
+
+    for (String name : new String[] {"UserProfileResponsePreferences", "UserPreferencesResponse"}) {
+      JsonNode response = schemas.path(name);
+      assertNonNullableString(response.path("properties").path("text"));
+      assertThat(stringValues(response.path("required"))).as(name).contains("text");
+    }
+
+    JsonNode profile = schemas.path("UserProfileResponse");
+    assertThat(stringValues(profile.path("required"))).contains("version");
+    assertThat(profile.path("properties").has("version")).isTrue();
+    assertThat(schemas.path("UserProfileResponsePreferences").path("properties").has("version"))
+        .isFalse();
+    assertThat(stringValues(schemas.path("UserPreferencesResponse").path("required")))
+        .contains("version");
+  }
+
+  @Test
+  void documentationProfileDisablesUserExecutionAndKeepsProtectedSearchClosed() throws Exception {
     var client = HttpClient.newHttpClient();
     var get =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/users/me"))
@@ -272,9 +331,7 @@ class ApiContractTests {
   @Test
   void controllerSkeletonsReturnOnlyNotImplementedWithoutDependencies() throws Exception {
     for (JsonNode contract : contracts()) {
-      if (contract.path("id").asText().startsWith("S-")
-          || contract.path("id").asText().startsWith("ST-")) continue;
-      if (IMPLEMENTED.contains(contract.path("id").asText())) continue;
+      if (isImplemented(contract.path("id").asText())) continue;
       String name =
           "com.bintime."
               + contract.path("domain").asText()
@@ -306,6 +363,30 @@ class ApiContractTests {
     try (var stream = getClass().getResourceAsStream("/contracts/notion-api.json")) {
       return mapper.readTree(stream);
     }
+  }
+
+  private boolean isImplemented(String id) {
+    return IMPLEMENTED.contains(id) || id.startsWith("S-") || id.startsWith("ST-");
+  }
+
+  private JsonNode parameter(JsonNode operation, String name) {
+    for (JsonNode parameter : operation.path("parameters")) {
+      if (parameter.path("name").asText().equals(name)) return parameter;
+    }
+    throw new AssertionError("Missing parameter " + name + " for " + operation.path("operationId"));
+  }
+
+  private Set<String> stringValues(JsonNode values) {
+    var result = new HashSet<String>();
+    for (JsonNode value : values) result.add(value.asText());
+    return result;
+  }
+
+  private void assertNonNullableString(JsonNode schema) {
+    JsonNode type = schema.path("type");
+    Set<String> types = type.isArray() ? stringValues(type) : Set.of(type.asText());
+    assertThat(types).containsExactly("string");
+    assertThat(schema.path("nullable").asBoolean()).isFalse();
   }
 
   private JsonNode getDoc(String group) throws Exception {

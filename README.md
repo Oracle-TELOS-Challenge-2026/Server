@@ -47,7 +47,7 @@ Elasticsearch는 검색용 파생 인덱스로 사용하고, 예약 확정 여�
 
 ## 사용자별 벡터 생성
 
-`user`의 공개 서비스에서 자연어 선호가 담긴 `preferences_json` 전체를 조회하고, `search`가 JSON 문자열을 그대로 OpenAI Embeddings API에 전달한다. 고정된 선호 DTO나 ACTIVE 대기 조건은 입력에 추가하지 않는다. 사용자 벡터는 Oracle `search_vector`에 저장하고 추천 검색 시 Elasticsearch에 전달한다. 선호 저장과 갱신 작업은 같은 트랜잭션에 기록한다. 동일 입력은 벡터를 재사용하고, 동시 생성 및 오래된 응답을 막는다. 시간·거리·가격 등 필수 조건은 벡터 유사도와 별도로 검증한다.
+`user`의 공개 서비스에서 자연어 선호가 담긴 `preferences_json` 전체를 조회하고, `search`가 JSON 문자열을 그대로 OpenAI Embeddings API에 전달한다. 고정된 선호 DTO나 ACTIVE 대기 조건은 입력에 추가하지 않는다. 사용자 벡터는 Oracle `search_vector`에 저장하고 추천 검색 시 Elasticsearch에 전달한다. 내부 `UserPreferenceService.replace`는 선호 저장과 벡터 갱신 작업을 같은 트랜잭션에 기록한다. U-08 선호 저장 API는 구현되어 있지만 이 변경 이벤트 경로와의 연결은 후속 작업이다. 동일 입력은 벡터를 재사용하고, 동시 생성 및 오래된 응답을 막는다. 시간·거리·가격 등 필수 조건은 벡터 유사도와 별도로 검증한다.
 
 벡터 생성은 자체 모델을 배포하는 대신 OpenAI의 Embeddings API를 호출하는 방식이다. 자연어 조건 추출과 벡터 생성은 별도 API 작업으로 구분한다. 참고: [OpenAI 공식 벡터 생성 문서](https://developers.openai.com/api/docs/guides/embeddings).
 
@@ -77,7 +77,7 @@ Controller마다 입력 Port를 만들거나 모든 Service에 인터페이스�
 
 ## 파일 구조
 
-store·search는 실제 기능에 필요한 Service·Repository 및 연동 경계를 구현했다. user·notification·chatting의 Controller·DTO 계약 골격은 유지한다.
+user·store·search는 실제 기능에 필요한 Service·Repository 및 연동 경계를 구현했다. notification·chatting의 Controller·DTO 계약 골격은 유지한다.
 
 ```text
 src/main/java/com/bintime/
@@ -95,7 +95,7 @@ src/main/java/com/bintime/
 ```text
 <domain>/
 ├── controller/     # HTTP 매핑·Swagger, 미구현 도메인만 501 스텁
-├── dto/            # 현재: 요청·응답 및 실시간 프레임 계약
+├── dto/            # 요청·응답 및 실시간 프레임 계약
 ├── service/        # 필요한 도메인부터 구현
 ├── repository/     # 필요한 도메인부터 구현
 ├── entity/         # 영속 원장 모델
@@ -120,8 +120,7 @@ IntelliJ에서도 Working directory를 저장소 루트로 지정하면 동일�
 
 ## API 계약 및 Swagger
 
-[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 계약을 정의했다. search의 S-01~08은 실제 처리 로직을 제공하며 실행·의존 계약·복구 방법은 [search 안내](docs/search.md), 구현 범위·미연결 항목·다음 작업은 [search 진행 현황](docs/search-progress.md)을 참고한다.
-[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 이름과 요청·응답 스키마를 맞췄고, 카카오 로그인 4개 API부터 처리 로직을 연결했다.
+[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)의 REST·SSE 45개에 store 등록 API 3개를 추가해 총 48개와 별도 채팅 WebSocket 프레임을 정의했다. user U-01~09, store ST-01~20, search S-01~08의 처리 로직을 구현했다. 사용자 API는 [프로필·위치·선호도 안내](docs/user-profile.md), store는 [store 구현 계약](docs/store.md), search의 실행·의존 계약·복구 방법은 [search 안내](docs/search.md), 미연결 항목·다음 작업은 [search 진행 현황](docs/search-progress.md)을 참고한다.
 
 - [API별 Controller·DTO 이름 매핑](docs/contracts/api.md)
 - [SSE·WebSocket 계약](docs/contracts/realtime.md)
@@ -136,12 +135,11 @@ DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 �
 ./gradlew bootRun --args='--spring.profiles.active=api-docs'
 ```
 
-개발 단계에서는 Spring Security와 OAuth2 Client 의존성을 제외했다. Swagger와 미구현 도메인의 골격 API는 로그인 없이 접근한다. store는 공개 조회를 제외한 API에 요청자 경계와 권한 검증을 적용한다. search의 보호 API는 user 공개 인증 계약과 CSRF 검증 연결을 요구하며, 미연결 상태에서는 접근을 거절한다. Swagger의 세션 쿠키와 인증·CSRF 설명은 향후 구현할 API 계약이다. `api-docs` 프로필은 문서 검토용이며 Swagger의 API 실행 기능은 비활성화한다.
-
-store·search 이외의 골격 Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 미구현 도메인의 200·201 등은 향후 구현할 성공 계약이다. 필수 입력에 대한 요청 바인딩은 그 전에 요청을 거절할 수 있다. 로그인과 실제 SSE/WS 전송은 별도 구현이다. store 보호 API는 검증된 인증·CSRF 연결 전에는 운영에서 닫혀 있으며, 명시적 local/test 대체 식별만 제공한다.
 카카오 로그인 시작·콜백·로그아웃·CSRF 조회는 구현되어 있다. `/api/v1/auth/**`, `/api/v1/users/**`에는 세션 인증과 상태 변경 시 CSRF 검증을 적용한다. Swagger는 로그인 없이 접근한다. 설정과 프론트 연동은 [카카오 로그인 실행](docs/kakao-login.md)을 참고한다. `api-docs` 프로필은 DB·로그인 없이 문서를 검토하는 용도이며 API 실행 기능은 비활성화한다.
 
-로그인 외의 Controller 계약 골격은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 필수 입력 바인딩이나 user 도메인의 인증·CSRF 검증은 그 전에 요청을 거절할 수 있다. 프로필·예약·AI·SSE/WS와 다른 도메인의 인증·권한은 각 기능 구현 시 연결한다.
+store·search는 요청자·권한 검증 경계를 구현했지만 카카오 세션·CSRF와의 연결은 별도 작업이다. store 보호 API는 검증된 인증·CSRF 연결 전에는 운영에서 닫혀 있으며, 명시적 local/test 대체 식별만 제공한다. search의 보호 API도 인증 계약이 연결되지 않은 상태에서는 접근을 거절한다.
+
+notification·chatting의 골격 Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 필수 입력 바인딩은 그 전에 요청을 거절할 수 있다. 실제 SSE/WS 전송은 후속 구현이다.
 
 ### 공통 JSON 응답
 
@@ -160,7 +158,7 @@ store·search 이외의 골격 Controller에 도달한 유효한 요청은 공�
 
 204·205·리다이렉트는 본문 없이 유지하고, SSE·WebSocket은 각 전송 프레임을 유지한다. Swagger와 Actuator 응답에는 API 봉투를 적용하지 않는다. 상세 사용법은 [공통 응답 계약](docs/contracts/response.md)을 참고한다.
 
-Notion v0.1의 알림 대상·슬롯 상태 정책은 기존 기획과 차이가 있어 [계약 문서](docs/contracts/api.md)에 기록했다. 이번 변경은 해당 정책을 실행하지 않는다.
+Notion v0.1의 알림 대상·슬롯 상태와 기존 기획 간 차이 및 store·search에서 적용한 정책은 [계약 문서](docs/contracts/api.md)에 기록했다. 실제 알림 전달과 도메인 간 미연결 항목은 후속 구현이다.
 
 ## 예약 연결 흐름
 
@@ -194,10 +192,10 @@ Notion v0.1의 알림 대상·슬롯 상태 정책은 기존 기획과 차이가
 ./gradlew build
 ```
 
-`format`은 API 골격의 Java 코드를 포맷한다. 기존 부트스트랩 파일은 대상에서 제외한다. 계약 테스트는 요청·응답 예시와 전체 경로를 Swagger에 대조하고 DTO 역직렬화와 미구현 도메인의 501 스텁을 검증한다. store는 실제 API·정합성 테스트를 별도로 수행한다. 테스트는 H2와 문서용 프로필을 사용하며 외부 AI·DB·Redis 연결이 필요하지 않다.
+`format`은 API 골격의 Java 코드를 포맷한다. 기존 부트스트랩 파일은 대상에서 제외한다. 계약 테스트는 요청·응답 예시와 전체 경로를 Swagger에 대조하고 DTO 역직렬화와 미구현 도메인의 501 스텁을 검증한다. user·store·search는 실제 API·정합성 테스트를 별도로 수행한다. 기본 테스트는 H2와 문서용 프로필을 사용하며 외부 AI·DB·Redis 연결이 필요하지 않다.
 
-### Store DB 반영 및 검증
+### DB 반영 및 검증
 
-기존 초기 DB에는 `infra/oracle/migrations/02-store-api.sql`을 1회 적용하고 배포한다. 빈 DB는 최신 `infra/oracle/local-setup/01ddl.sql`만 실행한다. 기존 데이터는 보존하며 영업시간 미상 매장은 휴무로 보정한다. `ddl-auto=validate`를 유지한다. 새 search 대기 연동을 위한 SQL은 `docs/sql/search-oracle.sql`이다.
+store의 기존 초기 DB에는 `infra/oracle/migrations/02-store-api.sql`을 1회 적용하고 배포한다. 빈 DB의 store 스키마는 최신 `infra/oracle/local-setup/01ddl.sql`로 준비한다. 기존 데이터는 보존하며 영업시간 미상 매장은 휴무로 보정한다. `ddl-auto=validate`를 유지한다. 사용자 프로필은 신규·기존 DB 모두 `infra/oracle/migrations/001-user-profile.sql`도 적용해야 한다. 새 search 대기 연동을 위한 SQL은 `docs/sql/search-oracle.sql`이다.
 
 `StoreApiTests`는 H2에서 API·동시성·멱등성·시간·대기 연동을 검증한다. `python3 infra/oracle/verify-store.py`는 로컬 Oracle의 격리 스키마에서 초기/변경 SQL·기존 데이터 보존·같은 API 및 경합 테스트를 실행한다. 인증 연결 조건, 테스트 실행 옵션, 후속 작업 소비 계약은 [store.md](docs/store.md)에 정리했다.

@@ -15,5 +15,13 @@ public record UserPreferencesResponse(
             nullable = true,
             example = "60000")
         Long maxPrice,
-    @Schema(description = "리소스 버전", requiredMode = Schema.RequiredMode.REQUIRED, example = "2")
+    @Schema(
+            description = "자유 입력 선호도. 미등록 시 빈 문자열",
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            maxLength = 2000)
+        String text,
+    @Schema(
+            description = "저장 후 이름·선호도 공통 버전. 다음 수정 요청의 expectedVersion으로 사용",
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            example = "2")
         Long version) {}

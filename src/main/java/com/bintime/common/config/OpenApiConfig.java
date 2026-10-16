@@ -25,10 +25,10 @@ import org.springframework.context.annotation.Configuration;
             title = "BinTime API",
             version = "v0.1-contract",
             description =
-                "store ST-01~17과 등록 API 3개, search S-01~08, 카카오 로그인·콜백·로그아웃·CSRF 조회는 구현된 API입니다."
-                    + " search 미연결 의존 기능은 503, 나머지 도메인 골격은 501을 반환합니다."
-                    + " store·search의 공통 인증은 별도 연결이 필요합니다. C-WS는 HTTP operation이 아닌"
-                    + " ChatWebSocketFrame 스키마와 docs/contracts/realtime.md를 참고하세요."))
+                "user U-01~09, store ST-01~20, search S-01~08은 구현된 API입니다. store·search의 카카오"
+                    + " 세션·CSRF 인증 연결은 별도 작업이 필요합니다. search 미연결 의존 기능은 503, notification·chatting"
+                    + " 골격은 501을 반환합니다. C-WS는 HTTP operation이 아닌 ChatWebSocketFrame 스키마와"
+                    + " docs/contracts/realtime.md를 참고하세요."))
 @SecurityScheme(
     name = "sessionCookie",
     type = SecuritySchemeType.APIKEY,

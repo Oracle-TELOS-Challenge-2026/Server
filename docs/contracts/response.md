@@ -63,5 +63,5 @@ Controller는 `ResponseEntity<ApiResponse<UserProfileResponse>>`처럼 성공 �
 
 - 성공 응답은 각 Controller에 선언한 상태와 반환 DTO 스키마로 표시한다. JSON 성공 응답에는 `resultType: SUCCESS`, `success.data`의 API별 DTO, `error: null`, `meta`를 포함한 `success` 예시를 제공한다. `success` 필드는 객체 스키마와 null 허용 여부를 함께 표시하여 내부 DTO 구조가 보이도록 한다. 204·리다이렉트에는 본문이 없고 SSE는 `text/event-stream`을 사용한다.
 - 오류 상태를 모든 API에 일괄 추가하지 않는다. 전역 예외 처리기의 응답도 자동 추가하지 않으며 각 API의 `@ApiResponse`에 명시한 오류만 공통 `ApiErrorResponse` 스키마로 표시한다. 오류별 설명은 유지한다.
-- 구현한 로그인 API(U-01·U-02·U-03·U-09)는 실제 상태를 명시하고, 나머지 계약 골격은 `501`을 명시한다. 각 API 설명에 명시한 충돌 `409`, 채팅 읽음 위치 오류 `400`, 알림 스트림의 `410 STREAM_CURSOR_EXPIRED`는 향후 구현할 해당 API 전용 계약이다. 도메인 기능 구현 시 실제로 발생하는 오류를 해당 API에 추가한다.
+- 구현한 사용자 API(U-01~U-09)는 실제 상태를 명시하고, notification·chatting의 미구현 계약 골격은 `501`을 명시한다. 프로필·선호도의 `409 VERSION_CONFLICT`와 위치의 `409 STALE_LOCATION`은 실제 오류로 처리한다. U-08 선호 저장은 구현되어 있으나 search의 벡터 변경 이벤트 경로와는 아직 연결되지 않았다. 미구현 도메인의 충돌·스트림 오류는 해당 기능 구현 시 연결한다.
 - 문서에 공통 오류를 나열하지 않아도 입력 바인딩 실패나 예상하지 못한 서버 오류는 기존 예외 처리기에 따라 공통 실패 응답으로 반환한다.
