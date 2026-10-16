@@ -119,6 +119,9 @@ class ChatBookingProposalTests {
         .filteredOn(ChatService.MessageCommitted.class::isInstance)
         .extracting(event -> ((ChatService.MessageCommitted) event).message())
         .containsExactly(card);
+    assertThat(committed)
+        .filteredOn(ChatService.PushRequested.class::isInstance)
+        .containsExactly(new ChatService.PushRequested(card, "customer"));
   }
 
   @Test
@@ -279,6 +282,7 @@ class ChatBookingProposalTests {
         .extracting(event -> ((ChatService.MessageUpdated) event).message())
         .containsExactly(result.data());
     assertThat(committed).noneMatch(ChatService.MessageCommitted.class::isInstance);
+    assertThat(committed).noneMatch(ChatService.PushRequested.class::isInstance);
     int events = committed.size();
     assertThat(
             chats.confirm(

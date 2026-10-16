@@ -23,6 +23,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -106,6 +107,188 @@ class FcmClientTests {
     assertThat(requestBody.path("message").has("webpush")).isFalse();
     assertThat(requestBody.path("message").path("data").path("url").asText())
         .isEqualTo("/customer/waitlist");
+  }
+
+  @Test
+  void sendsChatStringDataWithoutChangingMatchingNotificationShape() {
+    Map<String, String> data =
+        Map.of(
+            "type",
+            "CHAT_MESSAGE",
+            "roomId",
+            "room-1",
+            "messageId",
+            "message-1",
+            "sequence",
+            "12",
+            "url",
+            "https://untrusted.example");
+    var result =
+        client("https://frontend-oracle.vercel.app")
+            .sendPush("browser-fid", "새 채팅 메시지", "예약 문의입니다", data, "/", () -> true);
+
+    assertThat(result.accepted()).isTrue();
+    JsonNode message = requestBody.path("message");
+    assertThat(message.path("fid").asText()).isEqualTo("browser-fid");
+    assertThat(message.has("token")).isFalse();
+    assertThat(message.path("notification").path("title").asText()).isEqualTo("새 채팅 메시지");
+    assertThat(message.path("notification").path("body").asText()).isEqualTo("예약 문의입니다");
+    assertThat(message.path("data").path("type").asText()).isEqualTo("CHAT_MESSAGE");
+    assertThat(message.path("data").path("roomId").asText()).isEqualTo("room-1");
+    assertThat(message.path("data").path("messageId").asText()).isEqualTo("message-1");
+    assertThat(message.path("data").path("sequence").asText()).isEqualTo("12");
+    assertThat(message.path("data").has("notificationId")).isFalse();
+    assertThat(message.path("data").path("url").asText()).isEqualTo("/");
+    for (JsonNode value : message.path("data")) assertThat(value.isString()).isTrue();
+    assertThat(message.path("webpush").path("fcm_options").path("link").asText())
+        .isEqualTo("https://frontend-oracle.vercel.app/");
+    assertThat(data).containsEntry("url", "https://untrusted.example");
+  }
+
+  @Test
+  void customRelativePathStaysOnFrontendOriginAndLocalHttpOmitsClickOptions() {
+    var client = client("https://frontend-oracle.vercel.app/");
+    assertThat(
+            client
+                .sendPush("browser-fid", "채팅", "새 메시지", Map.of(), "/?roomId=room-1", () -> true)
+                .accepted())
+        .isTrue();
+    assertThat(requestBody.at("/message/webpush/fcm_options/link").asText())
+        .isEqualTo("https://frontend-oracle.vercel.app/?roomId=room-1");
+    assertThat(
+            client("http://localhost:5173")
+                .sendPush(
+                    "browser-fid", "채팅", "새 메시지", Map.of("type", "CHAT_MESSAGE"), "/", () -> true)
+                .accepted())
+        .isTrue();
+    assertThat(requestBody.path("message").has("webpush")).isFalse();
+    assertThat(requestBody.at("/message/data/url").asText()).isEqualTo("/");
+  }
+
+  @Test
+  void customClickPathsCannotChangeOriginOrInjectControls() {
+    var client = client("https://frontend-oracle.vercel.app");
+    for (String path :
+        new String[] {
+          null,
+          "",
+          "relative",
+          "https://untrusted.example/",
+          "//untrusted.example",
+          "///untrusted.example",
+          "/\\untrusted.example",
+          "/line\nbreak",
+          "/tab\t",
+          "/carriage\rreturn",
+          "/bad path",
+          "/%invalid"
+        }) {
+      assertThat(client.sendPush("browser-fid", "채팅", "새 메시지", Map.of(), path, () -> true))
+          .isEqualTo(new FcmClient.Result(false, "INVALID_ARGUMENT", false, 0));
+    }
+    assertThat(requests).hasValue(0);
+  }
+
+  @Test
+  void customPushCountsUtf8BytesAcrossNotificationAndDataBeforeHttp() {
+    var client = client("https://frontend-oracle.vercel.app");
+    assertThat(
+            client
+                .sendPush("browser-fid", "채팅", "한".repeat(1400), Map.of(), "/", () -> true)
+                .code())
+        .isEqualTo("INVALID_ARGUMENT");
+    assertThat(
+            client
+                .sendPush(
+                    "browser-fid",
+                    "채팅",
+                    "새 메시지",
+                    Map.of("preview", "한".repeat(1400)),
+                    "/",
+                    () -> true)
+                .code())
+        .isEqualTo("INVALID_ARGUMENT");
+    assertThat(requests).hasValue(0);
+    assertThat(
+            client
+                .sendPush("browser-fid", "채팅", "한".repeat(100), Map.of(), "/", () -> true)
+                .accepted())
+        .isTrue();
+  }
+
+  @Test
+  void customPushRejectsInvalidTargetMissingTextAndNonStringNullData() {
+    var client = client("http://localhost:5173");
+    assertThat(client.sendPush("x".repeat(129), "title", "body", Map.of(), "/", () -> true).code())
+        .isEqualTo("INVALID_INSTALLATION_ID");
+    assertThat(client.sendPush("browser-fid", null, "body", Map.of(), "/", () -> true).code())
+        .isEqualTo("INVALID_ARGUMENT");
+    assertThat(client.sendPush("browser-fid", "title", null, Map.of(), "/", () -> true).code())
+        .isEqualTo("INVALID_ARGUMENT");
+    assertThat(client.sendPush("browser-fid", "title", "body", null, "/", () -> true).code())
+        .isEqualTo("INVALID_ARGUMENT");
+    assertThat(client.sendPush("browser-fid", "title", "body", Map.of(), "/", null).code())
+        .isEqualTo("INVALID_ARGUMENT");
+    var data = new HashMap<String, String>();
+    data.put("roomId", null);
+    assertThat(client.sendPush("browser-fid", "title", "body", data, "/", () -> true).code())
+        .isEqualTo("INVALID_ARGUMENT");
+    data.clear();
+    data.put(null, "room-1");
+    assertThat(client.sendPush("browser-fid", "title", "body", data, "/", () -> true).code())
+        .isEqualTo("INVALID_ARGUMENT");
+    assertThat(requests).hasValue(0);
+  }
+
+  @Test
+  void customPushRechecksSessionAfterOAuthRefresh() {
+    AtomicBoolean active = new AtomicBoolean(true);
+    GoogleCredentials credentials =
+        new GoogleCredentials() {
+          @Override
+          public AccessToken refreshAccessToken() {
+            active.set(false);
+            return new AccessToken(
+                "refreshed-fake-token", new Date(System.currentTimeMillis() + 3_600_000));
+          }
+        };
+    assertThat(
+            client(credentials, "http://localhost:5173", Duration.ofSeconds(2))
+                .sendPush(
+                    "browser-fid", "채팅", "새 메시지", Map.of("type", "CHAT_MESSAGE"), "/", active::get))
+        .isEqualTo(new FcmClient.Result(false, "INACTIVE_SUBSCRIPTION", false, 0));
+    assertThat(requests).hasValue(0);
+  }
+
+  @Test
+  void customPushUsesExistingRetryAfterAndErrorHandling() {
+    status = 429;
+    retryAfter = "120";
+    responseBody = "{\"error\":{\"status\":\"QUOTA_EXCEEDED\"}}";
+    assertThat(
+            client("http://localhost:5173")
+                .sendPush("browser-fid", "채팅", "새 메시지", Map.of(), "/", () -> true))
+        .isEqualTo(new FcmClient.Result(false, "QUOTA_EXCEEDED", true, 120));
+  }
+
+  @Test
+  void matchingNotificationStillRejectsMissingOrBlankId() {
+    var client = client("http://localhost:5173");
+    for (String id : new String[] {null, "", " "}) {
+      var notification =
+          new NotificationResponse(
+              id,
+              "VACANCY_MATCHED",
+              "title",
+              "body",
+              null,
+              null,
+              "AVAILABLE",
+              null,
+              OffsetDateTime.now(clock));
+      assertThat(client.send("browser-fid", notification).code()).isEqualTo("INVALID_ARGUMENT");
+    }
+    assertThat(requests).hasValue(0);
   }
 
   @Test
@@ -212,6 +395,8 @@ class FcmClientTests {
         new FcmClient(json, false, "bintime-33512", "missing-secret.json", "http://localhost:5173");
     assertThat(client.enabled()).isFalse();
     assertThat(client.send("browser-fid", notification()))
+        .isEqualTo(new FcmClient.Result(false, "DISABLED", false, 0));
+    assertThat(client.sendPush("browser-fid", "채팅", "메시지", Map.of(), "/", () -> true))
         .isEqualTo(new FcmClient.Result(false, "DISABLED", false, 0));
     assertThat(requests).hasValue(0);
   }

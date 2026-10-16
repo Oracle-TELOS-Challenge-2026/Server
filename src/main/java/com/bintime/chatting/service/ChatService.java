@@ -56,6 +56,8 @@ public class ChatService {
 
   public record MessageUpdated(ChatMessageResponse message) {}
 
+  public record PushRequested(ChatMessageResponse message, String recipientId) {}
+
   public record ReadCommitted(String userId, ChatReadResponse read) {}
 
   private record Cursor(String user, String id, OffsetDateTime activity) {}
@@ -198,6 +200,10 @@ public class ChatService {
     // Subscribers only observe this event after the message and room counter commit together.
     events.publishEvent(new MessageCommitted(message));
     if (user.equals(room.customer())) invalidate(room, "REVIEW_REQUIRED", List.of("PENDING"));
+
+    // Pin the other participant while the room is locked; later owner changes must not retarget it.
+    events.publishEvent(
+        new PushRequested(message, user.equals(room.customer()) ? room.owner() : room.customer()));
     return new Result<>(message, 201);
   }
 
@@ -298,6 +304,7 @@ public class ChatService {
                 db.insertMessage(message);
                 db.insertProposal(message);
                 events.publishEvent(new MessageCommitted(message));
+                events.publishEvent(new PushRequested(message, room.customer()));
                 return new Result<>(message, 201);
               });
         });
