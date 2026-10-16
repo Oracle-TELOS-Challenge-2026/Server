@@ -162,7 +162,7 @@ Spring의 `prod` 프로필은 로컬 `.env`를 직접 읽지 않는다. 서버�
 `.env`는 Git·Docker 이미지에 포함하지 않는다.
 
 필요할 때 저장소 루트에서 `bash deploy.sh`를 실행한다. Docker Desktop과 Java 21이 필요하다.
-스크립트는 서버 인증서 존재 확인, 빌드·테스트, ARM64 이미지와 인프라 설정 전송, 자동 갱신 타이머 활성화, 서버 설정에 따른 FCM 선택, Compose 설정 검증, 컨테이너 실행, Nginx 검증·리로드, 내부·외부 HTTPS 상태 확인을 수행한다.
+최초 통합 배포에는 아래 프론트 빌드도 준비해야 한다. 스크립트는 서버 인증서·로그인 복귀 주소·프론트 파일 확인, 빌드·테스트, ARM64 이미지와 인프라 설정 전송, 자동 갱신 타이머 활성화, 서버 설정에 따른 FCM 선택, Compose 설정 검증, 컨테이너 실행, Nginx 검증·리로드, 내부·외부 HTTPS 상태와 화면 응답 확인을 수행한다.
 DB 마이그레이션과 Elasticsearch 최초 색인은 자동 실행하지 않는다. 앱 쓰기를 중지하고 백업한 뒤 해당 환경에 필요한 SQL을 먼저 적용한다. search v1 환경은 [v2 전환 절차](../docs/search-schema-v2.md), store는 migration `06`·`07`, FCM은 `002`·`003`, 채팅은 [채팅 DB 안내](../docs/chatting-db.md)를 확인한다. 최초 ES 인덱스/alias 생성은 [초기 색인 안내](../docs/search.md#store-카탈로그-연결-및-초기-색인)에 따라 별도 수행한다.
 최초 인증서 발급을 마친 서버를 대상으로 한다. 인증서가 없으면 설정을 덮어쓰기 전에 중단한다.
 SSH 키 기본 경로는 `~/Downloads/team3/team-3-1.key`이며 다른 PC에서는 `BINTIME_SSH_KEY=/키/경로 bash deploy.sh`로 지정한다.
@@ -180,6 +180,56 @@ Compose나 Nginx 설정을 바꿨다면 해당 설정 파일도 서버의 같은
 서버 `.env`는 별도 관리하고 Git·이미지에 넣지 않는다.
 Redis 데이터는 Docker 볼륨에 보존되며 `docker compose down --volumes`는 데이터를 삭제한다.
 
+### 프론트와 API를 같은 주소에서 제공
+
+운영 화면 주소는 **`https://140.238.19.165`**로 통일한다. Vercel 화면에서 IP API를 호출하면
+아이폰의 사이트 간 쿠키 제한으로 `bt_session`이 전송되지 않는다. Nginx가 프론트 정적 파일을
+제공하고 `/api/`(OAuth·WebSocket·SSE 포함), Swagger, 상태 확인은 기존 Spring으로 전달한다.
+클라이언트 로그인 로직이나 DB 스키마는 바꾸지 않는다.
+
+1. 서버 `~/bintime/.env`의 `FRONTEND_URL=https://140.238.19.165`를 설정한다. 기존 Vercel 값이
+   남아 있으면 `deploy.sh`가 빌드 전에 중단한다. 로그인 후 이동과 채팅 WebSocket Origin,
+   FCM 알림 클릭 주소가 모두 이 값을 사용한다. 카카오 로그인 콜백 URI는 기존
+   `https://140.238.19.165/api/v1/auth/oauth/kakao/callback`을 유지한다.
+2. 카카오 Developers의 **JavaScript SDK 도메인**에 `https://140.238.19.165`를 추가한다.
+   기존 localhost·Vercel 등록은 개발용으로 유지할 수 있다.
+3. 프론트 저장소는 `https://github.com/Oracle-TELOS-Challenge-2026/Frontend`다.
+   Node.js 22.12 이상인 22.x와 pnpm 10을 사용하고, 최초에는 `Server` 옆 `Frontend`에 clone한다.
+   `Frontend/.env.example`을 `.env.local`로 복사하고 **기존 Vercel의 공개 환경변수 6개**
+   (`VITE_KAKAO_MAP_APP_KEY`, `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_PROJECT_ID`,
+   `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_VAPID_KEY`)를 넣는다.
+   서버의 카카오 REST 키·Client Secret·Firebase 서비스 계정 JSON을 넣지 않는다.
+   키가 빠진 빌드에서는 지도·FCM이 비활성화된다.
+
+```sh
+# Server 폴더에서 최초 1회. 이미 clone했다면 생략한다.
+git clone https://github.com/Oracle-TELOS-Challenge-2026/Frontend.git ../Frontend
+cd ../Frontend
+cp -n .env.example .env.local
+# .env.local에 공개 설정을 채운 뒤 빌드한다.
+pnpm install --frozen-lockfile
+pnpm build
+cd ../Server
+BINTIME_FRONTEND_DIST=../Frontend/dist bash deploy.sh
+```
+
+현재 프론트의 API 주소는 `https://140.238.19.165`이고 WebSocket도 이 주소에서 파생하므로
+기능 코드를 수정하지 않고 같은 origin으로 연결할 수 있다. `dist`만 전달받았다면
+`BINTIME_FRONTEND_DIST=/받은/dist bash deploy.sh`로 배포한다.
+
+스크립트는 빌드 결과만 서버 `~/bintime/infra/frontend/dist`에 복사한다. 전송에 실패하면 새 화면을
+활성화하지 않으며, 새 HTML은 파일 복사 마지막에 교체한다. 기존 assets는 열려 있는 화면을 위해
+유지한다. 빌드 결과는 Git·백엔드 Docker 이미지에 포함하지 않고 Nginx에 읽기 전용으로 마운트한다.
+
+첫 업로드 후 **백엔드만 변경했을 때는 기존대로 `bash deploy.sh`**를 실행한다. 서버에 있는 화면을
+유지한다. 프론트가 바뀌면 다시 빌드하고 `BINTIME_FRONTEND_DIST`를 지정한다.
+화면과 API를 함께 배포하며 자동 CD나 Docker Hub 업로드는 하지 않는다.
+
+배포 후 아이폰에서도 **Vercel 대신 IP 화면 주소**로 접속해 새로 로그인한다.
+`/api/v1/users/me` 200, `/customer`·`/chat` 새로고침, 채팅 WebSocket 연결을 확인한다.
+알림 권한·서비스 워커·FID는 origin별로 관리되므로 새 화면 주소의 마이페이지에서 알림을 다시 켠다.
+실제 카카오 지도와 두 계정 간 FCM 수신은 브라우저에서 별도로 확인한다.
+
 ## 서버 확인
 
 서버 `.env`의 `HTTP_BIND_ADDRESS=0.0.0.0`, `HTTP_PORT=8080`으로 Nginx를 공개한다.
@@ -187,11 +237,11 @@ Redis 데이터는 Docker 볼륨에 보존되며 `docker compose down --volumes`
 
 최초 인증서 발급 및 HTTPS 전환을 완료한 뒤 사용하는 주소는 다음과 같다.
 
-- API 주소: `https://140.238.19.165`
+- 화면·API 주소: `https://140.238.19.165`
 - 상태 확인: `https://140.238.19.165/healthz`
 - Swagger: `https://140.238.19.165/swagger-ui/index.html`
 
-Nginx가 `http://127.0.0.1:5173`, `http://localhost:5173`, `https://frontend-oracle.vercel.app`에 대한 CORS와 OPTIONS 사전 요청을 처리한다. 5173은 프론트 개발 PC의 포트이므로 API 서버에 열지 않는다. 이 설정은 Nginx를 거치는 배포 API에 적용된다.
+Nginx가 `https://140.238.19.165`, `http://127.0.0.1:5173`, `http://localhost:5173`, `https://frontend-oracle.vercel.app`에 대한 CORS와 API OPTIONS 사전 요청을 처리한다. 운영 로그인·채팅·푸시는 IP 화면 주소를 사용한다. Vercel CORS 허용만으로 아이폰의 사이트 간 쿠키 제한이 해제되지는 않는다. 5173은 프론트 개발 PC의 포트이므로 API 서버에 열지 않는다. 이 설정은 Nginx를 거치는 배포 API에 적용된다.
 프론트 API 주소도 위 HTTPS 주소로 지정한다. HTTP 주소로 보내는 OPTIONS 요청은 리다이렉트가 CORS 오류로 보일 수 있다.
 
 ### IP 인증서와 자동 갱신

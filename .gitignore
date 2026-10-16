@@ -11,6 +11,7 @@ CLAUDE.md
 /infra/certbot/conf/
 /infra/certbot/www/
 /infra/certbot/log/
+/infra/frontend/dist/
 application-local.yml
 application-local.yaml
 .gradle
