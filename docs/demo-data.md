@@ -5,7 +5,7 @@
 ## 실행 순서
 
 1. 시연용 빈 앱 스키마에 `infra/oracle/ddl.sql` 전체 실행.
-2. 같은 앱 계정에서 `infra/oracle/migrations/004-chatting.sql`을 실행해 채팅 v1을 준비한다. 통합본 25개 테이블에 읽음·멱등성 테이블 2개가 추가되어 전체 27개, 채팅 4개가 된다. 이미 004를 적용한 기존 OCI 공유 DB에는 초기 DDL을 재실행하지 않는다.
+2. 같은 앱 계정에서 `infra/oracle/migrations/004-chatting.sql`을 실행해 채팅 v1을 준비하고, `infra/oracle/migrations/08-chat-booking-proposals.sql`을 추가 적용한다. 통합본 25개 테이블에 읽음·멱등성·제안 테이블이 추가되어 전체 28개, 채팅 5개가 된다. 이미 적용한 기존 OCI 공유 DB에는 초기 DDL이나 더미 INSERT를 재실행하지 않는다. 이번 SQL은 기존 텍스트 더미 INSERT의 컬럼 목록을 바꾸지 않는다.
 3. 앱 쓰기와 worker가 실행되지 않는 상태에서 `infra/oracle/dummy-data.sql` 전체를 **스크립트로** 실행. DataGrip에서는 `DECLARE ... END;` 전체를 선택해 실행하거나 스크립트 실행을 사용한다. 끝의 `/`는 PL/SQL 블록 구분자다.
 4. 앱을 시작하기 전에 `infra/oracle/verify-dummy-data.sql`을 실행해 기존 시연 데이터의 초기 상태를 검증하고, `infra/oracle/verify-chatting.sql`로 채팅 v1을 별도 확인한다.
 5. 시연용 앱을 연결하고 아래 시나리오 진행.

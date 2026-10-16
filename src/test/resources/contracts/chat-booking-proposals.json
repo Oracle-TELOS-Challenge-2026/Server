@@ -1,0 +1,98 @@
+[
+  {
+    "id": "C-06",
+    "domain": "chatting",
+    "controller": "ChatBookingProposalController",
+    "methodName": "createBookingProposal",
+    "method": "POST",
+    "path": "/api/v1/chatting/rooms/{roomId}/booking-proposals",
+    "request": "CreateBookingProposalRequest",
+    "response": "ChatMessageResponse",
+    "status": 201,
+    "query": [],
+    "auth": "해당 매장의 현재 사장님. 세션 쿠키, X-CSRF-Token, Idempotency-Key 필수",
+    "requestExample": {
+      "sourceMessageId": "msg_customer_001",
+      "serviceId": "svc_gel",
+      "serviceDescription": "젤 네일 + 기존 젤 제거 + 아트 2개",
+      "startAt": "2026-10-20T14:00:00+09:00",
+      "durationMinutes": 90,
+      "price": 75000,
+      "waitlistId": null
+    },
+    "responseExample": {
+      "id": "msg_proposal_001",
+      "roomId": "room_001",
+      "sequence": 2,
+      "sender": {
+        "id": "usr_owner_001",
+        "role": "OWNER",
+        "displayName": "네일 모먼트"
+      },
+      "clientMessageId": "proposal_001",
+      "type": "BOOKING_PROPOSAL",
+      "content": "예약 제안: 젤 네일 + 기존 젤 제거 + 아트 2개",
+      "createdAt": "2026-10-17T14:00:00+09:00",
+      "bookingProposal": {
+        "id": "proposal_001",
+        "sourceMessageId": "msg_customer_001",
+        "serviceId": "svc_gel",
+        "serviceDescription": "젤 네일 + 기존 젤 제거 + 아트 2개",
+        "startAt": "2026-10-20T14:00:00+09:00",
+        "endAt": "2026-10-20T15:30:00+09:00",
+        "durationMinutes": 90,
+        "price": 75000,
+        "status": "PENDING",
+        "version": 1,
+        "reservationId": null,
+        "waitlistId": null
+      }
+    },
+    "source": "Local user request, 2026-10-17; docs/chatting.md (not a Notion snapshot)"
+  },
+  {
+    "id": "C-07",
+    "domain": "chatting",
+    "controller": "ChatBookingProposalController",
+    "methodName": "confirmBookingProposal",
+    "method": "POST",
+    "path": "/api/v1/chatting/rooms/{roomId}/booking-proposals/{proposalId}/confirm",
+    "request": "ConfirmBookingProposalRequest",
+    "response": "ChatMessageResponse",
+    "status": 200,
+    "query": [],
+    "auth": "해당 방의 고객. 세션 쿠키, X-CSRF-Token, Idempotency-Key 필수",
+    "requestExample": {
+      "expectedVersion": 1
+    },
+    "responseExample": {
+      "id": "msg_proposal_001",
+      "roomId": "room_001",
+      "sequence": 2,
+      "sender": {
+        "id": "usr_owner_001",
+        "role": "OWNER",
+        "displayName": "네일 모먼트"
+      },
+      "clientMessageId": "proposal_001",
+      "type": "BOOKING_PROPOSAL",
+      "content": "예약 제안: 젤 네일 + 기존 젤 제거 + 아트 2개",
+      "createdAt": "2026-10-17T14:00:00+09:00",
+      "bookingProposal": {
+        "id": "proposal_001",
+        "sourceMessageId": "msg_customer_001",
+        "serviceId": "svc_gel",
+        "serviceDescription": "젤 네일 + 기존 젤 제거 + 아트 2개",
+        "startAt": "2026-10-20T14:00:00+09:00",
+        "endAt": "2026-10-20T15:30:00+09:00",
+        "durationMinutes": 90,
+        "price": 75000,
+        "status": "CONFIRMED",
+        "version": 2,
+        "reservationId": "rsv_001",
+        "waitlistId": null
+      }
+    },
+    "source": "Local user request, 2026-10-17; docs/chatting.md (not a Notion snapshot)"
+  }
+]

@@ -102,7 +102,12 @@ public record ReservationResponse(
               description = "durationMinutes",
               requiredMode = Schema.RequiredMode.REQUIRED,
               example = "60")
-          Integer durationMinutes) {}
+          Integer durationMinutes,
+      @Schema(description = "예약 시 확정한 시술·추가 옵션 설명", nullable = true) String serviceDescription) {
+    public Service(String id, String name, Integer durationMinutes) {
+      this(id, name, durationMinutes, null);
+    }
+  }
 
   @Schema(name = "ReservationResponsePrice")
   public record Price(

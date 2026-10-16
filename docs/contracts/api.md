@@ -1,8 +1,8 @@
-# BinTime API 계약 골격
+# BinTime API 계약
 
-출처: [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4) 및 [공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 2026-10-16 조회 기준의 구현 제안 계약이다.
+출처: [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4) 및 [공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 2026-10-16 조회 기준의 구현 제안 계약이다. C-06·C-07 예약 제안은 2026-10-17 사용자 요청으로 추가한 로컬 확장이며 Notion에서 가져온 항목이 아니다. 원본 [notion-api.json](../../src/test/resources/contracts/notion-api.json)은 유지하고 [chat-booking-proposals.json](../../src/test/resources/contracts/chat-booking-proposals.json)에 추가 요청·응답 예시를 보관한다.
 
-48개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01~09는 카카오 로그인·세션·CSRF 및 [프로필·위치·선호도](../user-profile.md)로 구현했다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~20은 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. notification N-01~06은 저장·읽음·SSE·FCM으로 구현했다. chatting C-01~05와 텍스트 WebSocket은 [채팅 연동 안내](../chatting.md)에 따라 구현했다.
+50개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01~09는 카카오 로그인·세션·CSRF 및 [프로필·위치·선호도](../user-profile.md)로 구현했다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~20은 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. notification N-01~06은 저장·읽음·SSE·FCM으로 구현했다. chatting C-01~07과 텍스트·예약 제안 WebSocket 이벤트는 [채팅 연동 안내](../chatting.md)에 따라 구현했다.
 
 Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`, `/api/v1/notifications/**`의 세션 인증·CSRF를 적용한다. store의 공개 조회 5개를 제외한 15개 API에는 세션 쿠키·CSRF 및 선택적 Bearer JWT 인증을 적용한다. [store 인증 계약](../store-auth.md)에 적용 범위와 설정을 정의한다. search는 매장 검색을 공개하고 대기·분석 API는 현재 CUSTOMER 또는 OWNER 인증과 쿠키 변경 요청 CSRF를 검증한다. 내부 검색은 별도 내부 토큰을 유지한다([search 인증](../search-auth.md)). `SearchUserAccessAdapter`가 공통 세션/JWT 인증 경계와 알림 구독 조회를 연결한다. chatting은 별도 필터 체인으로 카카오 세션 쿠키·변경 요청 CSRF를 검증하고 방의 고객·현재 매장 소유자만 허용한다. WebSocket은 세션·Origin·첫 프레임 CSRF를 검증한다. `api-docs` 프로필은 문서 열람용으로 Spring Security 필터와 DB 의존성을 제외하며, search 자체의 요청자 검증은 유지한다. 자세한 로그인 설정은 [카카오 로그인](../kakao-login.md)을 따른다.
 
@@ -13,7 +13,7 @@ Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`, `/api/v1/notifications
 - JSON 응답은 `BaseResponse<T>` 상속 기반의 `resultType/success.data/error/meta(timestamp,path)` 구조다. 기존 Notion의 최상위 data는 success.data로 이동한다. 목록의 items/page/counts 구조는 그 안에 유지한다. 204·OAuth redirect·SSE·WebSocket은 봉투 예외다. 자세한 계약은 [response.md](response.md)를 따른다.
 - ID는 String, 오프셋 포함 시각은 OffsetDateTime, 날짜는 LocalDate, 금액은 정수 원이다. Web Push expirationTime은 Unix epoch 밀리초다.
 - 사용자 API는 필수값·범위와 U-08의 필수 nullable `maxPrice` 키 존재 여부를 검증한다. 나머지 골격의 PATCH 생략/명시적 null 구분 및 필드 간 검증은 실제 구현 시 보완한다.
-- Swagger 첫 화면의 `all` 그룹은 전체 HTTP API 48개를 표시한다. `public`은 46개, `internal`은 2개를 표시한다. 내부 계약은 외부 고객의 호출용이 아니며 search 내부 인증 설정은 [search.md](../search.md)를 따른다.
+- Swagger 첫 화면의 `all` 그룹은 전체 HTTP API 50개를 표시한다. `public`은 48개, `internal`은 2개를 표시한다. chatting의 HTTP API는 7개이며 WebSocket은 이 수에 포함하지 않는다. 내부 계약은 외부 고객의 호출용이 아니며 search 내부 인증 설정은 [search.md](../search.md)를 따른다.
 - Notion 예시에서 생략된 선택 필드(reason, openingHours 등)는 공통 규약을 기준으로 포함한다. ST-08은 OWNER 조회 시 customer/resourceId가 추가된다.
 
 ## 명세 간 차이
@@ -69,8 +69,18 @@ Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며
 | C-03 | chatting | GET `/api/v1/chatting/rooms/{roomId}/messages` | ChatMessageController.getMessages | — | ChatMessageListResponse |
 | C-04 | chatting | POST `/api/v1/chatting/rooms/{roomId}/messages` | ChatMessageController.sendMessage | SendChatMessageRequest | ChatMessageResponse |
 | C-05 | chatting | PUT `/api/v1/chatting/rooms/{roomId}/read` | ChatRoomController.updateReadPosition | UpdateChatReadRequest | ChatReadResponse |
+| C-06 | chatting | POST `/api/v1/chatting/rooms/{roomId}/booking-proposals` | ChatBookingProposalController.createBookingProposal | CreateBookingProposalRequest | ChatMessageResponse |
+| C-07 | chatting | POST `/api/v1/chatting/rooms/{roomId}/booking-proposals/{proposalId}/confirm` | ChatBookingProposalController.confirmBookingProposal | ConfirmBookingProposalRequest | ChatMessageResponse |
 
 실시간 프레임은 [realtime.md](realtime.md)를 참고한다.
+
+### 로컬 확장: 채팅 예약 제안
+
+C-06은 매장의 현재 사장님이 고객의 가장 최근 TEXT를 원본으로 실제 시술·추가 옵션 설명, 시작 시각, 소요 시간, 최종 금액을 저장한다. 등록 시술의 기본값과 별도로 저장하며 전송만으로 예약이나 시간 선점을 만들지 않는다. 성공은 카드 메시지 `201`이다. 신규 텍스트와 제안 생성은 사용자별 합산 초당 5건 제한을 적용하며 초과하면 `429 RATE_LIMITED`다.
+
+C-07은 해당 방 고객이 `expectedVersion`만 보내 저장된 제안으로 예약을 확정한다. 확정 시 기존 영업시간·자원·고객 예약·대기 조건을 검증하고 실제 예약과 제안 상태를 한 트랜잭션으로 저장한다. 성공은 갱신된 카드 메시지 `200`이다. 두 요청은 `bt_session`, `X-CSRF-Token`, `Idempotency-Key`가 필수이며 같은 요청은 최초 성공 응답·상태를 24시간 재생한다. 클라이언트가 보낸 사용자 ID·확정 금액·시술 시간으로 저장 내용을 덮어쓰지 않는다.
+
+`ChatMessageResponse.type`에 `BOOKING_PROPOSAL`과 nullable `bookingProposal`이 추가된다. 카드 상태는 `PENDING`, `CONFIRMED`, `SUPERSEDED`, `REVIEW_REQUIRED`이며 버전으로 병합한다. **CONFIRMED는 해당 제안으로 예약이 확정되었다는 기록이다.** 이후 예약 취소·완료 등 현재 예약 상태는 `reservationId`로 기존 예약 API에서 조회하며 카드의 상태를 현재 예약 상태로 해석하지 않는다. 새 고객 TEXT는 미확정 제안을 재검토 상태로, 새 제안은 이전 미확정 제안을 대체 상태로 만든다. 권한·버전·무효화·충돌 오류와 재접속 동기화는 [예약 제안 명세](../chatting.md#예약-제안--c-06c-07)를 따른다.
 
 ## 추가 store 등록 API
 

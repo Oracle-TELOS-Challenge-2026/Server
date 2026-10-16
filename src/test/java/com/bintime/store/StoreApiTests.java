@@ -36,6 +36,7 @@ class StoreApiTests {
   @Autowired JsonMapper json;
   @Autowired StoreApplicationService stores;
   @Autowired StoreReservationPort reservations;
+  @Autowired com.bintime.chatting.service.ChatService chatting;
   @Autowired com.bintime.store.contract.SearchStoreCatalog catalog;
   @Autowired com.bintime.search.service.WaitlistService waitlists;
   @Autowired com.bintime.search.service.SearchIndexService searchIndex;
@@ -304,6 +305,429 @@ class StoreApiTests {
         slot.at("/price/payable").asLong(),
         slot.path("version").asLong(),
         null);
+  }
+
+  private StoreReservationPort.ProposalCommand proposal(
+      String shop,
+      String service,
+      String user,
+      String proposalId,
+      String time,
+      int duration,
+      long price,
+      String waitlist) {
+    return new StoreReservationPort.ProposalCommand(
+        user,
+        "owner",
+        "proposal-" + proposalId,
+        proposalId,
+        shop,
+        service,
+        "젤 네일 + 연장 2개 + 제거",
+        OffsetDateTime.parse(time),
+        duration,
+        price,
+        waitlist);
+  }
+
+  @Test
+  void proposalValidationDoesNotPublishSupplyAndReservationKeepsQuotedSnapshot() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    var command =
+        proposal(shop, svc, "alice", "custom", "2026-10-16T12:00:00+09:00", 90, 75000, null);
+    reservations.validateProposal(command);
+    assertThat(db.queryForObject("select count(*) from store_slots", Integer.class)).isZero();
+    assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+        .isZero();
+    var confirmed = reservations.reserveProposal(command);
+    assertThat(confirmed.endAt()).isEqualTo(OffsetDateTime.parse("2026-10-16T13:30:00+09:00"));
+    assertThat(confirmed.originalPrice()).isEqualTo(75000);
+    assertThat(confirmed.payablePrice()).isEqualTo(75000);
+    assertThat(reservations.reserveProposal(command)).isEqualTo(confirmed);
+    assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+        .isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select base_price from store_services where service_id=?", Long.class, svc))
+        .isEqualTo(50001);
+    assertThat(
+            db.queryForObject(
+                "select duration_minutes from store_services where service_id=?",
+                Integer.class,
+                svc))
+        .isEqualTo(60);
+    var detail =
+        ok("GET", BASE + "/reservations/" + confirmed.reservationId(), "alice", null, null, 200);
+    assertThat(detail.at("/service/serviceDescription").asText())
+        .isEqualTo(command.serviceDescription());
+    assertThat(detail.at("/service/durationMinutes").asInt()).isEqualTo(90);
+    var owner =
+        ok(
+            "GET",
+            ownerPath(shop) + "/reservations/" + confirmed.reservationId(),
+            "owner",
+            null,
+            null,
+            200);
+    assertThat(owner.at("/service/serviceDescription").asText())
+        .isEqualTo(command.serviceDescription());
+    var timetable =
+        ok("GET", ownerPath(shop) + "/timetable?date=2026-10-16", "owner", null, null, 200);
+    assertThat(timetable.toString()).contains(command.serviceDescription());
+    var list = ok("GET", BASE + "/reservations/me?scope=UPCOMING", "alice", null, null, 200);
+    assertThat(list.toString()).contains(command.serviceDescription());
+    var canceled = cancel(detail);
+    assertThat(canceled.at("/reservation/status").asText()).isEqualTo("CANCELED");
+    assertThat(canceled.at("/reservation/service/serviceDescription").asText())
+        .isEqualTo(command.serviceDescription());
+    assertThat(
+            db.queryForObject(
+                "select status_code from store_slots where slot_id=?",
+                String.class,
+                confirmed.slotId()))
+        .isEqualTo("CLOSED");
+    assertThat(
+            db.queryForObject(
+                "select original_price from store_slots where source_reservation_id=?",
+                Long.class,
+                confirmed.reservationId()))
+        .isEqualTo(75000);
+  }
+
+  @Test
+  void proposalReusesMatchingSupplyAndRejectsOtherOverlappingSupply() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    JsonNode existing = slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    var exact =
+        proposal(shop, svc, "alice", "matching", "2026-10-16T12:00:00+09:00", 60, 65000, null);
+    var confirmed = reservations.reserveProposal(exact);
+    assertThat(confirmed.slotId()).isEqualTo(existing.path("id").asText());
+    assertThat(confirmed.payablePrice()).isEqualTo(65000);
+    assertThat(db.queryForObject("select count(*) from store_slots", Integer.class)).isEqualTo(1);
+    slot(shop, svc, "2026-10-16T14:00:00+09:00");
+    assertThatThrownBy(
+            () ->
+                reservations.reserveProposal(
+                    proposal(
+                        shop, svc, "bob", "partial", "2026-10-16T14:00:00+09:00", 90, 65000, null)))
+        .hasMessage("SLOT_TIME_CONFLICT");
+    assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void proposalReservationRollsBackWithCallerIncludingSlotWaitlistAndEvent() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    seedIntent("proposal-wait", "alice", shop, svc);
+    var command =
+        proposal(
+            shop,
+            svc,
+            "alice",
+            "rollback",
+            "2026-10-16T12:00:00+09:00",
+            90,
+            55000,
+            "proposal-wait");
+    assertThatThrownBy(
+            () ->
+                transactions.executeWithoutResult(
+                    status -> {
+                      reservations.reserveProposal(command);
+                      throw new IllegalStateException("caller rollback");
+                    }))
+        .hasMessage("caller rollback");
+    assertThat(db.queryForObject("select count(*) from store_slots", Integer.class)).isZero();
+    assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+        .isZero();
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_events where event_type='BOOKED'", Integer.class))
+        .isZero();
+    assertThat(
+            db.queryForObject(
+                "select status from search_intent where id='proposal-wait'", String.class))
+        .isEqualTo("ACTIVE");
+    var confirmed = reservations.reserveProposal(command);
+    assertThat(
+            db.queryForObject(
+                "select reservation_id from search_intent where id='proposal-wait'", String.class))
+        .isEqualTo(confirmed.reservationId());
+    assertThatThrownBy(
+            () ->
+                reservations.reserveProposal(
+                    proposal(
+                        shop,
+                        svc,
+                        "alice",
+                        "rollback",
+                        "2026-10-16T12:00:00+09:00",
+                        90,
+                        55001,
+                        "proposal-wait")))
+        .hasMessage("IDEMPOTENCY_KEY_REUSED");
+  }
+
+  @Test
+  void proposalConfirmationRechecksCurrentOwnerHoursServiceAndCustomerSchedule() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    var outside =
+        proposal(shop, svc, "alice", "conditions", "2026-10-16T21:00:00+09:00", 90, 75000, null);
+    assertThatThrownBy(() -> reservations.validateProposal(outside))
+        .hasMessage("OUTSIDE_OPENING_HOURS");
+    var valid =
+        proposal(shop, svc, "alice", "conditions", "2026-10-16T12:00:00+09:00", 90, 75000, null);
+    reservations.validateProposal(valid);
+    db.update("update store_shops set owner_user_id='otherOwner' where store_id=?", shop);
+    assertThatThrownBy(() -> reservations.reserveProposal(valid)).hasMessage("STORE_FORBIDDEN");
+    db.update("update store_shops set owner_user_id='owner' where store_id=?", shop);
+    db.update("update store_services set active_yn='N' where service_id=?", svc);
+    assertThatThrownBy(() -> reservations.reserveProposal(valid)).hasMessage("SERVICE_INACTIVE");
+    db.update("update store_services set active_yn='Y' where service_id=?", svc);
+    var closed =
+        List.of("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN").stream()
+            .map(day -> Map.of("dayOfWeek", day, "closed", true))
+            .toList();
+    db.update(
+        "update store_shops set opening_hours_json=? where store_id=?",
+        json.writeValueAsString(closed),
+        shop);
+    assertThatThrownBy(() -> reservations.reserveProposal(valid))
+        .hasMessage("OUTSIDE_OPENING_HOURS");
+    db.update(
+        "update store_shops set opening_hours_json=? where store_id=?",
+        json.writeValueAsString(shopRequest().get("openingHours")),
+        shop);
+    String other = shop("owner"), otherSvc = service(other, 60);
+    reserve(slot(other, otherSvc, "2026-10-16T13:00:00+09:00"), "alice");
+    assertThatThrownBy(() -> reservations.reserveProposal(valid))
+        .hasMessage("RESERVATION_TIME_CONFLICT");
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_slots where store_id=?", Integer.class, shop))
+        .isZero();
+  }
+
+  @Test
+  void proposalRejectsInvalidQuotesAndWaitlistMismatchWithoutLeavingSupply() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    assertThatThrownBy(() -> reservations.validateProposal(null)).hasMessage("INVALID_INPUT");
+    assertThatThrownBy(
+            () ->
+                reservations.validateProposal(
+                    proposal(
+                        shop,
+                        svc,
+                        "missing",
+                        "missing",
+                        "2026-10-16T12:00:00+09:00",
+                        60,
+                        75000,
+                        null)))
+        .hasMessage("UNAUTHENTICATED");
+    for (int duration : List.of(0, 14, 16, 481))
+      assertThatThrownBy(
+              () ->
+                  reservations.validateProposal(
+                      proposal(
+                          shop,
+                          svc,
+                          "alice",
+                          "bad-duration",
+                          "2026-10-16T12:00:00+09:00",
+                          duration,
+                          75000,
+                          null)))
+          .hasMessage("INVALID_DURATION");
+    for (long price : List.of(-1L, 10000001L))
+      assertThatThrownBy(
+              () ->
+                  reservations.validateProposal(
+                      proposal(
+                          shop,
+                          svc,
+                          "alice",
+                          "bad-price",
+                          "2026-10-16T12:00:00+09:00",
+                          60,
+                          price,
+                          null)))
+          .hasMessage("INVALID_PRICE");
+    seedIntent("bob-wait", "bob", shop, svc);
+    assertThatThrownBy(
+            () ->
+                reservations.reserveProposal(
+                    proposal(
+                        shop,
+                        svc,
+                        "alice",
+                        "wrong-wait",
+                        "2026-10-16T12:00:00+09:00",
+                        60,
+                        75000,
+                        "bob-wait")))
+        .hasMessage("WAITLIST_FORBIDDEN");
+    assertThat(db.queryForObject("select count(*) from store_slots", Integer.class)).isZero();
+    assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+        .isZero();
+  }
+
+  @Test
+  void concurrentProposalConfirmationsBookOnlyOneCustomerWithoutExistingSupply() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    var start = new CountDownLatch(1);
+    try (var pool = Executors.newFixedThreadPool(2)) {
+      var attempts = new ArrayList<Future<String>>();
+      for (String user : List.of("alice", "bob"))
+        attempts.add(
+            pool.submit(
+                () -> {
+                  start.await();
+                  try {
+                    return reservations
+                        .reserveProposal(
+                            proposal(
+                                shop,
+                                svc,
+                                user,
+                                "race-" + user,
+                                "2026-10-16T12:00:00+09:00",
+                                90,
+                                75000,
+                                null))
+                        .status();
+                  } catch (com.bintime.common.web.ApiBusinessException failure) {
+                    return failure.code;
+                  }
+                }));
+      start.countDown();
+      assertThat(
+              List.of(
+                  attempts.get(0).get(15, TimeUnit.SECONDS),
+                  attempts.get(1).get(15, TimeUnit.SECONDS)))
+          .containsExactlyInAnyOrder("CONFIRMED", "RESERVATION_TIME_CONFLICT");
+    }
+    assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+        .isEqualTo(1);
+    assertThat(db.queryForObject("select count(*) from store_slots", Integer.class)).isEqualTo(1);
+  }
+
+  @Test
+  void realChatConfirmationSharesJpaAndJdbcTransactionAndRollsBackAfterReservationFlush()
+      throws Exception {
+    Assumptions.assumeTrue(System.getenv("STORE_TEST_DB_URL") == null);
+    var fixture =
+        new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
+            new org.springframework.core.io.ClassPathResource("chatting-store-schema.sql"));
+    try {
+      fixture.execute(Objects.requireNonNull(db.getDataSource()));
+      String shop = shop("owner"), svc = service(shop, 60);
+      String room =
+          chatting
+              .create(
+                  "alice", "chat-create", new com.bintime.chatting.dto.CreateChatRoomRequest(shop))
+              .data()
+              .id();
+      var source =
+          chatting.send(
+              "alice",
+              room,
+              "chat-source",
+              new com.bintime.chatting.dto.SendChatMessageRequest(
+                  "chat-source-client", "10월 20일 네일 예약하고 싶어요"));
+      String description = "젤 네일 + 기존 젤 제거 + 연장 2개";
+      var card =
+          chatting.propose(
+              "owner",
+              room,
+              "chat-propose",
+              new com.bintime.chatting.dto.CreateBookingProposalRequest(
+                  source.data().id(),
+                  svc,
+                  description,
+                  OffsetDateTime.parse("2026-10-20T12:00:00+09:00"),
+                  90,
+                  75000L,
+                  null));
+      String proposalId = card.data().bookingProposal().id();
+      var request = new com.bintime.chatting.dto.ConfirmBookingProposalRequest(1L);
+      assertThatThrownBy(
+              () ->
+                  transactions.executeWithoutResult(
+                      status -> {
+                        var confirmed =
+                            chatting.confirm("alice", room, proposalId, "chat-confirm", request);
+                        assertThat(confirmed.data().bookingProposal().reservationId()).isNotBlank();
+                        // JDBC는 store의 JPA flush와 제안의 FK 갱신을 같은 연결에서 확인한다.
+                        assertThat(
+                                db.queryForObject(
+                                    "select count(*) from store_reservations", Integer.class))
+                            .isEqualTo(1);
+                        assertThat(
+                                db.queryForObject(
+                                    "select status_code from chatting_booking_proposals where"
+                                        + " proposal_id=?",
+                                    String.class,
+                                    proposalId))
+                            .isEqualTo("CONFIRMED");
+                        throw new IllegalStateException("rollback after real chat confirmation");
+                      }))
+          .hasMessage("rollback after real chat confirmation");
+      assertThat(
+              db.queryForObject(
+                  "select status_code from chatting_booking_proposals where proposal_id=?",
+                  String.class,
+                  proposalId))
+          .isEqualTo("PENDING");
+      assertThat(
+              db.queryForObject(
+                  "select version_no from chatting_booking_proposals where proposal_id=?",
+                  Long.class,
+                  proposalId))
+          .isEqualTo(1);
+      assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+          .isZero();
+      assertThat(db.queryForObject("select count(*) from store_slots", Integer.class)).isZero();
+      assertThat(
+              db.queryForObject(
+                  "select count(*) from store_events where event_type='BOOKED'", Integer.class))
+          .isZero();
+      assertThat(
+              db.queryForObject(
+                  "select count(*) from store_idempotency where operation='RESERVE_PROPOSAL'",
+                  Integer.class))
+          .isZero();
+      assertThat(
+              db.queryForObject(
+                  "select count(*) from chatting_idempotency where key_value='chat-confirm'",
+                  Integer.class))
+          .isZero();
+
+      var confirmed = chatting.confirm("alice", room, proposalId, "chat-confirm", request);
+      var proposal = confirmed.data().bookingProposal();
+      assertThat(proposal.status()).isEqualTo("CONFIRMED");
+      assertThat(proposal.version()).isEqualTo(2);
+      assertThat(proposal.reservationId()).isNotBlank();
+      assertThat(chatting.confirm("alice", room, proposalId, "chat-confirm", request))
+          .isEqualTo(confirmed);
+      var detail =
+          ok("GET", BASE + "/reservations/" + proposal.reservationId(), "alice", null, null, 200);
+      assertThat(detail.at("/service/serviceDescription").asText()).isEqualTo(description);
+      assertThat(detail.at("/service/durationMinutes").asInt()).isEqualTo(90);
+      assertThat(detail.at("/price/payable").asLong()).isEqualTo(75000);
+      assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
+          .isEqualTo(1);
+      assertThat(db.queryForObject("select count(*) from store_slots", Integer.class)).isEqualTo(1);
+    } finally {
+      // 이 테스트만 만든 chat FK가 다른 store 테스트의 사용자/매장 정리를 막지 않게 한다.
+      for (String table :
+          List.of(
+              "chatting_booking_proposals",
+              "chatting_read_positions",
+              "chatting_idempotency",
+              "chatting_messages",
+              "chatting_rooms")) db.execute("drop table if exists " + table);
+    }
   }
 
   @Test

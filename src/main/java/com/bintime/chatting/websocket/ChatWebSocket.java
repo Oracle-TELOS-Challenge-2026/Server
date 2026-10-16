@@ -208,10 +208,56 @@ public class ChatWebSocket extends TextWebSocketHandler
     }
     c.subscriptions.put(room, after);
     c.readSequences.put(room, new HashMap<>());
+    c.proposalVersions.put(room, new LinkedHashMap<>());
     send(c, "room.subscribed", request, new ChatWebSocketFrame.Subscribed(room, latest));
     // Publish the subscription before replay; draining from its DB cursor joins replay to live
     // data.
     drain(c, room);
+    // Status revisions do not advance message_sequence. Rehydrate cards on EVERY reconnect.
+    proposalSnapshot(c, room);
+  }
+
+  private void proposalSnapshot(Connection c, String room) {
+    if (!c.subscriptions.containsKey(room) || !valid(c)) return;
+    var snapshot = chats.proposalSnapshots(c.principal.userId(), room);
+    if (snapshot.size() > 1000) {
+      proposalResync(c, room);
+      return;
+    }
+    for (var message : snapshot) proposalUpdate(c, message);
+  }
+
+  private void proposalResync(Connection c, String room) {
+    try {
+      long latest = chats.latest(c.principal.userId(), room);
+      // Keep live updates while the client refreshes cached cards over paginated REST history.
+      send(
+          c,
+          "room.resync_required",
+          null,
+          new ChatWebSocketFrame.ResyncRequired(room, latest, "PROPOSAL_STATE_LIMIT", true));
+    } catch (ApiBusinessException failure) {
+      unsubscribe(c, room);
+    } catch (RuntimeException unavailable) {
+      close(c, 1011, "SERVICE_UNAVAILABLE");
+    }
+  }
+
+  private void proposalUpdate(Connection c, ChatMessageResponse message) {
+    String room = message.roomId();
+    if (!valid(c) || !c.authenticated || !c.subscriptions.containsKey(room)) return;
+    try {
+      chats.latest(c.principal.userId(), room);
+      var versions = c.proposalVersions.get(room);
+      var proposal = message.bookingProposal();
+      if (proposal.version() <= versions.getOrDefault(proposal.id(), 0L)) return;
+      send(c, "message.updated", null, new ChatWebSocketFrame.Message(message));
+      rememberProposal(versions, proposal.id(), proposal.version());
+    } catch (ApiBusinessException failure) {
+      unsubscribe(c, room);
+    } catch (RuntimeException unavailable) {
+      close(c, 1011, "SERVICE_UNAVAILABLE");
+    }
   }
 
   private void drain(Connection c, String room) {
@@ -234,6 +280,11 @@ public class ChatWebSocket extends TextWebSocketHandler
           send(c, "message.created", null, new ChatWebSocketFrame.Message(message));
           if (!connections.containsKey(c.socket.getId())) return;
           c.subscriptions.put(room, message.sequence());
+          if (message.bookingProposal() != null) {
+            var proposal = message.bookingProposal();
+            var versions = c.proposalVersions.get(room);
+            rememberProposal(versions, proposal.id(), proposal.version());
+          }
         }
       } catch (ApiBusinessException failure) {
         unsubscribe(c, room);
@@ -255,6 +306,26 @@ public class ChatWebSocket extends TextWebSocketHandler
       String room = event.message().roomId();
       if (!c.subscriptions.containsKey(room)) continue;
       c.dirtyRooms.add(room);
+      schedule(c);
+    }
+  }
+
+  @TransactionalEventListener
+  public void messageUpdated(ChatService.MessageUpdated event) {
+    for (var c : connections.values()) {
+      if (!c.subscriptions.containsKey(event.message().roomId())) continue;
+      synchronized (c.pendingProposals) {
+        if (c.pendingProposals.size() >= 1000
+            && !c.pendingProposals.containsKey(event.message().id())) {
+          c.proposalResyncRooms.add(event.message().roomId());
+        } else {
+          c.pendingProposals.merge(
+              event.message().id(),
+              event.message(),
+              (old, next) ->
+                  old.bookingProposal().version() >= next.bookingProposal().version() ? old : next);
+        }
+      }
       schedule(c);
     }
   }
@@ -344,6 +415,14 @@ public class ChatWebSocket extends TextWebSocketHandler
                     if (c.pendingReads.remove(entry.getKey(), entry.getValue()))
                       readUpdate(c, entry.getValue());
                   }
+                  for (var entry : c.pendingProposals.entrySet()) {
+                    if (c.pendingProposals.remove(entry.getKey(), entry.getValue()))
+                      proposalUpdate(c, entry.getValue());
+                  }
+                  for (String room : c.proposalResyncRooms.toArray(String[]::new)) {
+                    if (c.proposalResyncRooms.remove(room) && c.subscriptions.containsKey(room))
+                      proposalResync(c, room);
+                  }
                 }
               }
             } finally {
@@ -359,6 +438,16 @@ public class ChatWebSocket extends TextWebSocketHandler
   private static void unsubscribe(Connection c, String room) {
     c.subscriptions.remove(room);
     c.readSequences.remove(room);
+    c.proposalVersions.remove(room);
+    c.proposalResyncRooms.remove(room);
+    c.pendingProposals.values().removeIf(message -> room.equals(message.roomId()));
+  }
+
+  private static void rememberProposal(Map<String, Long> versions, String id, long version) {
+    long latest = Math.max(version, versions.getOrDefault(id, 0L));
+    versions.remove(id);
+    if (versions.size() >= 1000) versions.remove(versions.keySet().iterator().next());
+    versions.put(id, latest);
   }
 
   private boolean valid(Connection c) {
@@ -443,6 +532,9 @@ public class ChatWebSocket extends TextWebSocketHandler
     final AtomicBoolean workPending = new AtomicBoolean();
     final AtomicBoolean workerRunning = new AtomicBoolean();
     final Map<String, Map<String, Long>> readSequences = new HashMap<>();
+    final Map<String, Map<String, Long>> proposalVersions = new HashMap<>();
+    final Map<String, ChatMessageResponse> pendingProposals = new ConcurrentHashMap<>();
+    final Set<String> proposalResyncRooms = ConcurrentHashMap.newKeySet();
     boolean authenticated;
     volatile long lastInbound;
     long lastPing;
