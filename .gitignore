@@ -3,7 +3,7 @@ HELP.md
 .env
 .env.*
 !.env.example
-application-local.properties
+!.env.prod.example
 application-local.yml
 application-local.yaml
 .gradle

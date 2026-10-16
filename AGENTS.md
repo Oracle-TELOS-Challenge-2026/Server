@@ -16,7 +16,7 @@
 
 MVP는 결제 없이 예약 확정까지 구현한다. 외부 예약 시스템 연동, 백그라운드 위치 추적, 행동 기반 선호 학습, 자동 할인율 결정은 기본 구현 범위에 포함하지 않는다.
 
-현재 저장소는 문서 단계이며 애플리케이션 코드나 빌드 설정은 없다. Spring 기반으로 `user`, `notification`, `search`, `store`, `chatting` 도메인을 나눈다. 전통적인 MVC 구조(Controller → Service → Repository)를 기본으로 하고, 외부 연동이 필요한 경계에는 Port 인터페이스와 이를 구현하는 Adapter를 적용한다. Redis, Nginx, Docker, Autonomous DB, Elasticsearch는 도입 예정이며 버전과 세부 설정은 미정이다. 도메인 책임과 파일 구조는 `README.md`를 참고한다. 다른 프로젝트의 아키텍처를 그대로 적용하지 않는다.
+현재 저장소에는 Spring Boot 4.1.1·Java 21·Gradle 설정과 도메인별 Controller·DTO 및 Swagger 계약 골격이 있다. `user`, `notification`, `search`, `store`, `chatting` 도메인을 나누고, 전통적인 MVC 구조(Controller → Service → Repository)를 기본으로 한다. 외부 연동이 필요한 경계에는 Port 인터페이스와 이를 구현하는 Adapter를 적용한다. 실제 비즈니스 로직은 아직 구현하지 않았다. 도메인 책임과 실행 방법은 `README.md`, API 이름과 명세 간 정책 차이는 `docs/contracts/api.md`를 참고한다. 다른 프로젝트의 아키텍처를 그대로 적용하지 않는다.
 
 ## Core Principles
 
@@ -74,7 +74,7 @@ MVP는 결제 없이 예약 확정까지 구현한다. 외부 예약 시스템 �
 
 버그 수정은 실용적인 경우 실패를 재현하는 테스트부터 작성한다. 구현을 그대로 반복하는 테스트보다 동작과 실패 경계를 검증한다.
 
-현재 저장소에는 검증 명령이 정의되어 있지 않다. `npm run format` 등 다른 프로젝트의 명령을 가정하지 않는다. 도구가 도입되면 저장소에 정의된 명령과 실행 위치를 따른다. 검증하지 못한 항목은 이유와 함께 알린다.
+저장소 루트에서 `./gradlew format`, `./gradlew test`, `./gradlew build`를 사용한다. 포맷 대상과 실행 조건은 `README.md`를 확인한다. `npm run format` 등 다른 프로젝트의 명령을 가정하지 않는다. 검증하지 못한 항목은 이유와 함께 알린다.
 
 ## Domain Rules
 

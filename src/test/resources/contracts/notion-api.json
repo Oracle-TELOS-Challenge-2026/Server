@@ -1,0 +1,2176 @@
+[
+  {
+    "id": "U-01",
+    "domain": "user",
+    "controller": "AuthController",
+    "methodName": "startKakaoLogin",
+    "method": "GET",
+    "path": "/api/v1/auth/oauth/kakao/start",
+    "request": null,
+    "response": null,
+    "status": 302,
+    "query": [
+      {
+        "name": "returnTo",
+        "required": false,
+        "type": "String",
+        "default": null
+      }
+    ],
+    "auth": "- 공개 API (OAuth 콜백은 state 검증)",
+    "requestExample": null,
+    "responseExample": null,
+    "source": "https://app.notion.com/p/3fbdaacb8cd481bf8e32fb1a1d26405a"
+  },
+  {
+    "id": "U-02",
+    "domain": "user",
+    "controller": "AuthController",
+    "methodName": "handleKakaoCallback",
+    "method": "GET",
+    "path": "/api/v1/auth/oauth/kakao/callback",
+    "request": null,
+    "response": null,
+    "status": 303,
+    "query": [
+      {
+        "name": "code",
+        "required": true,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "state",
+        "required": true,
+        "type": "String",
+        "default": null
+      }
+    ],
+    "auth": "- 공개 API (OAuth 콜백은 state 검증)",
+    "requestExample": null,
+    "responseExample": null,
+    "source": "https://app.notion.com/p/3fbdaacb8cd48139a62bc467e95200eb"
+  },
+  {
+    "id": "U-03",
+    "domain": "user",
+    "controller": "AuthController",
+    "methodName": "logout",
+    "method": "POST",
+    "path": "/api/v1/auth/logout",
+    "request": null,
+    "response": null,
+    "status": 204,
+    "query": [],
+    "auth": "- 로그인 세션 — 본인 데이터\n- X-CSRF-Token 필수",
+    "requestExample": null,
+    "responseExample": null,
+    "source": "https://app.notion.com/p/3fbdaacb8cd481ebbafccffba89f42cf"
+  },
+  {
+    "id": "U-09",
+    "domain": "user",
+    "controller": "AuthController",
+    "methodName": "getCsrfToken",
+    "method": "GET",
+    "path": "/api/v1/auth/csrf",
+    "request": null,
+    "response": "CsrfTokenResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 로그인 세션 — 본인 데이터",
+    "requestExample": null,
+    "responseExample": {
+      "csrfToken": "csrf-example",
+      "expiresAt": "2026-10-23T14:20:00+09:00"
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd48152b85ac51b50ad6c18"
+  },
+  {
+    "id": "U-04",
+    "domain": "user",
+    "controller": "UserController",
+    "methodName": "getMyProfile",
+    "method": "GET",
+    "path": "/api/v1/users/me",
+    "request": null,
+    "response": "UserProfileResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 로그인 세션 — 본인 데이터",
+    "requestExample": null,
+    "responseExample": {
+      "id": "usr_001",
+      "displayName": "빈틈고객",
+      "roles": [
+        "CUSTOMER"
+      ],
+      "ownedStoreIds": [],
+      "location": {
+        "latitude": 37.5445,
+        "longitude": 127.0557,
+        "accuracyMeters": 30,
+        "source": "DEVICE",
+        "observedAt": "2026-10-16T14:00:00+09:00",
+        "savedAt": "2026-10-16T14:00:02+09:00"
+      },
+      "preferences": {
+        "categories": [
+          "NAIL"
+        ],
+        "keywords": [
+          "심플",
+          "원컬러"
+        ],
+        "maxPrice": 60000
+      },
+      "version": 1
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481da8f4dd06507d4f48e"
+  },
+  {
+    "id": "U-05",
+    "domain": "user",
+    "controller": "UserController",
+    "methodName": "updateMyProfile",
+    "method": "PATCH",
+    "path": "/api/v1/users/me",
+    "request": "UpdateProfileRequest",
+    "response": "UserProfileResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 로그인 세션 — 본인 데이터\n- X-CSRF-Token 필수",
+    "requestExample": {
+      "displayName": "빈틈고객",
+      "expectedVersion": 1
+    },
+    "responseExample": {
+      "id": "usr_001",
+      "displayName": "빈틈고객",
+      "roles": [
+        "CUSTOMER"
+      ],
+      "ownedStoreIds": [],
+      "location": {
+        "latitude": 37.5445,
+        "longitude": 127.0557,
+        "accuracyMeters": 30,
+        "source": "DEVICE",
+        "observedAt": "2026-10-16T14:00:00+09:00",
+        "savedAt": "2026-10-16T14:00:02+09:00"
+      },
+      "preferences": {
+        "categories": [
+          "NAIL"
+        ],
+        "keywords": [
+          "심플",
+          "원컬러"
+        ],
+        "maxPrice": 60000
+      },
+      "version": 2
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481a7b8f6e7e95f7578bc"
+  },
+  {
+    "id": "U-06",
+    "domain": "user",
+    "controller": "UserController",
+    "methodName": "saveMyLocation",
+    "method": "PUT",
+    "path": "/api/v1/users/me/location",
+    "request": "SaveLocationRequest",
+    "response": "UserLocationResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 로그인 세션 — 본인 데이터\n- X-CSRF-Token 필수",
+    "requestExample": {
+      "latitude": 37.5445,
+      "longitude": 127.0557,
+      "accuracyMeters": 30,
+      "source": "DEVICE",
+      "observedAt": "2026-10-16T14:00:00+09:00"
+    },
+    "responseExample": {
+      "latitude": 37.5445,
+      "longitude": 127.0557,
+      "accuracyMeters": 30,
+      "source": "DEVICE",
+      "observedAt": "2026-10-16T14:00:00+09:00",
+      "savedAt": "2026-10-16T14:20:00+09:00"
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481518e1ac2ed5c1a795b"
+  },
+  {
+    "id": "U-07",
+    "domain": "user",
+    "controller": "UserController",
+    "methodName": "deleteMyLocation",
+    "method": "DELETE",
+    "path": "/api/v1/users/me/location",
+    "request": null,
+    "response": null,
+    "status": 204,
+    "query": [],
+    "auth": "- 로그인 세션 — 본인 데이터\n- X-CSRF-Token 필수",
+    "requestExample": null,
+    "responseExample": null,
+    "source": "https://app.notion.com/p/3fbdaacb8cd48122aa2cf4ab0b45c569"
+  },
+  {
+    "id": "U-08",
+    "domain": "user",
+    "controller": "UserController",
+    "methodName": "saveMyPreferences",
+    "method": "PUT",
+    "path": "/api/v1/users/me/preferences",
+    "request": "SavePreferencesRequest",
+    "response": "UserPreferencesResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 로그인 세션 — 본인 데이터\n- X-CSRF-Token 필수",
+    "requestExample": {
+      "categories": [
+        "NAIL"
+      ],
+      "keywords": [
+        "심플",
+        "원컬러"
+      ],
+      "maxPrice": 60000,
+      "expectedVersion": 1
+    },
+    "responseExample": {
+      "categories": [
+        "NAIL"
+      ],
+      "keywords": [
+        "심플",
+        "원컬러"
+      ],
+      "maxPrice": 60000,
+      "version": 2
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd4811b914ee86f66a91271"
+  },
+  {
+    "id": "ST-01",
+    "domain": "store",
+    "controller": "StoreController",
+    "methodName": "getCategories",
+    "method": "GET",
+    "path": "/api/v1/stores/categories",
+    "request": null,
+    "response": "CategoryListResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 공개 API (OAuth 콜백은 state 검증)",
+    "requestExample": null,
+    "responseExample": {
+      "items": [
+        {
+          "code": "NAIL",
+          "label": "네일"
+        },
+        {
+          "code": "HAIR",
+          "label": "헤어"
+        },
+        {
+          "code": "EYELASH",
+          "label": "속눈썹"
+        },
+        {
+          "code": "SKIN",
+          "label": "피부관리"
+        }
+      ]
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481d581b5ce3d62ce1c3e"
+  },
+  {
+    "id": "ST-02",
+    "domain": "store",
+    "controller": "StoreController",
+    "methodName": "getStore",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}",
+    "request": null,
+    "response": "StoreDetailResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 공개 API (OAuth 콜백은 state 검증)",
+    "requestExample": null,
+    "responseExample": {
+      "id": "shop_moment",
+      "name": "네일 모먼트",
+      "category": "NAIL",
+      "description": "취향을 함께 고민하는 네일 공간",
+      "address": "서울 성동구 연무장길 18, 2층",
+      "location": {
+        "latitude": 37.5445,
+        "longitude": 127.0557
+      },
+      "imageUrl": "https://example.com/moment.jpg",
+      "rating": {
+        "average": 4.9,
+        "count": 12
+      },
+      "timezone": "Asia/Seoul",
+      "openingHours": [
+        {
+          "dayOfWeek": "MON",
+          "opensAt": "09:00",
+          "closesAt": "20:00",
+          "closed": false
+        },
+        {
+          "dayOfWeek": "TUE",
+          "opensAt": "09:00",
+          "closesAt": "20:00",
+          "closed": false
+        },
+        {
+          "dayOfWeek": "WED",
+          "opensAt": "09:00",
+          "closesAt": "20:00",
+          "closed": false
+        },
+        {
+          "dayOfWeek": "THU",
+          "opensAt": "09:00",
+          "closesAt": "20:00",
+          "closed": false
+        },
+        {
+          "dayOfWeek": "FRI",
+          "opensAt": "09:00",
+          "closesAt": "20:00",
+          "closed": false
+        },
+        {
+          "dayOfWeek": "SAT",
+          "opensAt": "09:00",
+          "closesAt": "20:00",
+          "closed": false
+        },
+        {
+          "dayOfWeek": "SUN",
+          "opensAt": "09:00",
+          "closesAt": "20:00",
+          "closed": false
+        }
+      ],
+      "version": 1
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd4817ea5c4e613c28f0b7a"
+  },
+  {
+    "id": "ST-03",
+    "domain": "store",
+    "controller": "StoreController",
+    "methodName": "getServices",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/services",
+    "request": null,
+    "response": "StoreServiceListResponse",
+    "status": 200,
+    "query": [
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "Integer",
+        "default": "20"
+      }
+    ],
+    "auth": "- 공개 API (OAuth 콜백은 state 검증)",
+    "requestExample": null,
+    "responseExample": {
+      "items": [
+        {
+          "id": "svc_nail_01",
+          "storeId": "shop_moment",
+          "category": "NAIL",
+          "name": "원컬러 젤 네일",
+          "durationMinutes": 60,
+          "basePrice": 50000,
+          "currency": "KRW",
+          "active": true,
+          "version": 1
+        }
+      ],
+      "page": {
+        "nextCursor": null,
+        "hasNext": false
+      }
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd48116b811ca85ed7225b1"
+  },
+  {
+    "id": "ST-04",
+    "domain": "store",
+    "controller": "StoreController",
+    "methodName": "getAvailableSlots",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/slots",
+    "request": null,
+    "response": "ReservationSlotListResponse",
+    "status": 200,
+    "query": [
+      {
+        "name": "from",
+        "required": true,
+        "type": "LocalDate",
+        "default": null
+      },
+      {
+        "name": "to",
+        "required": true,
+        "type": "LocalDate",
+        "default": null
+      },
+      {
+        "name": "serviceId",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "Integer",
+        "default": "20"
+      }
+    ],
+    "auth": "- 공개 API (OAuth 콜백은 state 검증)",
+    "requestExample": null,
+    "responseExample": {
+      "items": [
+        {
+          "id": "slot_1700",
+          "storeId": "shop_moment",
+          "serviceId": "svc_nail_01",
+          "resourceId": "staff_01",
+          "startAt": "2026-10-16T17:00:00+09:00",
+          "endAt": "2026-10-16T18:00:00+09:00",
+          "status": "AVAILABLE",
+          "bookable": true,
+          "unavailableReason": null,
+          "source": "VACANCY",
+          "vacancyId": "vac_001",
+          "publicationVersion": 3,
+          "price": {
+            "original": 50000,
+            "payable": 35000,
+            "discountPercent": 30,
+            "currency": "KRW"
+          },
+          "version": 3
+        }
+      ],
+      "page": {
+        "nextCursor": null,
+        "hasNext": false
+      }
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd48115b8d0d7fbaa43a726"
+  },
+  {
+    "id": "ST-05",
+    "domain": "store",
+    "controller": "StoreController",
+    "methodName": "getSlot",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/slots/{slotId}",
+    "request": null,
+    "response": "ReservationSlotResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 공개 API (OAuth 콜백은 state 검증)",
+    "requestExample": null,
+    "responseExample": {
+      "id": "slot_1700",
+      "storeId": "shop_moment",
+      "serviceId": "svc_nail_01",
+      "resourceId": "staff_01",
+      "startAt": "2026-10-16T17:00:00+09:00",
+      "endAt": "2026-10-16T18:00:00+09:00",
+      "status": "AVAILABLE",
+      "bookable": true,
+      "unavailableReason": null,
+      "source": "VACANCY",
+      "vacancyId": "vac_001",
+      "publicationVersion": 3,
+      "price": {
+        "original": 50000,
+        "payable": 35000,
+        "discountPercent": 30,
+        "currency": "KRW"
+      },
+      "version": 3
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd4817c8bb8ca01f9db0058"
+  },
+  {
+    "id": "ST-06",
+    "domain": "store",
+    "controller": "ReservationController",
+    "methodName": "createReservation",
+    "method": "POST",
+    "path": "/api/v1/reservations",
+    "request": "CreateReservationRequest",
+    "response": "ReservationResponse",
+    "status": 201,
+    "query": [],
+    "auth": "- CUSTOMER — 본인 데이터\n- X-CSRF-Token 필수\n- Idempotency-Key 필수 (24시간 재생)",
+    "requestExample": {
+      "slotId": "slot_1700",
+      "expectedPrice": 35000,
+      "expectedSlotVersion": 3,
+      "waitlistId": "wait_001"
+    },
+    "responseExample": {
+      "id": "rsv_001",
+      "store": {
+        "id": "shop_moment",
+        "name": "네일 모먼트",
+        "imageUrl": null
+      },
+      "service": {
+        "id": "svc_nail_01",
+        "name": "원컬러 젤 네일",
+        "durationMinutes": 60
+      },
+      "slotId": "slot_1700",
+      "status": "CONFIRMED",
+      "startAt": "2026-10-16T17:00:00+09:00",
+      "endAt": "2026-10-16T18:00:00+09:00",
+      "price": {
+        "original": 50000,
+        "payable": 35000,
+        "currency": "KRW"
+      },
+      "waitlistId": "wait_001",
+      "cancelReasonCode": null,
+      "canceledAt": null,
+      "createdAt": "2026-10-16T14:20:00+09:00",
+      "version": 1,
+      "allowedActions": [
+        "VIEW_STORE",
+        "OPEN_CHAT",
+        "CANCEL"
+      ]
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481278f63f09125038da1"
+  },
+  {
+    "id": "ST-07",
+    "domain": "store",
+    "controller": "ReservationController",
+    "methodName": "getMyReservations",
+    "method": "GET",
+    "path": "/api/v1/reservations/me",
+    "request": null,
+    "response": "ReservationListResponse",
+    "status": 200,
+    "query": [
+      {
+        "name": "scope",
+        "required": true,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "Integer",
+        "default": "20"
+      }
+    ],
+    "auth": "- CUSTOMER — 본인 데이터",
+    "requestExample": null,
+    "responseExample": {
+      "items": [
+        {
+          "id": "rsv_001",
+          "store": {
+            "id": "shop_moment",
+            "name": "네일 모먼트",
+            "imageUrl": null
+          },
+          "service": {
+            "id": "svc_nail_01",
+            "name": "원컬러 젤 네일",
+            "durationMinutes": 60
+          },
+          "slotId": "slot_1700",
+          "status": "CONFIRMED",
+          "startAt": "2026-10-16T17:00:00+09:00",
+          "endAt": "2026-10-16T18:00:00+09:00",
+          "price": {
+            "original": 50000,
+            "payable": 35000,
+            "currency": "KRW"
+          },
+          "waitlistId": "wait_001",
+          "cancelReasonCode": null,
+          "canceledAt": null,
+          "createdAt": "2026-10-16T14:20:00+09:00",
+          "version": 1,
+          "allowedActions": [
+            "VIEW_STORE",
+            "OPEN_CHAT",
+            "CANCEL"
+          ]
+        }
+      ],
+      "page": {
+        "nextCursor": null,
+        "hasNext": false
+      },
+      "counts": {
+        "upcoming": 2,
+        "past": 1,
+        "canceled": 0
+      }
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd4817b813ad3029a4c241c"
+  },
+  {
+    "id": "ST-08",
+    "domain": "store",
+    "controller": "ReservationController",
+    "methodName": "getReservation",
+    "method": "GET",
+    "path": "/api/v1/reservations/{reservationId}",
+    "request": null,
+    "response": "ReservationResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 예약 본인 또는 해당 매장 OWNER",
+    "requestExample": null,
+    "responseExample": {
+      "id": "rsv_001",
+      "store": {
+        "id": "shop_moment",
+        "name": "네일 모먼트",
+        "imageUrl": null
+      },
+      "service": {
+        "id": "svc_nail_01",
+        "name": "원컬러 젤 네일",
+        "durationMinutes": 60
+      },
+      "slotId": "slot_1700",
+      "status": "CONFIRMED",
+      "startAt": "2026-10-16T17:00:00+09:00",
+      "endAt": "2026-10-16T18:00:00+09:00",
+      "price": {
+        "original": 50000,
+        "payable": 35000,
+        "currency": "KRW"
+      },
+      "waitlistId": "wait_001",
+      "cancelReasonCode": null,
+      "canceledAt": null,
+      "createdAt": "2026-10-16T14:20:00+09:00",
+      "version": 1,
+      "allowedActions": [
+        "VIEW_STORE",
+        "OPEN_CHAT",
+        "CANCEL"
+      ]
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481ec9983fd64ba822751"
+  },
+  {
+    "id": "ST-09",
+    "domain": "store",
+    "controller": "ReservationController",
+    "methodName": "cancelReservation",
+    "method": "POST",
+    "path": "/api/v1/reservations/{reservationId}/cancel",
+    "request": "CancelReservationRequest",
+    "response": "CancelReservationResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 예약 본인 또는 해당 매장 OWNER\n- X-CSRF-Token 필수\n- Idempotency-Key 필수 (24시간 재생)",
+    "requestExample": {
+      "reasonCode": "CUSTOMER_REQUEST",
+      "expectedVersion": 1
+    },
+    "responseExample": {
+      "reservation": {
+        "id": "rsv_001",
+        "store": {
+          "id": "shop_moment",
+          "name": "네일 모먼트",
+          "imageUrl": null
+        },
+        "service": {
+          "id": "svc_nail_01",
+          "name": "원컬러 젤 네일",
+          "durationMinutes": 60
+        },
+        "slotId": "slot_1700",
+        "status": "CANCELED",
+        "startAt": "2026-10-16T17:00:00+09:00",
+        "endAt": "2026-10-16T18:00:00+09:00",
+        "price": {
+          "original": 50000,
+          "payable": 35000,
+          "currency": "KRW"
+        },
+        "waitlistId": "wait_001",
+        "cancelReasonCode": "CUSTOMER_REQUEST",
+        "canceledAt": "2026-10-16T14:20:00+09:00",
+        "createdAt": "2026-10-16T14:20:00+09:00",
+        "version": 2,
+        "allowedActions": [
+          "VIEW_STORE",
+          "OPEN_CHAT",
+          "REBOOK"
+        ]
+      },
+      "vacancy": {
+        "id": "vac_001",
+        "storeId": "shop_moment",
+        "sourceReservationId": "rsv_old",
+        "reason": "CANCELLATION",
+        "status": "DRAFT",
+        "resourceId": "staff_01",
+        "availableFrom": "2026-10-16T17:00:00+09:00",
+        "availableUntil": "2026-10-16T18:00:00+09:00",
+        "originalServiceId": "svc_nail_01",
+        "originalPrice": 50000,
+        "publishedSlotId": null,
+        "publishedAt": null,
+        "occurredAt": "2026-10-16T14:10:00+09:00",
+        "version": 1
+      }
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd48174b700df232299fa77"
+  },
+  {
+    "id": "ST-10",
+    "domain": "store",
+    "controller": "OwnerStoreController",
+    "methodName": "updateStore",
+    "method": "PATCH",
+    "path": "/api/v1/owner/stores/{storeId}",
+    "request": "UpdateStoreRequest",
+    "response": "StoreDetailResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- OWNER — 해당 매장 소유자\n- X-CSRF-Token 필수",
+    "requestExample": {
+      "description": "취향을 함께 고민하는 따뜻한 네일 공간",
+      "expectedVersion": 1
+    },
+    "responseExample": {
+      "id": "shop_moment",
+      "name": "네일 모먼트",
+      "category": "NAIL",
+      "description": "취향을 함께 고민하는 따뜻한 네일 공간",
+      "address": "서울 성동구 연무장길 18, 2층",
+      "location": {
+        "latitude": 37.5445,
+        "longitude": 127.0557
+      },
+      "imageUrl": "https://example.com/moment.jpg",
+      "rating": {
+        "average": 4.9,
+        "count": 12
+      },
+      "timezone": "Asia/Seoul",
+      "openingHours": [
+        {
+          "dayOfWeek": "MON",
+          "opensAt": "09:00",
+          "closesAt": "20:00",
+          "closed": false
+        }
+      ],
+      "version": 2
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481aab1edf442cb8b4f32"
+  },
+  {
+    "id": "ST-11",
+    "domain": "store",
+    "controller": "OwnerStoreController",
+    "methodName": "getTimetable",
+    "method": "GET",
+    "path": "/api/v1/owner/stores/{storeId}/timetable",
+    "request": null,
+    "response": "TimetableResponse",
+    "status": 200,
+    "query": [
+      {
+        "name": "date",
+        "required": true,
+        "type": "LocalDate",
+        "default": null
+      }
+    ],
+    "auth": "- OWNER — 해당 매장 소유자",
+    "requestExample": null,
+    "responseExample": {
+      "date": "2026-10-16",
+      "timezone": "Asia/Seoul",
+      "summary": {
+        "total": 4,
+        "remainingConfirmed": 2
+      },
+      "resources": [
+        {
+          "id": "staff_01",
+          "label": "담당자 1"
+        }
+      ],
+      "reservations": [
+        {
+          "id": "rsv_001",
+          "store": {
+            "id": "shop_moment",
+            "name": "네일 모먼트",
+            "imageUrl": null
+          },
+          "service": {
+            "id": "svc_nail_01",
+            "name": "원컬러 젤 네일",
+            "durationMinutes": 60
+          },
+          "slotId": "slot_1700",
+          "status": "CONFIRMED",
+          "startAt": "2026-10-16T17:00:00+09:00",
+          "endAt": "2026-10-16T18:00:00+09:00",
+          "price": {
+            "original": 50000,
+            "payable": 35000,
+            "currency": "KRW"
+          },
+          "waitlistId": "wait_001",
+          "cancelReasonCode": null,
+          "canceledAt": null,
+          "createdAt": "2026-10-16T14:20:00+09:00",
+          "version": 1,
+          "allowedActions": [
+            "VIEW_STORE",
+            "OPEN_CHAT",
+            "CANCEL"
+          ],
+          "customer": {
+            "id": "usr_001",
+            "displayName": "빈틈고객"
+          },
+          "resourceId": "staff_01"
+        }
+      ],
+      "availableSlots": [
+        {
+          "id": "slot_1700",
+          "storeId": "shop_moment",
+          "serviceId": "svc_nail_01",
+          "resourceId": "staff_01",
+          "startAt": "2026-10-16T17:00:00+09:00",
+          "endAt": "2026-10-16T18:00:00+09:00",
+          "status": "AVAILABLE",
+          "bookable": true,
+          "unavailableReason": null,
+          "source": "VACANCY",
+          "vacancyId": "vac_001",
+          "publicationVersion": 3,
+          "price": {
+            "original": 50000,
+            "payable": 35000,
+            "discountPercent": 30,
+            "currency": "KRW"
+          },
+          "version": 3
+        }
+      ],
+      "vacancies": [
+        {
+          "id": "vac_001",
+          "storeId": "shop_moment",
+          "sourceReservationId": "rsv_old",
+          "reason": "CANCELLATION",
+          "status": "DRAFT",
+          "resourceId": "staff_01",
+          "availableFrom": "2026-10-16T17:00:00+09:00",
+          "availableUntil": "2026-10-16T18:00:00+09:00",
+          "originalServiceId": "svc_nail_01",
+          "originalPrice": 50000,
+          "publishedSlotId": null,
+          "publishedAt": null,
+          "occurredAt": "2026-10-16T14:10:00+09:00",
+          "version": 1
+        }
+      ]
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd48108a991f06efbee9ea2"
+  },
+  {
+    "id": "ST-12",
+    "domain": "store",
+    "controller": "OwnerReservationController",
+    "methodName": "getReservation",
+    "method": "GET",
+    "path": "/api/v1/owner/stores/{storeId}/reservations/{reservationId}",
+    "request": null,
+    "response": "OwnerReservationResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- OWNER — 해당 매장 소유자",
+    "requestExample": null,
+    "responseExample": {
+      "id": "rsv_001",
+      "store": {
+        "id": "shop_moment",
+        "name": "네일 모먼트",
+        "imageUrl": null
+      },
+      "service": {
+        "id": "svc_nail_01",
+        "name": "원컬러 젤 네일",
+        "durationMinutes": 60
+      },
+      "slotId": "slot_1700",
+      "status": "CONFIRMED",
+      "startAt": "2026-10-16T17:00:00+09:00",
+      "endAt": "2026-10-16T18:00:00+09:00",
+      "price": {
+        "original": 50000,
+        "payable": 35000,
+        "currency": "KRW"
+      },
+      "waitlistId": "wait_001",
+      "cancelReasonCode": null,
+      "canceledAt": null,
+      "createdAt": "2026-10-16T14:20:00+09:00",
+      "version": 1,
+      "allowedActions": [
+        "VIEW_STORE",
+        "OPEN_CHAT",
+        "CANCEL"
+      ],
+      "customer": {
+        "id": "usr_001",
+        "displayName": "빈틈고객"
+      },
+      "resourceId": "staff_01"
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd4817c8755dc27b321fa8c"
+  },
+  {
+    "id": "ST-13",
+    "domain": "store",
+    "controller": "OwnerReservationController",
+    "methodName": "updateReservationStatus",
+    "method": "POST",
+    "path": "/api/v1/owner/stores/{storeId}/reservations/{reservationId}/status",
+    "request": "UpdateReservationStatusRequest",
+    "response": "UpdateReservationStatusResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- OWNER — 해당 매장 소유자\n- X-CSRF-Token 필수\n- Idempotency-Key 필수 (24시간 재생)",
+    "requestExample": {
+      "status": "COMPLETED",
+      "expectedVersion": 1
+    },
+    "responseExample": {
+      "reservation": {
+        "id": "rsv_001",
+        "store": {
+          "id": "shop_moment",
+          "name": "네일 모먼트",
+          "imageUrl": null
+        },
+        "service": {
+          "id": "svc_nail_01",
+          "name": "원컬러 젤 네일",
+          "durationMinutes": 60
+        },
+        "slotId": "slot_1700",
+        "status": "COMPLETED",
+        "startAt": "2026-10-16T17:00:00+09:00",
+        "endAt": "2026-10-16T18:00:00+09:00",
+        "price": {
+          "original": 50000,
+          "payable": 35000,
+          "currency": "KRW"
+        },
+        "waitlistId": "wait_001",
+        "cancelReasonCode": null,
+        "canceledAt": null,
+        "createdAt": "2026-10-16T14:20:00+09:00",
+        "version": 2,
+        "allowedActions": [
+          "VIEW_STORE",
+          "OPEN_CHAT",
+          "REBOOK"
+        ],
+        "customer": {
+          "id": "usr_001",
+          "displayName": "빈틈고객"
+        },
+        "resourceId": "staff_01"
+      },
+      "vacancy": null
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481d7a2e4fba29a1d7554"
+  },
+  {
+    "id": "ST-14",
+    "domain": "store",
+    "controller": "OwnerVacancyController",
+    "methodName": "getVacancies",
+    "method": "GET",
+    "path": "/api/v1/owner/stores/{storeId}/vacancies",
+    "request": null,
+    "response": "VacancyListResponse",
+    "status": 200,
+    "query": [
+      {
+        "name": "status",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "Integer",
+        "default": "20"
+      }
+    ],
+    "auth": "- OWNER — 해당 매장 소유자",
+    "requestExample": null,
+    "responseExample": {
+      "items": [
+        {
+          "id": "vac_001",
+          "storeId": "shop_moment",
+          "sourceReservationId": "rsv_old",
+          "reason": "CANCELLATION",
+          "status": "DRAFT",
+          "resourceId": "staff_01",
+          "availableFrom": "2026-10-16T17:00:00+09:00",
+          "availableUntil": "2026-10-16T18:00:00+09:00",
+          "originalServiceId": "svc_nail_01",
+          "originalPrice": 50000,
+          "publishedSlotId": null,
+          "publishedAt": null,
+          "occurredAt": "2026-10-16T14:10:00+09:00",
+          "version": 1
+        }
+      ],
+      "page": {
+        "nextCursor": null,
+        "hasNext": false
+      },
+      "counts": {
+        "awaitingPublication": 2,
+        "published": 1,
+        "filled": 0
+      }
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481a49fc5db03d18be940"
+  },
+  {
+    "id": "ST-15",
+    "domain": "store",
+    "controller": "OwnerVacancyController",
+    "methodName": "publishVacancy",
+    "method": "POST",
+    "path": "/api/v1/owner/stores/{storeId}/vacancies/{vacancyId}/publish",
+    "request": "PublishVacancyRequest",
+    "response": "PublishVacancyResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- OWNER — 해당 매장 소유자\n- X-CSRF-Token 필수\n- Idempotency-Key 필수 (24시간 재생)",
+    "requestExample": {
+      "serviceId": "svc_nail_01",
+      "startAt": "2026-10-16T17:00:00+09:00",
+      "discount": {
+        "type": "PERCENT",
+        "value": 30
+      },
+      "expectedVersion": 1
+    },
+    "responseExample": {
+      "vacancy": {
+        "id": "vac_001",
+        "storeId": "shop_moment",
+        "sourceReservationId": "rsv_old",
+        "reason": "CANCELLATION",
+        "status": "PUBLISHED",
+        "resourceId": "staff_01",
+        "availableFrom": "2026-10-16T17:00:00+09:00",
+        "availableUntil": "2026-10-16T18:00:00+09:00",
+        "originalServiceId": "svc_nail_01",
+        "originalPrice": 50000,
+        "publishedSlotId": "slot_1700",
+        "publishedAt": "2026-10-16T14:20:00+09:00",
+        "occurredAt": "2026-10-16T14:10:00+09:00",
+        "version": 2
+      },
+      "slot": {
+        "id": "slot_1700",
+        "storeId": "shop_moment",
+        "serviceId": "svc_nail_01",
+        "resourceId": "staff_01",
+        "startAt": "2026-10-16T17:00:00+09:00",
+        "endAt": "2026-10-16T18:00:00+09:00",
+        "status": "AVAILABLE",
+        "bookable": true,
+        "unavailableReason": null,
+        "source": "VACANCY",
+        "vacancyId": "vac_001",
+        "publicationVersion": 3,
+        "price": {
+          "original": 50000,
+          "payable": 35000,
+          "discountPercent": 30,
+          "currency": "KRW"
+        },
+        "version": 3
+      },
+      "matchingStatus": "QUEUED"
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481ae89e8eb205f157f7e"
+  },
+  {
+    "id": "ST-16",
+    "domain": "store",
+    "controller": "OwnerVacancyController",
+    "methodName": "withdrawVacancy",
+    "method": "POST",
+    "path": "/api/v1/owner/stores/{storeId}/vacancies/{vacancyId}/withdraw",
+    "request": "WithdrawVacancyRequest",
+    "response": "WithdrawVacancyResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- OWNER — 해당 매장 소유자\n- X-CSRF-Token 필수\n- Idempotency-Key 필수 (24시간 재생)",
+    "requestExample": {
+      "expectedVersion": 2
+    },
+    "responseExample": {
+      "vacancy": {
+        "id": "vac_001",
+        "storeId": "shop_moment",
+        "sourceReservationId": "rsv_old",
+        "reason": "CANCELLATION",
+        "status": "WITHDRAWN",
+        "resourceId": "staff_01",
+        "availableFrom": "2026-10-16T17:00:00+09:00",
+        "availableUntil": "2026-10-16T18:00:00+09:00",
+        "originalServiceId": "svc_nail_01",
+        "originalPrice": 50000,
+        "publishedSlotId": "slot_1700",
+        "publishedAt": "2026-10-16T14:20:00+09:00",
+        "occurredAt": "2026-10-16T14:10:00+09:00",
+        "version": 3
+      },
+      "slot": {
+        "id": "slot_1700",
+        "storeId": "shop_moment",
+        "serviceId": "svc_nail_01",
+        "resourceId": "staff_01",
+        "startAt": "2026-10-16T17:00:00+09:00",
+        "endAt": "2026-10-16T18:00:00+09:00",
+        "status": "BLOCKED",
+        "bookable": false,
+        "unavailableReason": "BLOCKED",
+        "source": "VACANCY",
+        "vacancyId": "vac_001",
+        "publicationVersion": 3,
+        "price": {
+          "original": 50000,
+          "payable": 35000,
+          "discountPercent": 30,
+          "currency": "KRW"
+        },
+        "version": 4
+      }
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481799276c9f05e1a32ec"
+  },
+  {
+    "id": "ST-17",
+    "domain": "store",
+    "controller": "OwnerStoreController",
+    "methodName": "updateService",
+    "method": "PATCH",
+    "path": "/api/v1/owner/stores/{storeId}/services/{serviceId}",
+    "request": "UpdateStoreServiceRequest",
+    "response": "StoreServiceResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- OWNER — 해당 매장 소유자\n- X-CSRF-Token 필수",
+    "requestExample": {
+      "name": "원컬러 젤 네일",
+      "basePrice": 55000,
+      "active": true,
+      "expectedVersion": 1
+    },
+    "responseExample": {
+      "id": "svc_nail_01",
+      "storeId": "shop_moment",
+      "category": "NAIL",
+      "name": "원컬러 젤 네일",
+      "durationMinutes": 60,
+      "basePrice": 55000,
+      "currency": "KRW",
+      "active": true,
+      "version": 2
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd48183a811dd12c2cac293"
+  },
+  {
+    "id": "S-01",
+    "domain": "search",
+    "controller": "SearchController",
+    "methodName": "searchStores",
+    "method": "GET",
+    "path": "/api/v1/search/stores",
+    "request": null,
+    "response": "StoreSearchResponse",
+    "status": 200,
+    "query": [
+      {
+        "name": "latitude",
+        "required": true,
+        "type": "Double",
+        "default": null
+      },
+      {
+        "name": "longitude",
+        "required": true,
+        "type": "Double",
+        "default": null
+      },
+      {
+        "name": "radiusMeters",
+        "required": false,
+        "type": "Integer",
+        "default": "3000"
+      },
+      {
+        "name": "keyword",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "category",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "from",
+        "required": false,
+        "type": "OffsetDateTime",
+        "default": null
+      },
+      {
+        "name": "to",
+        "required": false,
+        "type": "OffsetDateTime",
+        "default": null
+      },
+      {
+        "name": "vacancyOnly",
+        "required": false,
+        "type": "Boolean",
+        "default": "false"
+      },
+      {
+        "name": "sort",
+        "required": false,
+        "type": "String",
+        "default": "DISTANCE"
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "Integer",
+        "default": "20"
+      }
+    ],
+    "auth": "- 공개 API (OAuth 콜백은 state 검증)",
+    "requestExample": null,
+    "responseExample": {
+      "items": [
+        {
+          "store": {
+            "id": "shop_moment",
+            "name": "네일 모먼트",
+            "category": "NAIL",
+            "imageUrl": null,
+            "rating": {
+              "average": 4.9,
+              "count": 12
+            }
+          },
+          "location": {
+            "latitude": 37.5445,
+            "longitude": 127.0557
+          },
+          "distanceMeters": 220,
+          "walkingMinutes": null,
+          "bestSlot": {
+            "id": "slot_1700",
+            "serviceId": "svc_nail_01",
+            "serviceName": "원컬러 젤 네일",
+            "startAt": "2026-10-16T17:00:00+09:00",
+            "originalPrice": 50000,
+            "payablePrice": 35000,
+            "currency": "KRW",
+            "source": "VACANCY",
+            "version": 3
+          },
+          "recommendationReasons": [
+            "NEARBY",
+            "MATCHED_CATEGORY"
+          ]
+        }
+      ],
+      "page": {
+        "nextCursor": null,
+        "hasNext": false
+      },
+      "snapshotAt": "2026-10-16T14:20:00+09:00"
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd4813b97d4c57041a4e79d"
+  },
+  {
+    "id": "S-02",
+    "domain": "search",
+    "controller": "SearchController",
+    "methodName": "analyzeIntent",
+    "method": "POST",
+    "path": "/api/v1/search/intents/analyze",
+    "request": "AnalyzeIntentRequest",
+    "response": "AnalyzeIntentResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- CUSTOMER — 본인 데이터\n- X-CSRF-Token 필수",
+    "requestExample": {
+      "text": "내일 오후 3시부터 6시 사이에 성수역 근처에서 6만원 이하로 네일 받고 싶어",
+      "context": {
+        "storeId": null,
+        "location": {
+          "latitude": 37.5445,
+          "longitude": 127.0557
+        }
+      }
+    },
+    "responseExample": {
+      "referenceTime": "2026-10-16T14:00:00+09:00",
+      "timezone": "Asia/Seoul",
+      "conditions": {
+        "storeId": null,
+        "category": "NAIL",
+        "serviceId": null,
+        "windowStart": "2026-10-17T15:00:00+09:00",
+        "windowEnd": "2026-10-17T18:00:00+09:00",
+        "location": {
+          "latitude": 37.5445,
+          "longitude": 127.0557
+        },
+        "radiusMeters": 3000,
+        "maxPrice": 60000,
+        "keywords": []
+      },
+      "resolution": "RESOLVED",
+      "missingFields": [],
+      "clarificationQuestion": null
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481c99aade960e5397683"
+  },
+  {
+    "id": "S-03",
+    "domain": "search",
+    "controller": "WaitlistController",
+    "methodName": "createWaitlist",
+    "method": "POST",
+    "path": "/api/v1/search/waitlists",
+    "request": "CreateWaitlistRequest",
+    "response": "WaitlistResponse",
+    "status": 201,
+    "query": [],
+    "auth": "- CUSTOMER — 본인 데이터\n- X-CSRF-Token 필수\n- Idempotency-Key 필수 (24시간 재생)",
+    "requestExample": {
+      "source": "NATURAL_LANGUAGE",
+      "conditions": {
+        "storeId": null,
+        "category": "NAIL",
+        "serviceId": null,
+        "windowStart": "2026-10-17T15:00:00+09:00",
+        "windowEnd": "2026-10-17T18:00:00+09:00",
+        "location": {
+          "latitude": 37.5445,
+          "longitude": 127.0557
+        },
+        "radiusMeters": 3000,
+        "maxPrice": 60000,
+        "keywords": [
+          "원컬러"
+        ]
+      }
+    },
+    "responseExample": {
+      "id": "wait_001",
+      "status": "ACTIVE",
+      "source": "NATURAL_LANGUAGE",
+      "conditions": {
+        "storeId": null,
+        "category": "NAIL",
+        "serviceId": null,
+        "windowStart": "2026-10-17T15:00:00+09:00",
+        "windowEnd": "2026-10-17T18:00:00+09:00",
+        "location": {
+          "latitude": 37.5445,
+          "longitude": 127.0557
+        },
+        "radiusMeters": 3000,
+        "maxPrice": 60000,
+        "keywords": [
+          "원컬러"
+        ]
+      },
+      "store": null,
+      "service": null,
+      "availability": "AVAILABLE",
+      "offers": [
+        {
+          "id": "offer_001",
+          "slotId": "slot_17_1600",
+          "publicationVersion": 2,
+          "storeId": "shop_moment",
+          "storeName": "네일 모먼트",
+          "serviceId": "svc_nail_01",
+          "serviceName": "원컬러 젤 네일",
+          "startAt": "2026-10-17T16:00:00+09:00",
+          "endAt": "2026-10-17T17:00:00+09:00",
+          "originalPrice": 50000,
+          "payablePrice": 35000,
+          "currency": "KRW",
+          "imageUrl": null,
+          "validatedAt": "2026-10-16T14:20:00+09:00"
+        }
+      ],
+      "reservationId": null,
+      "createdAt": "2026-10-16T14:00:00+09:00",
+      "version": 1
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481b491eafe6165c139c9"
+  },
+  {
+    "id": "S-04",
+    "domain": "search",
+    "controller": "WaitlistController",
+    "methodName": "getMyWaitlists",
+    "method": "GET",
+    "path": "/api/v1/search/waitlists/me",
+    "request": null,
+    "response": "WaitlistListResponse",
+    "status": 200,
+    "query": [
+      {
+        "name": "status",
+        "required": false,
+        "type": "String",
+        "default": "ACTIVE"
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "Integer",
+        "default": "20"
+      }
+    ],
+    "auth": "- CUSTOMER — 본인 데이터",
+    "requestExample": null,
+    "responseExample": {
+      "items": [
+        {
+          "id": "wait_001",
+          "status": "ACTIVE",
+          "source": "NATURAL_LANGUAGE",
+          "conditions": {
+            "storeId": null,
+            "category": "NAIL",
+            "serviceId": null,
+            "windowStart": "2026-10-17T15:00:00+09:00",
+            "windowEnd": "2026-10-17T18:00:00+09:00",
+            "location": {
+              "latitude": 37.5445,
+              "longitude": 127.0557
+            },
+            "radiusMeters": 3000,
+            "maxPrice": 60000,
+            "keywords": [
+              "원컬러"
+            ]
+          },
+          "store": null,
+          "service": null,
+          "availability": "AVAILABLE",
+          "offers": [
+            {
+              "id": "offer_001",
+              "slotId": "slot_17_1600",
+              "publicationVersion": 2,
+              "storeId": "shop_moment",
+              "storeName": "네일 모먼트",
+              "serviceId": "svc_nail_01",
+              "serviceName": "원컬러 젤 네일",
+              "startAt": "2026-10-17T16:00:00+09:00",
+              "endAt": "2026-10-17T17:00:00+09:00",
+              "originalPrice": 50000,
+              "payablePrice": 35000,
+              "currency": "KRW",
+              "imageUrl": null,
+              "validatedAt": "2026-10-16T14:20:00+09:00"
+            }
+          ],
+          "reservationId": null,
+          "createdAt": "2026-10-16T14:00:00+09:00",
+          "version": 1
+        }
+      ],
+      "page": {
+        "nextCursor": null,
+        "hasNext": false
+      },
+      "counts": {
+        "active": 2,
+        "fulfilled": 0,
+        "canceled": 0,
+        "expired": 0
+      }
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481cd9cf8d1076661e3cf"
+  },
+  {
+    "id": "S-05",
+    "domain": "search",
+    "controller": "WaitlistController",
+    "methodName": "getWaitlist",
+    "method": "GET",
+    "path": "/api/v1/search/waitlists/{waitlistId}",
+    "request": null,
+    "response": "WaitlistResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- CUSTOMER — 본인 데이터",
+    "requestExample": null,
+    "responseExample": {
+      "id": "wait_001",
+      "status": "ACTIVE",
+      "source": "NATURAL_LANGUAGE",
+      "conditions": {
+        "storeId": null,
+        "category": "NAIL",
+        "serviceId": null,
+        "windowStart": "2026-10-17T15:00:00+09:00",
+        "windowEnd": "2026-10-17T18:00:00+09:00",
+        "location": {
+          "latitude": 37.5445,
+          "longitude": 127.0557
+        },
+        "radiusMeters": 3000,
+        "maxPrice": 60000,
+        "keywords": [
+          "원컬러"
+        ]
+      },
+      "store": null,
+      "service": null,
+      "availability": "AVAILABLE",
+      "offers": [
+        {
+          "id": "offer_001",
+          "slotId": "slot_17_1600",
+          "publicationVersion": 2,
+          "storeId": "shop_moment",
+          "storeName": "네일 모먼트",
+          "serviceId": "svc_nail_01",
+          "serviceName": "원컬러 젤 네일",
+          "startAt": "2026-10-17T16:00:00+09:00",
+          "endAt": "2026-10-17T17:00:00+09:00",
+          "originalPrice": 50000,
+          "payablePrice": 35000,
+          "currency": "KRW",
+          "imageUrl": null,
+          "validatedAt": "2026-10-16T14:20:00+09:00"
+        }
+      ],
+      "reservationId": null,
+      "createdAt": "2026-10-16T14:00:00+09:00",
+      "version": 1
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd4817c935cd20b6950f87a"
+  },
+  {
+    "id": "S-06",
+    "domain": "search",
+    "controller": "WaitlistController",
+    "methodName": "updateWaitlist",
+    "method": "PATCH",
+    "path": "/api/v1/search/waitlists/{waitlistId}",
+    "request": "UpdateWaitlistRequest",
+    "response": "WaitlistResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- CUSTOMER — 본인 데이터\n- X-CSRF-Token 필수",
+    "requestExample": {
+      "conditions": {
+        "storeId": null,
+        "category": "NAIL",
+        "serviceId": null,
+        "windowStart": "2026-10-17T15:00:00+09:00",
+        "windowEnd": "2026-10-17T18:00:00+09:00",
+        "location": {
+          "latitude": 37.5445,
+          "longitude": 127.0557
+        },
+        "radiusMeters": 3000,
+        "maxPrice": 60000,
+        "keywords": [
+          "원컬러"
+        ]
+      },
+      "expectedVersion": 1
+    },
+    "responseExample": {
+      "id": "wait_001",
+      "status": "ACTIVE",
+      "source": "NATURAL_LANGUAGE",
+      "conditions": {
+        "storeId": null,
+        "category": "NAIL",
+        "serviceId": null,
+        "windowStart": "2026-10-17T15:00:00+09:00",
+        "windowEnd": "2026-10-17T18:00:00+09:00",
+        "location": {
+          "latitude": 37.5445,
+          "longitude": 127.0557
+        },
+        "radiusMeters": 3000,
+        "maxPrice": 60000,
+        "keywords": [
+          "원컬러"
+        ]
+      },
+      "store": null,
+      "service": null,
+      "availability": "WAITING",
+      "offers": [],
+      "reservationId": null,
+      "createdAt": "2026-10-16T14:00:00+09:00",
+      "version": 2
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481959feaea05c12928b2"
+  },
+  {
+    "id": "S-07",
+    "domain": "search",
+    "controller": "WaitlistController",
+    "methodName": "cancelWaitlist",
+    "method": "POST",
+    "path": "/api/v1/search/waitlists/{waitlistId}/cancel",
+    "request": "CancelWaitlistRequest",
+    "response": "WaitlistResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- CUSTOMER — 본인 데이터\n- X-CSRF-Token 필수\n- Idempotency-Key 필수 (24시간 재생)",
+    "requestExample": {
+      "expectedVersion": 1
+    },
+    "responseExample": {
+      "id": "wait_001",
+      "status": "CANCELED",
+      "source": "NATURAL_LANGUAGE",
+      "conditions": {
+        "storeId": null,
+        "category": "NAIL",
+        "serviceId": null,
+        "windowStart": "2026-10-17T15:00:00+09:00",
+        "windowEnd": "2026-10-17T18:00:00+09:00",
+        "location": {
+          "latitude": 37.5445,
+          "longitude": 127.0557
+        },
+        "radiusMeters": 3000,
+        "maxPrice": 60000,
+        "keywords": [
+          "원컬러"
+        ]
+      },
+      "store": null,
+      "service": null,
+      "availability": "CLOSED",
+      "offers": [],
+      "reservationId": null,
+      "createdAt": "2026-10-16T14:00:00+09:00",
+      "version": 2
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd48168ac03e08aa5df488c"
+  },
+  {
+    "id": "S-08",
+    "domain": "search",
+    "controller": "InternalSearchController",
+    "methodName": "createMatchJob",
+    "method": "POST",
+    "path": "/api/v1/internal/search/match-jobs",
+    "request": "CreateMatchJobRequest",
+    "response": "MatchJobResponse",
+    "status": 202,
+    "query": [],
+    "auth": "- INTERNAL — 외부 접근 불가, 내부 인증 또는 모듈 호출",
+    "requestExample": {
+      "eventId": "evt_001",
+      "slotId": "slot_17_1600",
+      "publicationVersion": 2
+    },
+    "responseExample": {
+      "jobId": "job_001",
+      "status": "QUEUED"
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481c69ccade175948c157"
+  },
+  {
+    "id": "N-01",
+    "domain": "notification",
+    "controller": "NotificationController",
+    "methodName": "getNotifications",
+    "method": "GET",
+    "path": "/api/v1/notifications",
+    "request": null,
+    "response": "NotificationListResponse",
+    "status": 200,
+    "query": [
+      {
+        "name": "unreadOnly",
+        "required": false,
+        "type": "Boolean",
+        "default": "false"
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "Integer",
+        "default": "20"
+      }
+    ],
+    "auth": "- 로그인 세션 — 본인 데이터",
+    "requestExample": null,
+    "responseExample": {
+      "items": [
+        {
+          "id": "noti_001",
+          "type": "VACANCY_MATCHED",
+          "title": "원하던 시간에 빈자리가 생겼어요",
+          "body": "네일 모먼트 · 10월 17일 16:00 · 35,000원",
+          "target": {
+            "storeId": "shop_moment",
+            "slotId": "slot_17_1600",
+            "publicationVersion": 2,
+            "waitlistIds": [
+              "wait_001"
+            ]
+          },
+          "action": {
+            "type": "OPEN_SLOT",
+            "path": "/customer/shops/shop_moment?slotId=slot_17_1600"
+          },
+          "availability": "AVAILABLE",
+          "readAt": null,
+          "createdAt": "2026-10-16T14:20:00+09:00"
+        }
+      ],
+      "page": {
+        "nextCursor": null,
+        "hasNext": false
+      },
+      "unreadCount": 1
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481649c12da127fb36943"
+  },
+  {
+    "id": "N-02",
+    "domain": "notification",
+    "controller": "NotificationController",
+    "methodName": "markNotificationRead",
+    "method": "PATCH",
+    "path": "/api/v1/notifications/{notificationId}/read",
+    "request": "MarkNotificationReadRequest",
+    "response": "NotificationResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 로그인 세션 — 본인 데이터\n- X-CSRF-Token 필수",
+    "requestExample": {
+      "read": true
+    },
+    "responseExample": {
+      "id": "noti_001",
+      "type": "VACANCY_MATCHED",
+      "title": "원하던 시간에 빈자리가 생겼어요",
+      "body": "네일 모먼트 · 10월 17일 16:00 · 35,000원",
+      "target": {
+        "storeId": "shop_moment",
+        "slotId": "slot_17_1600",
+        "publicationVersion": 2,
+        "waitlistIds": [
+          "wait_001"
+        ]
+      },
+      "action": {
+        "type": "OPEN_SLOT",
+        "path": "/customer/shops/shop_moment?slotId=slot_17_1600"
+      },
+      "availability": "AVAILABLE",
+      "readAt": "2026-10-16T14:20:00+09:00",
+      "createdAt": "2026-10-16T14:20:00+09:00"
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd48110a228da3a4f12e85a"
+  },
+  {
+    "id": "N-03",
+    "domain": "notification",
+    "controller": "NotificationController",
+    "methodName": "streamNotifications",
+    "method": "GET",
+    "path": "/api/v1/notifications/stream",
+    "request": null,
+    "response": null,
+    "status": 200,
+    "query": [
+      {
+        "name": "afterEventId",
+        "required": false,
+        "type": "String",
+        "default": null
+      }
+    ],
+    "auth": "- 로그인 세션 — 본인 데이터\n- Accept: text/event-stream; Last-Event-ID 선택",
+    "requestExample": null,
+    "responseExample": null,
+    "source": "https://app.notion.com/p/3fbdaacb8cd481529f3ff4711b7c4aaf"
+  },
+  {
+    "id": "N-04",
+    "domain": "notification",
+    "controller": "PushSubscriptionController",
+    "methodName": "registerPushSubscription",
+    "method": "POST",
+    "path": "/api/v1/notifications/push-subscriptions",
+    "request": "RegisterPushSubscriptionRequest",
+    "response": "PushSubscriptionResponse",
+    "status": 201,
+    "query": [],
+    "auth": "- 로그인 세션 — 본인 데이터\n- X-CSRF-Token 필수",
+    "requestExample": {
+      "endpoint": "https://push.example.net/subscription/opaque",
+      "keys": {
+        "p256dh": "base64url-key",
+        "auth": "base64url-secret"
+      },
+      "expirationTime": null
+    },
+    "responseExample": {
+      "id": "push_001",
+      "createdAt": "2026-10-16T14:20:00+09:00",
+      "expiresAt": null
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd48156a1d6f67cc3cbd034"
+  },
+  {
+    "id": "N-05",
+    "domain": "notification",
+    "controller": "PushSubscriptionController",
+    "methodName": "deletePushSubscription",
+    "method": "DELETE",
+    "path": "/api/v1/notifications/push-subscriptions/{subscriptionId}",
+    "request": null,
+    "response": null,
+    "status": 204,
+    "query": [],
+    "auth": "- 로그인 세션 — 본인 데이터\n- X-CSRF-Token 필수",
+    "requestExample": null,
+    "responseExample": null,
+    "source": "https://app.notion.com/p/3fbdaacb8cd4814491f0f94e752b9a50"
+  },
+  {
+    "id": "N-06",
+    "domain": "notification",
+    "controller": "InternalNotificationController",
+    "methodName": "dispatchNotification",
+    "method": "POST",
+    "path": "/api/v1/internal/notifications/dispatch",
+    "request": "DispatchNotificationRequest",
+    "response": "DispatchNotificationResponse",
+    "status": 202,
+    "query": [],
+    "auth": "- INTERNAL — 외부 접근 불가, 내부 인증 또는 모듈 호출",
+    "requestExample": {
+      "eventId": "evt_match_001",
+      "userId": "usr_001",
+      "type": "VACANCY_MATCHED",
+      "slotId": "slot_17_1600",
+      "publicationVersion": 2,
+      "matches": [
+        {
+          "waitlistId": "wait_001",
+          "waitlistVersion": 1
+        }
+      ],
+      "expiresAt": "2026-10-17T16:00:00+09:00"
+    },
+    "responseExample": {
+      "notificationId": "noti_001",
+      "status": "QUEUED"
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd48197a045fff04c9ff16e"
+  },
+  {
+    "id": "C-01",
+    "domain": "chatting",
+    "controller": "ChatRoomController",
+    "methodName": "createChatRoom",
+    "method": "POST",
+    "path": "/api/v1/chatting/rooms",
+    "request": "CreateChatRoomRequest",
+    "response": "ChatRoomResponse",
+    "status": 201,
+    "query": [],
+    "auth": "- CUSTOMER — 본인 데이터\n- X-CSRF-Token 필수\n- Idempotency-Key 필수 (24시간 재생)",
+    "requestExample": {
+      "storeId": "shop_moment"
+    },
+    "responseExample": {
+      "id": "room_001",
+      "store": {
+        "id": "shop_moment",
+        "name": "네일 모먼트",
+        "imageUrl": null
+      },
+      "customer": {
+        "id": "usr_001",
+        "displayName": "빈틈고객"
+      },
+      "status": "OPEN",
+      "lastMessage": null,
+      "unreadCount": 0,
+      "lastReadSequence": 0,
+      "createdAt": "2026-10-16T14:00:00+09:00"
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd4813abd64ce628e66ba48"
+  },
+  {
+    "id": "C-02",
+    "domain": "chatting",
+    "controller": "ChatRoomController",
+    "methodName": "getChatRooms",
+    "method": "GET",
+    "path": "/api/v1/chatting/rooms",
+    "request": null,
+    "response": "ChatRoomListResponse",
+    "status": 200,
+    "query": [
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "String",
+        "default": null
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "Integer",
+        "default": "20"
+      }
+    ],
+    "auth": "- 로그인한 채팅방 참여자 (고객/소유 매장 사장님)",
+    "requestExample": null,
+    "responseExample": {
+      "items": [
+        {
+          "id": "room_001",
+          "store": {
+            "id": "shop_moment",
+            "name": "네일 모먼트",
+            "imageUrl": null
+          },
+          "customer": {
+            "id": "usr_001",
+            "displayName": "빈틈고객"
+          },
+          "status": "OPEN",
+          "lastMessage": null,
+          "unreadCount": 0,
+          "lastReadSequence": 0,
+          "createdAt": "2026-10-16T14:00:00+09:00"
+        }
+      ],
+      "page": {
+        "nextCursor": null,
+        "hasNext": false
+      }
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd4814092c0d8b25f948a50"
+  },
+  {
+    "id": "C-03",
+    "domain": "chatting",
+    "controller": "ChatMessageController",
+    "methodName": "getMessages",
+    "method": "GET",
+    "path": "/api/v1/chatting/rooms/{roomId}/messages",
+    "request": null,
+    "response": "ChatMessageListResponse",
+    "status": 200,
+    "query": [
+      {
+        "name": "beforeSequence",
+        "required": false,
+        "type": "Long",
+        "default": null
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "Integer",
+        "default": "30"
+      }
+    ],
+    "auth": "- 로그인한 채팅방 참여자 (고객/소유 매장 사장님)",
+    "requestExample": null,
+    "responseExample": {
+      "items": [
+        {
+          "id": "msg_001",
+          "roomId": "room_001",
+          "sequence": 1,
+          "sender": {
+            "id": "usr_001",
+            "role": "CUSTOMER",
+            "displayName": "빈틈고객"
+          },
+          "clientMessageId": "550e8400-e29b-41d4-a716-446655440000",
+          "type": "TEXT",
+          "content": "내일 오후 4시 예약 가능한가요?",
+          "createdAt": "2026-10-16T14:10:00+09:00"
+        }
+      ],
+      "page": {
+        "hasOlder": false,
+        "nextBeforeSequence": null
+      }
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd481ab99f8e9575674c9d5"
+  },
+  {
+    "id": "C-04",
+    "domain": "chatting",
+    "controller": "ChatMessageController",
+    "methodName": "sendMessage",
+    "method": "POST",
+    "path": "/api/v1/chatting/rooms/{roomId}/messages",
+    "request": "SendChatMessageRequest",
+    "response": "ChatMessageResponse",
+    "status": 201,
+    "query": [],
+    "auth": "- 로그인한 채팅방 참여자 (고객/소유 매장 사장님)\n- X-CSRF-Token 필수\n- Idempotency-Key 필수 (24시간 재생)",
+    "requestExample": {
+      "clientMessageId": "550e8400-e29b-41d4-a716-446655440000",
+      "content": "내일 오후 4시 예약 가능한가요?"
+    },
+    "responseExample": {
+      "id": "msg_001",
+      "roomId": "room_001",
+      "sequence": 1,
+      "sender": {
+        "id": "usr_001",
+        "role": "CUSTOMER",
+        "displayName": "빈틈고객"
+      },
+      "clientMessageId": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "TEXT",
+      "content": "내일 오후 4시 예약 가능한가요?",
+      "createdAt": "2026-10-16T14:10:00+09:00"
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd4818aa794f4d31bbcd63a"
+  },
+  {
+    "id": "C-05",
+    "domain": "chatting",
+    "controller": "ChatRoomController",
+    "methodName": "updateReadPosition",
+    "method": "PUT",
+    "path": "/api/v1/chatting/rooms/{roomId}/read",
+    "request": "UpdateChatReadRequest",
+    "response": "ChatReadResponse",
+    "status": 200,
+    "query": [],
+    "auth": "- 로그인한 채팅방 참여자 (고객/소유 매장 사장님)\n- X-CSRF-Token 필수",
+    "requestExample": {
+      "lastReadSequence": 1
+    },
+    "responseExample": {
+      "roomId": "room_001",
+      "lastReadSequence": 1,
+      "readAt": "2026-10-16T14:20:00+09:00"
+    },
+    "source": "https://app.notion.com/p/3fbdaacb8cd4810387e7d5894f2fa8d1"
+  }
+]

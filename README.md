@@ -31,7 +31,7 @@
 
 ## 예정 기술 스택
 
-아래는 현재 도입 예정인 기술과 역할이다. 버전, 세부 라이브러리, 배포 구성은 아직 확정하지 않았다.
+아래는 현재 적용 중이거나 도입 예정인 기술과 역할이다. 빌드 설정은 Spring Boot 4.1.1과 Java 21을 사용한다.
 
 | 기술 | 예정 용도 |
 | --- | --- |
@@ -77,10 +77,12 @@ Controller마다 입력 Port를 만들거나 모든 Service에 인터페이스�
 
 ## 파일 구조
 
-현재 저장소는 `README.md`와 `AGENTS.md` 중심의 문서 단계다. 소스 디렉터리는 아직 생성하지 않는다. 아래는 향후 기능 구현 시 참고할 구조 예시이며, 필요한 패키지만 만든다.
+현재는 Spring 부트스트랩과 도메인별 Controller·DTO 계약 골격이 있다. Service·Repository·Port·Adapter는 실제 기능을 구현할 때 필요한 범위만 추가한다.
 
 ```text
 src/main/java/com/bintime/
+├── BintimeApplication.java
+├── common/             # Swagger 설정, 공통 응답·오류 봉투
 ├── user/
 ├── notification/
 ├── search/
@@ -88,20 +90,73 @@ src/main/java/com/bintime/
 └── chatting/
 ```
 
-각 도메인은 MVC 계층을 기본으로 다음처럼 구성할 수 있다.
+각 도메인의 현재 구조와 향후 추가할 패키지는 다음과 같다.
 
 ```text
 <domain>/
-├── controller/
-├── service/
-├── repository/
-├── entity/
-├── dto/
+├── controller/     # 현재: HTTP 매핑, Swagger 문서, 501 스텁
+├── dto/            # 현재: 요청·응답 및 실시간 프레임 계약
+├── service/        # 추후 구현
+├── repository/     # 추후 구현
+├── entity/         # 추후 구현
 ├── port/           # 외부 기능 인터페이스가 필요할 때 추가
 └── adapter/        # 해당 Port의 외부 연동 구현
 ```
 
-패키지 루트 `com.bintime`은 예시다. 실행 클래스, 빌드 도구, 의존성, Docker 및 Nginx 설정은 아직 추가하지 않았다.
+패키지 루트는 `com.bintime`이며 Gradle을 사용한다. 인프라 실행 설정은 [infra/README.md](infra/README.md)를 참고한다.
+
+## 로컬·배포 DB 연결
+
+기본 Spring 프로필은 `local`이다. 저장소 루트 `.env`의 설정을 `application-local.properties`에서 읽고, `compose.dev.yaml`도 같은 값으로 Oracle·Redis를 구성한다.
+
+```bash
+# 최초 1회. 기존 .env가 있으면 필요한 키만 추가한다.
+cp -n .env.example .env
+docker compose -f compose.dev.yaml up --detach --wait --wait-timeout 600
+./gradlew bootRun
+```
+
+IntelliJ에서도 Working directory를 저장소 루트로 지정하면 동일하게 실행된다. `application-prod.properties`는 배포 Compose가 서버 `.env`에서 주입하는 환경 변수를 사용한다. 서버 템플릿은 `.env.prod.example`이다. 프로필별 설정과 DataGrip 연결값은 [인프라 안내](infra/README.md#환경별-설정-파일)를 참고한다.
+
+## API 계약 및 Swagger
+
+[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 이름과 요청·응답 스키마를 맞췄으며 실제 처리 로직은 아직 없다.
+
+- [API별 Controller·DTO 이름 매핑](docs/contracts/api.md)
+- [SSE·WebSocket 계약](docs/contracts/realtime.md)
+- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+- 기본 선택 `all`: `/v3/api-docs/all` (전체 45개 operation)
+- 외부 API OpenAPI: `/v3/api-docs/public` (43개 operation)
+- 내부 계약 OpenAPI: `/v3/api-docs/internal` (2개 operation)
+
+DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 명령을 실행한다. Gradle toolchain은 Java 21을 사용한다.
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=api-docs'
+```
+
+개발 단계에서는 Spring Security와 OAuth2 Client 의존성을 제외했다. API와 Swagger는 로그인 없이 접근하며 CSRF 헤더도 런타임에서 요구하지 않는다. Swagger의 세션 쿠키와 인증·CSRF 설명은 향후 구현할 API 계약이다. `api-docs` 프로필은 문서 검토용이며 Swagger의 API 실행 기능은 비활성화한다.
+
+Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 문서의 200·201 등은 향후 구현할 성공 계약이다. 필수 입력에 대한 요청 바인딩은 그 전에 요청을 거절할 수 있다. 인증·권한·CSRF 검증, 비즈니스 검증, 예약, AI 호출, SSE/WS 전송은 구현하지 않았다.
+
+### 공통 JSON 응답
+
+`BaseResponse<T>`를 성공 DTO `ApiResponse<T>`와 실패 DTO `ApiErrorResponse`가 상속한다. `/api/v1/**`의 일반 응답은 자동 wrapping하며, 이미 공통 DTO인 응답은 중복으로 감싸지 않는다. `meta`는 서버가 채우며 `timestamp`(Asia/Seoul)와 `path`(쿼리 제외)만 제공한다.
+
+```json
+{
+  "resultType": "SUCCESS",
+  "success": { "data": { "id": "usr_001" } },
+  "error": null,
+  "meta": { "timestamp": "2026-07-12T07:00:00", "path": "/api/v1/users/me" }
+}
+```
+
+실패는 `resultType: "FAILURE"`, `success: null`, `error: {code, message, details, retryable}`이며 HTTP 오류 상태를 유지한다. 입력 바인딩 오류와 미구현 501도 같은 형식이다. 기존 Notion의 `data/meta(requestId, serverTime)` 응답 봉투는 이 구조로 대체했으며 각 도메인 데이터의 필드는 유지한다.
+
+204·205·리다이렉트는 본문 없이 유지하고, SSE·WebSocket은 각 전송 프레임을 유지한다. Swagger와 Actuator 응답에는 API 봉투를 적용하지 않는다. 상세 사용법은 [공통 응답 계약](docs/contracts/response.md)을 참고한다.
+
+Notion v0.1의 알림 대상·슬롯 상태 정책은 기존 기획과 차이가 있어 [계약 문서](docs/contracts/api.md)에 기록했다. 이번 변경은 해당 정책을 실행하지 않는다.
 
 ## 예약 연결 흐름
 
@@ -123,8 +178,16 @@ src/main/java/com/bintime/
 - 실시간 전달 채널과 재시도·복구 수단을 구분한다. Redis 사용만으로 전달 보장이나 초저지연 달성을 가정하지 않는다.
 - 동일 사용자·슬롯의 중복 알림을 방지하고, 연결이 끊긴 사용자는 저장된 알림을 다시 조회할 수 있게 한다.
 - 슬롯 등록→매칭 완료→발송→클라이언트 수신 구간의 지연과 실패율을 측정한다. 필요 시 p95/p99 지연과 연결 수를 함께 확인한다.
-- 알림 채널은 SSE·WebSocket·모바일 푸시 중 클라이언트 요구에 따라 결정한다. 사장님과의 채팅 채널은 WebSocket을 사용한다.
+- 통합 API 명세의 알림 채널은 SSE이며, 비접속 사용자는 동의한 웹 푸시로 보완한다. 사장님과의 채팅 채널은 WebSocket을 사용한다.
 
 ## 개발 및 검증
 
-작업 전 [AGENTS.md](AGENTS.md)를 확인한다. 현재는 문서 단계이므로 실행·포맷·테스트 명령이 없다. Spring 초기 설정 시 빌드 도구와 버전을 결정하고 실제 검증 명령을 이 문서에 추가한다.
+작업 전 [AGENTS.md](AGENTS.md)를 확인한다.
+
+```bash
+./gradlew format
+./gradlew test
+./gradlew build
+```
+
+`format`은 API 골격의 Java 코드를 포맷한다. 기존 부트스트랩 파일은 대상에서 제외한다. 계약 테스트는 Notion에서 조회한 요청·응답 예시와 전체 경로를 Swagger에 대조하고 DTO 역직렬화와 501 스텁을 검증한다. 테스트는 H2와 문서용 프로필을 사용하며 외부 AI·DB·Redis 연결이 필요하지 않다.

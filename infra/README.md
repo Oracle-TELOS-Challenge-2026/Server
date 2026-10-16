@@ -6,7 +6,7 @@ Java 21 · Spring Boot · Gradle · Oracle · Redis를 사용한다.
 
 | 환경 | DB | Spring 프로필 |
 | --- | --- | --- |
-| 개인 개발 | 각 PC의 Oracle Free 26ai 컨테이너 | `dev` (기본값) |
+| 개인 개발 | 각 PC의 Oracle Free 26ai 컨테이너 | `local` (기본값) |
 | 자동 테스트 | 매 실행 시 생성하는 메모리 H2 | `test` |
 | 배포·시연 | OCI Autonomous DB | `prod` (배포 Compose에서 지정) |
 
@@ -36,31 +36,58 @@ git switch -c feat/user-login
 
 ## 로컬 실행
 
-Docker Desktop을 실행하고 개발용 Oracle·Redis를 띄운다. `.env`나 OCI 접속 정보는 필요 없다.
+Docker Desktop을 실행하고 저장소 루트에 로컬 `.env`를 만든 뒤 Oracle·Redis를 띄운다. OCI 접속 정보는 필요 없다.
 Oracle 이미지와 데이터 파일을 위해 디스크 여유 공간을 확보한다. 첫 실행은 이미지 다운로드와 DB 초기화로 몇 분 걸릴 수 있다.
-Oracle Lite 이미지의 ARM64·AMD64 태그와 Compose 설정은 확인했다. 현재 담당자 PC의 디스크 공간 부족으로 로컬 Oracle 초기화·앱 연결은 아직 검증하지 못했다.
+Oracle Lite 이미지의 ARM64·AMD64 태그와 Compose 설정을 사용한다. 로컬 컨테이너에서 앱 계정 생성과 SQL 로그인을 검증했다.
 
 ```sh
+# 최초 1회. 기존 .env가 있으면 덮어쓰지 않고 필요한 키만 추가한다.
+cp -n .env.example .env
 docker compose -f compose.dev.yaml up --detach --wait --wait-timeout 600
 ```
 
-`BINTIME_APP` 계정은 최초 DB 볼륨 생성 시 자동으로 만들어진다.
+Lite 이미지의 `startup` 스크립트(`infra/oracle/local-setup/01-app-user.sh`)가 없는 `USERS` 테이블스페이스와 `.env`의 `DB_USERNAME` 계정을 생성한다. 최초 비밀번호는 `DB_PASSWORD`다. 재시작 시 기존 계정·비밀번호·데이터는 유지한다.
+기존 컨테이너에 이 설정을 반영할 때도 위 `up` 명령을 사용한다. 볼륨을 삭제할 필요는 없다.
 개발 Compose는 별도의 `bintime-dev` 프로젝트와 볼륨을 사용한다. Oracle·Redis 포트는 `127.0.0.1`에만 노출한다.
-저장소에 있는 고정 비밀번호는 로컬 컨테이너 전용이다. 배포 DB·Redis에는 별도 비밀번호를 사용한다.
+`.env.example`의 예시 비밀번호는 로컬 컨테이너 전용이다. 배포 DB·Redis에는 별도 비밀번호를 사용한다.
 개발 PC의 공인 IP를 OCI DB 허용 목록에 등록할 필요가 없다.
 
 이전에 로컬에서 배포용 Compose를 실행했다면 포트 충돌을 피하도록 먼저 `docker compose down`을 실행한다. `--volumes`는 붙이지 않는다.
 
 ### IntelliJ에서 개발할 때
 
-추가 환경 변수 없이 `BintimeApplication`을 실행하거나 다음 명령을 쓴다. 기본 프로필은 `dev`다.
-기존 Run Configuration에 `SPRING_PROFILES_ACTIVE=prod`, `SPRING_DATASOURCE_*` 등을 설정했다면 로컬 실행에서는 제거한다.
+Run Configuration의 Working directory를 저장소 루트로 지정하고 `BintimeApplication`을 실행하거나 다음 명령을 쓴다. 기본 프로필은 `local`이다. Spring은 `application-local.properties`의 config import로 루트 `.env`를 읽는다.
+기존 Run Configuration에 `SPRING_PROFILES_ACTIVE=dev/prod`, `SPRING_DATASOURCE_*`, `DB_*`, `REDIS_*` 등을 설정했다면 로컬 실행에서는 제거하거나 의도한 값으로 맞춘다. 환경 변수는 `.env`보다 우선한다.
 
 ```sh
 ./gradlew bootRun
 ```
 
-DataGrip의 개발 DB 연결은 다음과 같다. 기존 Autonomous DB 연결과 별도 데이터 소스로 추가한다.
+### 환경별 설정 파일
+
+| 파일 | 역할 |
+| --- | --- |
+| `application.properties` | 공통 설정과 기본 프로필 `local` |
+| `application-local.properties` | 루트 `.env`를 읽고 DB·Redis 연결값에 적용 |
+| `application-prod.properties` | 배포 Compose가 주입한 DB·Redis 환경 변수 사용 |
+| `.env.example` | 로컬 `.env` 템플릿 |
+| `.env.prod.example` | 서버 `.env` 템플릿 |
+
+로컬 `.env`는 Spring의 Java Properties 형식과 Compose가 함께 읽으므로 따옴표, `export`, 인라인 주석, 변수 확장 없이 `KEY=value`로 작성한다. 값은 예시처럼 ASCII 영문·숫자와 `_ . - : / @ !` 범위로 작성한다.
+
+- `ORACLE_PWD`: 로컬 Oracle 관리자 비밀번호. 앱 계정 비밀번호와 별개다.
+- `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`: 호스트에서 실행하는 Spring의 Oracle 연결값. 계정명은 영문 대문자로 시작하는 1~30자의 대문자·숫자·밑줄이다.
+- `ORACLE_PORT`: 호스트에 노출하는 Oracle 포트. 변경하면 `DB_URL`의 포트도 함께 변경한다. 서비스 이름은 `FREEPDB1`이다.
+- `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`: 호스트에서 실행하는 Spring의 Redis 연결값. Compose는 `REDIS_PORT`로 호스트 포트를 노출한다.
+- 개발 Compose는 Oracle·Redis만 실행한다. Spring은 IDE나 `bootRun`으로 호스트에서 실행하므로 호스트명은 `localhost`를 사용한다.
+- 기존 Oracle 계정은 `.env`의 비밀번호를 바꿔도 자동 변경하지 않는다. 실제 계정 비밀번호와 `.env`를 함께 변경해야 한다.
+- `.env`는 Git과 Docker 이미지에서 제외한다. 테스트용 `test`, 문서용 `api-docs` 프로필은 유지한다.
+
+명시적으로 프로필을 지정하려면 `./gradlew bootRun --args='--spring.profiles.active=local'`을 사용한다. 배포는 `prod`를 지정한다.
+
+### DataGrip
+
+DataGrip의 개발 DB 연결은 `.env` 값에 맞춘다. 아래는 템플릿 기본값이며 기존 Autonomous DB 연결과 별도 데이터 소스로 추가한다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -90,8 +117,9 @@ Oracle Free와 Autonomous DB는 관리 기능·접속 방식 등이 다르므로
 - 서버는 `opc@140.238.19.165`, Oracle Linux 9 / ARM64, 실행 폴더는 `~/bintime`이다.
 
 배포용 파일은 `compose.yaml`이며 로컬 개발용 `compose.dev.yaml`과 섞어서 사용하지 않는다.
-서버 `.env`에는 `.env.example`을 참고해 OCI JDBC URL 전체, `BINTIME_APP` 비밀번호, 별도 Redis 비밀번호를 설정한다.
+서버 `.env`에는 `.env.prod.example`을 참고해 OCI JDBC URL 전체, `BINTIME_APP` 비밀번호, 별도 Redis 비밀번호를 설정한다.
 `$`, `#`, 공백이 들어간 값은 작은따옴표로 감싼다. 배포용 Compose는 `prod` 프로필을 명시하고 환경 변수가 없으면 실행을 중단한다.
+Spring의 `prod` 프로필은 로컬 `.env`를 직접 읽지 않는다. 서버에서는 `compose.yaml`이 `.env`를 읽어 app 컨테이너에 필요한 변수를 주입한다. 직접 JAR로 실행할 경우 같은 값을 프로세스 환경 변수로 제공한다.
 `.env`는 Git·Docker 이미지에 포함하지 않는다.
 
 필요할 때만 ARM64 이미지를 빌드해서 SSH로 직접 전달한다.
