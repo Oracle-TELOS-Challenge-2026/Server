@@ -11,4 +11,6 @@ public record CreateWaitlistRequest(
             allowableValues = {"STORE_DETAIL", "RESERVATION_FAILED", "NATURAL_LANGUAGE", "MANUAL"})
         String source,
     @Schema(description = "예약 조건. 변경 시 객체 전체 교체", requiredMode = Schema.RequiredMode.REQUIRED)
-        WaitlistConditions conditions) {}
+        WaitlistConditions conditions,
+    @Schema(description = "명시적 알림 동의. true 필수", requiredMode = Schema.RequiredMode.REQUIRED)
+        Boolean notificationConsent) {}

@@ -28,7 +28,26 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "search")
 public class WaitlistController {
 
-  // 실제 처리 전까지 성공으로 오인되지 않도록 모든 요청에 501을 반환한다.
+  private final org.springframework.beans.factory.ObjectProvider<
+          com.bintime.search.service.WaitlistService>
+      provider;
+
+  public WaitlistController(
+      org.springframework.beans.factory.ObjectProvider<com.bintime.search.service.WaitlistService>
+          provider) {
+    this.provider = provider;
+  }
+
+  private com.bintime.search.service.WaitlistService service() {
+    var service = provider.getIfAvailable();
+    if (service == null) throw com.bintime.search.service.SearchFailure.unavailable();
+    return service;
+  }
+
+  private String user(jakarta.servlet.http.HttpServletRequest http) {
+    return (String) http.getAttribute("search.user");
+  }
+
   @Operation(
       operationId = "createWaitlist",
       summary = "S-03 · 빈자리 대기 등록",
@@ -38,13 +57,13 @@ public class WaitlistController {
               + "- CUSTOMER — 본인 데이터\n"
               + "- X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481b491eafe6165c139c9"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "201",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공 응답",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -114,16 +133,36 @@ public class WaitlistController {
       responseCode = "409",
       description = "DUPLICATE_WAITLIST: 동일한 ACTIVE 대기 조건이 존재",
       content = @Content)
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(
+      responseCode = "400",
+      description = "잘못된 입력 또는 커서 (retryable=false)",
+      content = @Content)
+  @ApiResponse(responseCode = "401", description = "인증 필요 (retryable=false)", content = @Content)
+  @ApiResponse(
+      responseCode = "403",
+      description = "권한 또는 CSRF/내부 인증 실패 (retryable=false)",
+      content = @Content)
+  @ApiResponse(
+      responseCode = "404",
+      description = "본인 리소스 없음 (retryable=false)",
+      content = @Content)
+  @ApiResponse(
+      responseCode = "503",
+      description = "외부 의존 기능 장애. 수동 입력 또는 재시도 가능 (retryable=true)",
+      content = @Content)
   @PostMapping(
       value = "/api/v1/search/waitlists",
       produces = MediaType.APPLICATION_JSON_VALUE,
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<WaitlistResponse>> createWaitlist(
+      jakarta.servlet.http.HttpServletRequest http,
       @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestHeader("Idempotency-Key") String idempotencyKey,
       @RequestBody CreateWaitlistRequest request) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(
+            com.bintime.common.dto.ApiResponse.success(
+                service().create(user(http), idempotencyKey, request)));
   }
 
   @Operation(
@@ -132,13 +171,13 @@ public class WaitlistController {
       description =
           "status 기본 ACTIVE. 후보를 store 원장에서 재검증. 제안은 선점 아님.\n\n"
               + "- CUSTOMER — 본인 데이터\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481cd9cf8d1076661e3cf"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공 응답",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -218,9 +257,26 @@ public class WaitlistController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(
+      responseCode = "400",
+      description = "잘못된 입력 또는 커서 (retryable=false)",
+      content = @Content)
+  @ApiResponse(responseCode = "401", description = "인증 필요 (retryable=false)", content = @Content)
+  @ApiResponse(
+      responseCode = "403",
+      description = "권한 또는 CSRF/내부 인증 실패 (retryable=false)",
+      content = @Content)
+  @ApiResponse(
+      responseCode = "404",
+      description = "본인 리소스 없음 (retryable=false)",
+      content = @Content)
+  @ApiResponse(
+      responseCode = "503",
+      description = "외부 의존 기능 장애. 수동 입력 또는 재시도 가능 (retryable=true)",
+      content = @Content)
   @GetMapping(value = "/api/v1/search/waitlists/me", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<WaitlistListResponse>> getMyWaitlists(
+      jakarta.servlet.http.HttpServletRequest http,
       @io.swagger.v3.oas.annotations.Parameter(
               schema =
                   @io.swagger.v3.oas.annotations.media.Schema(
@@ -232,7 +288,9 @@ public class WaitlistController {
               schema = @io.swagger.v3.oas.annotations.media.Schema(minimum = "1", maximum = "100"))
           @RequestParam(value = "limit", required = false, defaultValue = "20")
           Integer limit) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(
+            service().list(user(http), status, cursor, limit)));
   }
 
   @Operation(
@@ -241,13 +299,13 @@ public class WaitlistController {
       description =
           "최신 예약 가능 Offer 최대 3개를 startAt 오름차순 반환. 상태와 availability를 구분.\n\n"
               + "- CUSTOMER — 본인 데이터\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4817c935cd20b6950f87a"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공 응답",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -313,13 +371,30 @@ public class WaitlistController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(
+      responseCode = "400",
+      description = "잘못된 입력 또는 커서 (retryable=false)",
+      content = @Content)
+  @ApiResponse(responseCode = "401", description = "인증 필요 (retryable=false)", content = @Content)
+  @ApiResponse(
+      responseCode = "403",
+      description = "권한 또는 CSRF/내부 인증 실패 (retryable=false)",
+      content = @Content)
+  @ApiResponse(
+      responseCode = "404",
+      description = "본인 리소스 없음 (retryable=false)",
+      content = @Content)
+  @ApiResponse(
+      responseCode = "503",
+      description = "외부 의존 기능 장애. 수동 입력 또는 재시도 가능 (retryable=true)",
+      content = @Content)
   @GetMapping(
       value = "/api/v1/search/waitlists/{waitlistId}",
       produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<WaitlistResponse>> getWaitlist(
-      @PathVariable("waitlistId") String waitlistId) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+      jakarta.servlet.http.HttpServletRequest http, @PathVariable("waitlistId") String waitlistId) {
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(service().get(user(http), waitlistId)));
   }
 
   @Operation(
@@ -329,13 +404,13 @@ public class WaitlistController {
           "conditions 전체 교체. ACTIVE만 수정. 이전 Offer 무효화 후 재매칭.\n\n"
               + "- CUSTOMER — 본인 데이터\n"
               + "- X-CSRF-Token 필수\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481959feaea05c12928b2"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공 응답",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -384,16 +459,36 @@ public class WaitlistController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(
+      responseCode = "400",
+      description = "잘못된 입력 또는 커서 (retryable=false)",
+      content = @Content)
+  @ApiResponse(responseCode = "401", description = "인증 필요 (retryable=false)", content = @Content)
+  @ApiResponse(
+      responseCode = "403",
+      description = "권한 또는 CSRF/내부 인증 실패 (retryable=false)",
+      content = @Content)
+  @ApiResponse(
+      responseCode = "404",
+      description = "본인 리소스 없음 (retryable=false)",
+      content = @Content)
+  @ApiResponse(
+      responseCode = "503",
+      description = "외부 의존 기능 장애. 수동 입력 또는 재시도 가능 (retryable=true)",
+      content = @Content)
+  @ApiResponse(responseCode = "409", description = "상태/버전/중복 충돌", content = @Content)
   @PatchMapping(
       value = "/api/v1/search/waitlists/{waitlistId}",
       produces = MediaType.APPLICATION_JSON_VALUE,
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<WaitlistResponse>> updateWaitlist(
+      jakarta.servlet.http.HttpServletRequest http,
       @PathVariable("waitlistId") String waitlistId,
       @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestBody UpdateWaitlistRequest request) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(
+            service().update(user(http), waitlistId, request)));
   }
 
   @Operation(
@@ -404,13 +499,13 @@ public class WaitlistController {
               + "- CUSTOMER — 본인 데이터\n"
               + "- X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48168ac03e08aa5df488c"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공 응답",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -459,16 +554,36 @@ public class WaitlistController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(
+      responseCode = "400",
+      description = "잘못된 입력 또는 커서 (retryable=false)",
+      content = @Content)
+  @ApiResponse(responseCode = "401", description = "인증 필요 (retryable=false)", content = @Content)
+  @ApiResponse(
+      responseCode = "403",
+      description = "권한 또는 CSRF/내부 인증 실패 (retryable=false)",
+      content = @Content)
+  @ApiResponse(
+      responseCode = "404",
+      description = "본인 리소스 없음 (retryable=false)",
+      content = @Content)
+  @ApiResponse(
+      responseCode = "503",
+      description = "외부 의존 기능 장애. 수동 입력 또는 재시도 가능 (retryable=true)",
+      content = @Content)
+  @ApiResponse(responseCode = "409", description = "상태/버전/멱등키 충돌", content = @Content)
   @PostMapping(
       value = "/api/v1/search/waitlists/{waitlistId}/cancel",
       produces = MediaType.APPLICATION_JSON_VALUE,
       consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<WaitlistResponse>> cancelWaitlist(
+      jakarta.servlet.http.HttpServletRequest http,
       @PathVariable("waitlistId") String waitlistId,
       @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestHeader("Idempotency-Key") String idempotencyKey,
       @RequestBody CancelWaitlistRequest request) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(
+            service().cancel(user(http), waitlistId, idempotencyKey, request)));
   }
 }

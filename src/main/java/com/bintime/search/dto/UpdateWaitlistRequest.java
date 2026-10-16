@@ -10,4 +10,6 @@ public record UpdateWaitlistRequest(
             description = "변경 전 리소스 버전. 불일치 시 409 VERSION_CONFLICT",
             requiredMode = Schema.RequiredMode.REQUIRED,
             example = "1")
-        Long expectedVersion) {}
+        Long expectedVersion,
+    @Schema(description = "명시적 알림 동의. true 필수", requiredMode = Schema.RequiredMode.REQUIRED)
+        Boolean notificationConsent) {}

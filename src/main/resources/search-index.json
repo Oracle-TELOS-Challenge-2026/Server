@@ -1,0 +1,51 @@
+{
+  "mappings": {
+    "properties": {
+      "document": {
+        "type": "object",
+        "enabled": false
+      },
+      "id": {
+        "type": "keyword"
+      },
+      "name": {
+        "type": "text"
+      },
+      "description": {
+        "type": "text"
+      },
+      "category": {
+        "type": "keyword"
+      },
+      "location": {
+        "type": "geo_point"
+      },
+      "embedding": {
+        "type": "dense_vector",
+        "dims": 1536,
+        "index": true,
+        "similarity": "cosine"
+      },
+      "slots": {
+        "type": "nested",
+        "properties": {
+          "id": {
+            "type": "keyword"
+          },
+          "startAt": {
+            "type": "date"
+          },
+          "endAt": {
+            "type": "date"
+          },
+          "payablePrice": {
+            "type": "long"
+          },
+          "source": {
+            "type": "keyword"
+          }
+        }
+      }
+    }
+  }
+}

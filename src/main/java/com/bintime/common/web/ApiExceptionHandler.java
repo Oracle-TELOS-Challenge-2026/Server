@@ -32,6 +32,17 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     return failure(status, headers, path);
   }
 
+  @ExceptionHandler(com.bintime.search.service.SearchFailure.class)
+  ResponseEntity<Object> handleSearch(
+      com.bintime.search.service.SearchFailure ex, HttpServletRequest request) {
+    return ResponseEntity.status(ex.status)
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            new ApiErrorResponse(
+                new ApiError(ex.code, ex.getMessage(), List.of(), ex.retryable()),
+                ResponseMeta.now(request.getRequestURI())));
+  }
+
   @ExceptionHandler(Exception.class)
   ResponseEntity<Object> handleUnexpectedException(Exception ex, HttpServletRequest request)
       throws Exception {
@@ -40,6 +51,16 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
     log.error("API request failed: {}", request.getRequestURI(), ex);
     return failure(HttpStatus.INTERNAL_SERVER_ERROR, new HttpHeaders(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(com.bintime.common.web.ApiBusinessException.class)
+  ResponseEntity<Object> handleStoreException(
+      com.bintime.common.web.ApiBusinessException ex, HttpServletRequest request) {
+    return ResponseEntity.status(ex.status)
+        .body(
+            new ApiErrorResponse(
+                new ApiError(ex.code, ex.getMessage(), List.of(), false),
+                ResponseMeta.now(request.getRequestURI())));
   }
 
   private ResponseEntity<Object> failure(HttpStatusCode status, HttpHeaders headers, String path) {

@@ -1,0 +1,114 @@
+{
+  "type": "object",
+  "properties": {
+    "supported": {
+      "type": "boolean"
+    },
+    "conditions": {
+      "type": "object",
+      "properties": {
+        "storeId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "serviceId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "windowStart": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "windowEnd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "radiusMeters": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "maxPrice": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "location": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "latitude": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "longitude": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "latitude",
+            "longitude"
+          ],
+          "additionalProperties": false
+        },
+        "keywords": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "storeId",
+        "category",
+        "serviceId",
+        "windowStart",
+        "windowEnd",
+        "radiusMeters",
+        "maxPrice",
+        "location",
+        "keywords"
+      ],
+      "additionalProperties": false
+    },
+    "serviceText": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "구체적인 시술을 요청하면 원문 시술명. 일반 카테고리 요청은 null. 실제 ID는 서버가 검증한다."
+    }
+  },
+  "required": [
+    "supported",
+    "conditions",
+    "serviceText"
+  ],
+  "additionalProperties": false
+}

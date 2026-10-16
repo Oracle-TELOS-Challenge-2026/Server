@@ -12,7 +12,6 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,20 +26,30 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "store")
 public class OwnerVacancyController {
 
-  // 실제 처리 전까지 성공으로 오인되지 않도록 모든 요청에 501을 반환한다.
+  private final com.bintime.store.service.StoreApplicationService svc;
+  private final com.bintime.common.auth.CurrentActor actor;
+
+  public OwnerVacancyController(
+      @org.springframework.context.annotation.Lazy
+          com.bintime.store.service.StoreApplicationService svc,
+      com.bintime.common.auth.CurrentActor actor) {
+    this.svc = svc;
+    this.actor = actor;
+  }
+
   @Operation(
       operationId = "getVacancies",
       summary = "ST-14 · 취소·노쇼 빈자리 목록 조회",
       description =
           "occurredAt 내림차순. 미발행 DRAFT와 발행 완료 상태를 구분한다.\n\n"
               + "- OWNER — 해당 매장 소유자\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "Oracle 영속 데이터와 도메인 규칙을 검증합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481a49fc5db03d18be940"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -90,7 +99,10 @@ public class OwnerVacancyController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "404", description = "리소스 없음")
   @GetMapping(
       value = "/api/v1/owner/stores/{storeId}/vacancies",
       produces = MediaType.APPLICATION_JSON_VALUE)
@@ -107,7 +119,10 @@ public class OwnerVacancyController {
               schema = @io.swagger.v3.oas.annotations.media.Schema(minimum = "1", maximum = "100"))
           @RequestParam(value = "limit", required = false, defaultValue = "20")
           Integer limit) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok()
+        .body(
+            com.bintime.common.dto.ApiResponse.success(
+                svc.vacancies(actor.get(), storeId, status, cursor, limit)));
   }
 
   @Operation(
@@ -119,13 +134,13 @@ public class OwnerVacancyController {
               + "- OWNER — 해당 매장 소유자\n"
               + "- X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "Oracle 영속 데이터와 도메인 규칙을 검증합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481ae89e8eb205f157f7e"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -186,7 +201,11 @@ public class OwnerVacancyController {
                             }
                           }
                           """)))
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "404", description = "리소스 없음")
+  @ApiResponse(responseCode = "409", description = "상태·버전·시간·가격 충돌")
   @PostMapping(
       value = "/api/v1/owner/stores/{storeId}/vacancies/{vacancyId}/publish",
       produces = MediaType.APPLICATION_JSON_VALUE,
@@ -197,7 +216,10 @@ public class OwnerVacancyController {
       @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
       @RequestHeader("Idempotency-Key") String idempotencyKey,
       @RequestBody PublishVacancyRequest request) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok()
+        .body(
+            com.bintime.common.dto.ApiResponse.success(
+                svc.publish(actor.get(), storeId, vacancyId, idempotencyKey, request)));
   }
 
   @Operation(
@@ -208,13 +230,13 @@ public class OwnerVacancyController {
               + "- OWNER — 해당 매장 소유자\n"
               + "- X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)\n\n"
-              + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
+              + "Oracle 영속 데이터와 도메인 규칙을 검증합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481799276c9f05e1a32ec"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(
       responseCode = "200",
-      description = "명세상 성공 응답 (미구현)",
+      description = "성공",
       useReturnTypeSchema = true,
       content =
           @Content(
@@ -278,7 +300,10 @@ public class OwnerVacancyController {
       responseCode = "409",
       description = "VACANCY_ALREADY_FILLED: 이미 예약된 빈자리",
       content = @Content)
-  @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
+  @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "404", description = "리소스 없음")
   @PostMapping(
       value = "/api/v1/owner/stores/{storeId}/vacancies/{vacancyId}/withdraw",
       produces = MediaType.APPLICATION_JSON_VALUE,
@@ -290,6 +315,9 @@ public class OwnerVacancyController {
           @RequestHeader(value = "X-CSRF-Token", required = false) String csrfToken,
           @RequestHeader("Idempotency-Key") String idempotencyKey,
           @RequestBody WithdrawVacancyRequest request) {
-    throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    return ResponseEntity.ok()
+        .body(
+            com.bintime.common.dto.ApiResponse.success(
+                svc.withdraw(actor.get(), storeId, vacancyId, idempotencyKey, request)));
   }
 }

@@ -13,7 +13,10 @@ import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = "bintime.auth.client-id=")
+    properties = {
+      "spring.datasource.url=jdbc:h2:mem:kakao-unconfigured-test;DB_CLOSE_DELAY=-1",
+      "bintime.auth.client-id="
+    })
 @ActiveProfiles("test")
 class KakaoUnconfiguredTests {
   @LocalServerPort private int port;
