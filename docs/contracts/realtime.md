@@ -30,6 +30,8 @@ data: {"notification":{"id":"noti_001","type":"VACANCY_MATCHED"}}
 
 ## FCM 알림 등록·발송 — N-04~06
 
+store 발행 → search 매칭 → 알림 접수·발송의 연결과 통합 테스트는 [store 알림 통합](../store-notification-integration.md)을 참고한다.
+
 - N-04 `POST /api/v1/notifications/push-subscriptions`는 `{"installationId":"<FID>"}`만 받는다. 문자열 1~128자이며 공백·제어문자는 허용하지 않는다. 이전 Web Push endpoint/keys 계약은 대체됐다.
 - 신규 연결은 201, 같은 사용자·FID 재등록은 같은 구독 ID와 최초 createdAt을 유지하며 200이다. `expiresAt:null`은 Firebase 만료 시각을 알 수 없다는 의미다. 다른 계정의 활성 FID는 409 `SUBSCRIPTION_IN_USE`다.
 - 한 세션의 새 FID 등록은 이전 연결을 원자적으로 교체한다. 같은 FID를 공유하는 다른 유효 세션과 다른 브라우저 FID는 유지한다.

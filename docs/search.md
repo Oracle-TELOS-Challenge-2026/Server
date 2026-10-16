@@ -195,3 +195,5 @@ SEARCH_ELASTICSEARCH_URL=http://localhost:9200 ./gradlew test --tests '*StoreCat
 실제 Oracle도 연결하려면 빈 전용 테스트 스키마에 최신 전체 초기 DDL과 search DDL을 적용하고 `CATALOG_ORACLE_URL/USER/PASSWORD`를 제공한다. USER는 안전장치로 `BT_CATALOG_` + 대문자 16진수 12자리여야 한다. 테스트는 업무 행을 생성하므로 앱 스키마를 사용하지 않는다. 테스트용 ES alias/index는 UUID로 분리하고 종료 시 정리한다.
 
 검증 기록: 격리 Oracle + 실제 ES에서 위 흐름을 통과했고, 로컬 앱 DB에서도 서버를 기동해 초기 `bintime-stores` alias 생성과 S-01 HTTP 200을 확인했다. 로컬에는 매장/슬롯이 0건이라 응답은 빈 목록이며 테스트용 업무 데이터를 앱 DB에 추가하지 않았다. 점검 서버는 종료했고 ES 컨테이너와 초기 인덱스는 유지했다.
+
+알림 연결의 실제 Bean·로컬 DDL·Oracle 통합 검증·남은 실기기 QA는 [Search → Notification 연결](search-notification-integration.md)을 따른다. 정상 프로필에서 알림 대체 Bean을 사용하지 않으며 `NotificationSchemaVerifier`가 누락된 알림 JDBC 열을 기동 시 검증한다. 로컬 알림 확장 후 전체 테이블은 25개이며 search 7개 구성은 유지된다.

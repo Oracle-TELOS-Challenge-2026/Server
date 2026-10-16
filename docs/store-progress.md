@@ -14,7 +14,7 @@
 | 원장 저장과 예약 정합성 | Oracle 저장, 고객·매장 잠금, 중복 예약 방어 구현 |
 | 대기를 연결한 예약 | search 공개 협력 서비스의 조건 검증·완료 및 같은 트랜잭션 롤백 구현 |
 | 후속 작업 저장·전달 | 매장·시술·공급·예약 변경 저장과 search 영속 큐 전달·재시도·lease 회수 구현 |
-| 검색·매칭·실제 알림까지 이어지는 흐름 | 조회·이벤트 전달·search 사용자 인증 구현. 알림 전역 설정·실제 전달·마감 연결은 남음 |
+| 검색·매칭·알림 연결 | store outbox → search 매칭 → 알림 저장·발송 작업 연결. 실제 기기 수신·배포 QA와 열린 화면 마감 갱신은 별도 |
 | 운영 인증 | 카카오 세션·CSRF 연결 및 선택적 Bearer JWT 검증 구현. 실제 배포 로그인 QA는 별도 |
 | 직접 QA | 격리된 Oracle QA 서버 준비와 36개 순차 요청 모음 제공 |
 | 운영 배포 | 로컬 검증 완료. 실제 배포 DB 반영·인증 개방·운영 연동은 별도 작업 |
@@ -106,10 +106,10 @@
 | STORE-NEXT-02 | 구현·H2/격리 Oracle 검증 완료 | StoreSearchCatalogService가 validate·available·revalidate·export·describe 제공 | 실제 원장 조회, 거리 필터 후 다중 페이지 순회, 예약·철회·만료·비활성 공급 제외 검증 |
 | STORE-NEXT-03 | 구현·H2/격리 Oracle 검증 완료 | 별도 search_version을 매장 잠금 아래 업무 변경과 함께 증가. export는 커밋된 동일 스냅샷 조회 | 기존 PATCH 버전 유지. 시술·슬롯·예약 상태 변경 반영, 롤백·멱등 재생 검증. 앱 DB에는 06 SQL 별도 적용 필요 |
 | STORE-NEXT-04 | 구현 · H2/격리 Oracle 검증 완료 | store_events를 search 큐에 전달. 생성·발행 매칭, 변경 문서 색인 접수. lease·재시도·동시 소비·롤백 구현 | PROCESSED는 search 접수 완료. 실제 알림 마감은 NEXT-05에 남음. 기존 DB에는 07 SQL 필요([전달 계약](store-event-delivery.md)) |
-| STORE-NEXT-05 | P0 · 상대 도메인 협업 필요 | search/notification과 제안 마감·예약 결과 전달 및 화면 갱신 연결 | 예약·철회·만료된 공급이 알림/제안과 고객·매장 화면에서 마감됨. 늦게 클릭해도 원장의 재검증으로 중복 예약 차단 |
-| STORE-NEXT-06 | P0 · 통합 검증 대기 | 실제 인증 및 검색·알림을 붙인 사용자 흐름 QA, 배포 DB 반영·기동 점검 | 대기 활성화 → 슬롯 발행 → 실제 제안/알림 → 예약 → 다른 고객의 마감 확인까지 검증. 배포 DB validate 통과 |
+| STORE-NEXT-05 | 서버 계약 연결 · 화면 갱신 남음 | search 매칭부터 notification 저장·재시도와 예약·철회·만료 재검증 연결. [알림 통합](store-notification-integration.md) 참고 | 발송 전 차단·목록 마감 반영 검증. 현재 SSE에는 마감 이벤트가 없어 열린 화면은 재조회 필요 |
+| STORE-NEXT-06 | 자동 통합 검증 추가 · 배포 QA 대기 | 실제 서비스·세션/CSRF 경로로 발행·매칭·알림·재예약 검증. 외부 공급자는 대역 사용 | 실제 카카오 로그인·FCM 기기 수신·배포 DB 적용과 기동 검증은 별도 |
 
-SearchStoreCatalog는 [StoreSearchCatalogService](../src/main/java/com/bintime/store/service/StoreSearchCatalogService.java)가 구현한다. 정상 실행에서는 이 Bean을 사용하고, DB 없는 api-docs에서는 기존 미연결 대체 Bean을 유지한다. search 사용자 인증과 store_events 소비자도 연결되었다. [search 인증](search-auth.md)과 [전달 계약](store-event-delivery.md)을 참고한다. 실제 알림 저장·발송·전역 설정과 마감 전달은 아직 별도 작업이다.
+SearchStoreCatalog는 [StoreSearchCatalogService](../src/main/java/com/bintime/store/service/StoreSearchCatalogService.java)가 구현한다. 정상 실행에서는 이 Bean을 사용하고, DB 없는 api-docs에서는 기존 미연결 대체 Bean을 유지한다. search 사용자 인증과 store_events 소비자도 연결되었다. [search 인증](search-auth.md), [전달 계약](store-event-delivery.md), [알림 통합](store-notification-integration.md)을 참고한다. 별도 전역 알림 설정 대신 유효 세션에 연결된 FID 구독과 활성 대기의 명시적 동의를 확인한다.
 
 검색 문서는 매장 정보뿐 아니라 시술·슬롯을 포함한다. 기존 매장 version은 PATCH 충돌 제어용으로 유지하고, 검색에는 별도 search_version을 사용한다. 갱신 범위·조회 규칙·마이그레이션은 [카탈로그 계약](store-catalog.md)에 기록했다.
 
