@@ -191,6 +191,24 @@ class StoreApiTests {
   }
 
   @Test
+  void newStoreAppearsOnMapBeforeServicesSlotsOrIndexWorkersRun() throws Exception {
+    String store = shop("alice");
+    var map =
+        ok(
+            "GET",
+            BASE + "/search/stores?latitude=37.5&longitude=127&radiusMeters=3000",
+            null,
+            null,
+            null,
+            200);
+    assertThat(map.path("items").size()).isEqualTo(1);
+    assertThat(map.at("/items/0/store/id").asText()).isEqualTo(store);
+    assertThat(map.at("/items/0/bestSlot").isNull()).isTrue();
+    assertThat(db.queryForObject("select count(*) from store_services", Integer.class)).isZero();
+    assertThat(db.queryForObject("select count(*) from store_slots", Integer.class)).isZero();
+  }
+
+  @Test
   void failedRegistrationAndTransactionRollbackDoNotGrantOwner() throws Exception {
     var invalid = new HashMap<>(shopRequest());
     invalid.put("category", "INVALID");

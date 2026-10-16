@@ -64,6 +64,9 @@ public class StoreSearchService {
     Query q =
         new Query(
             lat, lon, radius, keyword, category, from == null ? at : from, to, vacancy, sort, at);
+    // 기본 지도는 매장 탐색이다. 슬롯 등록이나 비동기 색인이 끝나기를 기다리지 않는다.
+    if (!vacancy && from == null && to == null && "DISTANCE".equals(sort))
+      return browse(q, state, limit);
     float[] vector = null;
     if (sort.equals("RECOMMENDED")) {
       var service = vectors.getIfAvailable();
@@ -170,6 +173,96 @@ public class StoreSearchService {
       index.close(pit);
       throw e;
     }
+  }
+
+  private StoreSearchResponse browse(Query q, SearchCursor.State state, int limit) {
+    String hash = WaitlistService.hash("store-map-v1:" + json.writeValueAsString(q));
+    if (state != null && (!"store-map".equals(state.pit()) || !hash.equals(state.queryHash())))
+      throw SearchFailure.bad("CURSOR_CONDITIONS_CHANGED");
+    var documents = new ArrayList<SearchStoreCatalog.StoreDocument>();
+    String cursor = null;
+    do {
+      var page = stores.export(cursor, 100);
+      for (var doc : page.items()) {
+        double distance =
+            ConditionRules.distance(q.latitude(), q.longitude(), doc.latitude(), doc.longitude());
+        if (distance > q.radiusMeters()) continue;
+        if (q.category() != null && !q.category().equals(doc.category())) continue;
+        if (q.keyword() != null && !q.keyword().isBlank()) {
+          String content =
+              (doc.name() + " " + Objects.toString(doc.description(), "")).toLowerCase(Locale.ROOT);
+          if (!content.contains(q.keyword().strip().toLowerCase(Locale.ROOT))) continue;
+        }
+        documents.add(doc);
+      }
+      cursor = page.nextCursor();
+    } while (cursor != null);
+    Comparator<SearchStoreCatalog.StoreDocument> order =
+        Comparator.comparingDouble(
+                (SearchStoreCatalog.StoreDocument doc) ->
+                    ConditionRules.distance(
+                        q.latitude(), q.longitude(), doc.latitude(), doc.longitude()))
+            .thenComparing(SearchStoreCatalog.StoreDocument::id);
+    documents.sort(order);
+    double afterDistance = state == null ? -1 : ((Number) state.after().getFirst()).doubleValue();
+    String afterId = state == null ? "" : (String) state.after().get(1);
+    var items = new ArrayList<StoreSearchResponse.Item>();
+    boolean more = false;
+    double lastDistance = 0;
+    String lastId = "";
+    for (var doc : documents) {
+      double distance =
+          ConditionRules.distance(q.latitude(), q.longitude(), doc.latitude(), doc.longitude());
+      if (distance < afterDistance
+          || (Double.compare(distance, afterDistance) == 0 && doc.id().compareTo(afterId) <= 0))
+        continue;
+      if (items.size() == limit) {
+        more = true;
+        break;
+      }
+      Slot best =
+          doc.slots().stream().filter(s -> eligible(q, s)).min(slotOrder("DISTANCE")).orElse(null);
+      items.add(
+          new StoreSearchResponse.Item(
+              new StoreSearchResponse.ItemStore(
+                  doc.id(),
+                  doc.name(),
+                  doc.category(),
+                  doc.imageUrl(),
+                  doc.rating() == null
+                      ? null
+                      : new StoreSearchResponse.ItemStoreRating(doc.rating(), doc.ratingCount())),
+              new StoreSearchResponse.ItemLocation(doc.latitude(), doc.longitude()),
+              (int) Math.round(distance),
+              null,
+              best == null
+                  ? null
+                  : new StoreSearchResponse.ItemBestSlot(
+                      best.id(),
+                      best.serviceId(),
+                      best.serviceName(),
+                      best.startAt(),
+                      best.originalPrice(),
+                      best.payablePrice(),
+                      "KRW",
+                      best.source(),
+                      best.version()),
+              List.of("NEARBY")));
+      lastDistance = distance;
+      lastId = doc.id();
+    }
+    long snapshot = q.snapshotAt().toInstant().toEpochMilli();
+    String next =
+        more
+            ? cursors.encode(
+                new SearchCursor.State(
+                    "store-map",
+                    List.of(lastDistance, lastId),
+                    hash,
+                    state == null ? snapshot + 300000 : state.expiresAt(),
+                    snapshot))
+            : null;
+    return new StoreSearchResponse(items, new CursorPage(next, more), q.snapshotAt());
   }
 
   private boolean eligible(Query q, Slot s) {

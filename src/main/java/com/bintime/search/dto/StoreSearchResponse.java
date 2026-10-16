@@ -29,7 +29,10 @@ public record StoreSearchResponse(
               requiredMode = Schema.RequiredMode.REQUIRED,
               nullable = true)
           Integer walkingMinutes,
-      @Schema(description = "bestSlot", requiredMode = Schema.RequiredMode.REQUIRED)
+      @Schema(
+              description = "예약 가능한 대표 슬롯. 기본 지도 조회에서 슬롯이 없는 매장도 포함하며 이 값은 null",
+              requiredMode = Schema.RequiredMode.REQUIRED,
+              nullable = true)
           ItemBestSlot bestSlot,
       @Schema(description = "recommendationReasons", requiredMode = Schema.RequiredMode.REQUIRED)
           List<String> recommendationReasons) {}
