@@ -137,9 +137,9 @@ DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 �
 
 카카오 로그인 시작·콜백·로그아웃·CSRF 조회는 구현되어 있다. `/api/v1/auth/**`, `/api/v1/users/**`에는 세션 인증과 상태 변경 시 CSRF 검증을 적용한다. Swagger는 로그인 없이 접근한다. 설정과 프론트 연동은 [카카오 로그인 실행](docs/kakao-login.md)을 참고한다. `api-docs` 프로필은 DB·로그인 없이 문서를 검토하는 용도이며 API 실행 기능은 비활성화한다.
 
-store·search는 카카오 세션 쿠키·CSRF와 연결되었으며 선택적으로 Bearer JWT도 지원한다. 공개 조회와 보호 API의 구분은 [store 인증 계약](docs/store-auth.md), [search 인증 계약](docs/search-auth.md)을 참고한다. search 대기 API는 현재 DB 역할이 CUSTOMER인 본인 데이터만 허용한다. 알림 전역 설정과 실제 전달은 별도 연결이 필요하다.
+store·search는 카카오 세션 쿠키·CSRF와 연결되었으며 선택적으로 Bearer JWT도 지원한다. 공개 조회와 보호 API의 구분은 [store 인증 계약](docs/store-auth.md), [search 인증 계약](docs/search-auth.md)을 참고한다. search 대기 API는 현재 DB 역할이 CUSTOMER인 본인 데이터만 허용한다. 매칭 알림은 활성 세션의 FID 구독과 대기의 명시적 동의를 확인해 notification에 접수한다([store 알림 통합](docs/store-notification-integration.md)).
 
-notification은 저장·읽음·SSE·FCM을, chatting은 채팅방·메시지 이력·읽음 위치 REST와 WebSocket 송수신을 제공한다. 세션·CSRF 인증 및 프론트 연결 예시는 [실시간 계약](docs/contracts/realtime.md)과 [채팅 연동 안내](docs/chatting.md)를 참고한다.
+notification은 저장·읽음·SSE·FCM을, chatting은 채팅방·메시지 이력·읽음 위치 REST와 WebSocket 송수신을 제공한다. 세션·CSRF 인증 및 프론트 연결 예시는 [실시간 계약](docs/contracts/realtime.md)과 [채팅 연동 안내](docs/chatting.md)를 참고한다. 실제 푸시에는 [FCM 설정](infra/README.md#fcm-알림-설정)과 브라우저 FID 등록이 필요하다.
 
 ### 공통 JSON 응답
 
@@ -158,7 +158,7 @@ notification은 저장·읽음·SSE·FCM을, chatting은 채팅방·메시지 �
 
 204·205·리다이렉트는 본문 없이 유지하고, SSE·WebSocket은 각 전송 프레임을 유지한다. Swagger와 Actuator 응답에는 API 봉투를 적용하지 않는다. 상세 사용법은 [공통 응답 계약](docs/contracts/response.md)을 참고한다.
 
-Notion v0.1의 알림 대상·슬롯 상태와 기존 기획 간 차이 및 store·search에서 적용한 정책은 [계약 문서](docs/contracts/api.md)에 기록했다. 실제 알림 전달과 도메인 간 미연결 항목은 후속 구현이다.
+Notion v0.1의 알림 대상·슬롯 상태와 기존 기획 간 차이 및 store·search에서 적용한 정책은 [계약 문서](docs/contracts/api.md)에 기록했다. 실제 기기 수신·배포 환경 QA는 자동 통합 테스트와 별도로 진행한다.
 
 ## 예약 연결 흐름
 
@@ -196,6 +196,10 @@ Notion v0.1의 알림 대상·슬롯 상태와 기존 기획 간 차이 및 stor
 
 ### DB 반영 및 검증
 
-store의 기존 초기 DB에는 `infra/oracle/migrations/02-store-api.sql`을 1회 적용하고 배포한다. 빈 DB의 store 스키마는 최신 `infra/oracle/local-setup/01ddl.sql`로 준비한다. 기존 데이터는 보존하며 영업시간 미상 매장은 휴무로 보정한다. `ddl-auto=validate`를 유지한다. 사용자 프로필은 신규·기존 DB 모두 `infra/oracle/migrations/001-user-profile.sql`도 적용해야 한다. 새 search 대기 연동을 위한 SQL은 `docs/sql/search-oracle.sql`이다.
+**신규 빈 DB는 [통합 DDL](infra/oracle/ddl.sql) 실행 후 [채팅 004](infra/oracle/migrations/004-chatting.sql)를 적용한다.** 통합본의 기본 25개 테이블에 채팅 읽음·멱등성 테이블이 추가되어 전체 27개, 채팅 4개 테이블이 된다. 이미 반영된 `local-setup/01ddl.sql`, search DDL이나 다른 기존 마이그레이션은 중복 실행하지 않는다. 계정·권한 준비, 파일별 반영 내역과 Oracle 대조 결과는 [통합 DDL 안내](docs/unified-ddl.md)를 참고한다.
+
+시연용 빈 DB에는 통합 DDL과 채팅 004 다음 [더미 INSERT](infra/oracle/dummy-data.sql)를 실행한다. 사용자 지정 좌표를 기준으로 한 시나리오와 검증 방법은 [더미데이터 안내](docs/demo-data.md)를 참고한다.
+
+기존 DB는 현재 적용 상태에 맞춰 `infra/oracle/migrations/`의 변경 SQL을 사용한다. 통합 DDL은 기존 DB 업데이트용이 아니다. 기존 초기 store DB에는 `02-store-api.sql`, 기존 search v1에는 04·05 전환이 필요하며 프로필·알림·카탈로그·이벤트 전달 변경도 확인한다. `ddl-auto=validate`를 유지한다. 기존 분산 SQL은 마이그레이션 이력과 QA 비교를 위해 보존한다.
 
 `StoreApiTests`는 H2에서 API·동시성·멱등성·시간·대기 연동을 검증한다. `python3 infra/oracle/verify-store.py`는 로컬 Oracle의 격리 스키마에서 초기/변경 SQL·기존 데이터 보존·같은 API 및 경합 테스트를 실행한다. 인증 연결 조건, 테스트 실행 옵션, 후속 작업 소비 계약은 [store.md](docs/store.md)에 정리했다.

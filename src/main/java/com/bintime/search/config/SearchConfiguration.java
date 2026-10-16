@@ -74,6 +74,7 @@ public class SearchConfiguration {
   }
 
   @Bean
+  @Profile("api-docs")
   @ConditionalOnMissingBean
   SearchNotificationGateway searchNotifications() {
     return r -> {

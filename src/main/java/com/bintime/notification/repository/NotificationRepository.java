@@ -273,10 +273,11 @@ public class NotificationRepository {
             : accepted == statuses.size()
                 ? "SENT"
                 : accepted > 0 ? "PARTIAL" : statuses.contains("FAILED") ? "FAILED" : "EXPIRED";
+    // Oracle needs an explicit type when the nullable acceptance timestamp is used in COALESCE.
     jdbc.update(
         """
         update notification_alerts set push_status=?,push_attempts=push_attempts+?,
-          push_attempted_at=?,push_accepted_at=coalesce(push_accepted_at,?),push_error_code=?
+          push_attempted_at=?,push_accepted_at=coalesce(push_accepted_at,cast(? as timestamp with time zone)),push_error_code=?
         where notification_id=?
         """,
         aggregate,

@@ -25,6 +25,16 @@
 - 초기 색인 실행 옵션과 alias별 고유 인덱스 이름을 추가했다. 로컬 서버 기동·초기 alias 생성·S-01 HTTP 200을 확인했다. 앱 DB의 매장·슬롯은 0건이므로 로컬 응답은 빈 목록이다.
 - `StoreCatalogConnectionTests`를 추가했다. 격리 Oracle/실제 ES에서 등록 → 대기 → 색인/벡터 캐시 → HTTP 검색 → 예약 → 오래된 ES 슬롯 제외 → FULFILLED를 확인했다. OpenAI는 대역이며 실제 발송은 범위 밖이다.
 
+### Notification 연결 완료
+
+- 정상 프로필은 실제 `NotificationService`를 `SearchNotificationGateway`로 사용한다. 대체 구현은 api-docs 전용이다. 활성 구독 조회는 `SearchUserAccessAdapter` → `NotificationSubscriptions`로 연결되어 있다.
+- store 이벤트 → search 매칭 → 알림 영속 큐 → 발송 worker 연결을 H2와 격리 Oracle에서 확인했다. 7명 전원·고객별 2개 대기 통합·중복 방지·취소/예약 후 발송 차단을 검증했다. 외부 FCM은 대역이다.
+- Oracle 발송 결과 저장의 nullable 날짜 바인딩 오류를 수정하고 회귀 검증했다. 알림 JDBC 테이블 시작 검증도 추가했다.
+- 로컬 알림 migration 002/003 적용 완료. 기존 행 수를 유지하며 알림 보조 테이블 5개를 추가해 전체 25개다(search 7개 유지). 서버 기동, 공개 검색 200·미인증 알림 401 확인 후 점검 서버를 종료했다.
+- 전체 format/test/build 성공: 244건 중 실패/오류 0, 외부 검증 4건 제외. 동시 검증 충돌을 피하려고 build 출력만 임시 경로로 분리했다.
+- [Search → Notification 연결·검증 상세](search-notification-integration.md). 실제 브라우저 수신과 운영 배포는 별도 확인 대상이다.
+- **선호 변경 시 벡터 자동 갱신은 사용자 결정에 따라 MVP 후순위다.** 다음은 실제 브라우저의 구독 → 알림 수신 → 예약 흐름 검증이다.
+
 ## 1. 현재 상태
 
 **S-01~08의 Controller·Service·Repository와 OpenAI/Elasticsearch Adapter는 구현되어 있다. 사용자 선호 JSON으로 실제 OpenAI 임베딩을 생성하고 Oracle에 저장하는 경로도 검증했다. 실제 사용자 인증부터 매장 검색·매칭·알림 수신까지 이어지는 통합 흐름은 아직 미완료다.**
@@ -34,14 +44,14 @@
 | 예약 대기 관리 | 실제 store 검증/표시 조회 연결, 조건·동의·버전·멱등성·만료·영속 작업 구현 | 인증/알림 설정과 전체 사용자 흐름 QA |
 | 조건 검색 | 실제 store 카탈로그 연결·초기 색인·S-01/예약 후 재검증 통합 확인 | 증분 이벤트의 운영 연결·복구 QA |
 | 자연어 분석 | Responses 구조화 출력·서버 검증·추가 질문·장애 구분 구현 | 실제 사용자 요청 연결 및 자연어 품질 QA |
-| 사용자 벡터 | 자유로운 JSON 조회 → 작업 저장 → OpenAI → Oracle 캐시 구현 | 구현된 U-08 저장 경로와 변경 이벤트 연결 |
-| 매칭 | 모든 적격 고객 순회·제안 저장·고객별 통합·발송 전 재검증 구현 | store 이벤트 전달과 notification 접수 |
+| 사용자 벡터 | 자유로운 JSON 조회 → 작업 저장 → OpenAI → Oracle 캐시 구현 | U-08 변경 이벤트 자동 갱신은 MVP 후순위 |
+| 매칭·알림 | store 이벤트·search 매칭·notification 접수/발송 worker 연결 및 Oracle 검증 완료 | 실제 브라우저/FCM 수신 QA |
 | 작업 복구 | DB claim·lease·재시도·중단 작업 회수 구현 | 운영 지표·보관 정책·장애 대응 검증 |
 | 예약과 대기 완료 | store 예약 트랜잭션에서 search 협력 서비스 호출 구현 | 실제 검색·알림을 거친 예약 전체 QA |
-| Oracle 스키마 | 로컬 v2 전환 완료, search 7개·전체 20개 | 다른 환경별 DDL 적용·확인 |
+| Oracle 스키마 | search 7개 유지, notification 확장 후 로컬 전체 25개 | 다른 환경별 DDL 적용·확인 |
 | Elasticsearch 인프라 | 로컬 실행·초기 alias 구축, 운영 Compose·prod 접속/인증 설정 구현 | 실제 운영 배포·실제 운영 데이터 초기 색인 |
 
-정상 프로필의 `SearchStoreCatalog`는 `StoreSearchCatalogService`다. 503 대체 Bean은 api-docs에만 남겼고 실제 Bean 1개가 주입되는 것을 검증했다. user의 인증 Adapter와 store 이벤트 consumer도 현재 별도 작업에서 추가되고 있으며 [search 인증](search-auth.md), [이벤트 전달](store-event-delivery.md)에 계약이 있다. 이번 연결 검증에서 `notificationsEnabled`와 `SearchNotificationGateway`의 실제 알림 연동은 완료로 계산하지 않는다. 테스트 대역의 OpenAI/알림 결과와 실제 전달을 구분한다.
+정상 프로필의 `SearchStoreCatalog`는 `StoreSearchCatalogService`다. 503 대체 Bean은 api-docs에만 남겼고 실제 Bean 1개가 주입되는 것을 검증했다. user의 인증 Adapter와 store 이벤트 consumer도 현재 별도 작업에서 추가되고 있으며 [search 인증](search-auth.md), [이벤트 전달](store-event-delivery.md)에 계약이 있다. `notificationsEnabled`와 `SearchNotificationGateway`도 실제 구독 조회·NotificationService로 연결했고 외부 FCM만 대역으로 검증했다. 테스트 대역의 OpenAI/알림 결과와 실제 전달을 구분한다.
 
 ## 2. API별 구현 범위
 
@@ -123,14 +133,14 @@ Oracle이 원본이고 Elasticsearch는 재구축 가능한 검색 인덱스다.
 
 ## 6. 다음 구현 우선순위
 
-**카탈로그 연결과 초기 색인은 완료했다. 다음 단계는 store 이벤트 consumer가 실제 발행·예약·철회 후 ES와 매칭 작업을 갱신하는지 검증하는 것이다.** 현재 추가된 consumer의 재시도·재시작과 user 인증 연결을 함께 점검한 후 실제 notification을 연결한다.
+**store 이벤트·search 매칭·notification 백엔드 연결은 완료했다. 다음 MVP 단계는 실제 브라우저 알림 구독과 FCM/SSE 수신, 알림에서 예약으로 이어지는 QA다.** 선호 변경 시 벡터 자동 갱신은 이 작업보다 후순위로 둔다.
 
 | 순서 | 다음 작업 | 확인할 결과 |
 | --- | --- | --- |
 | 1 · 완료 | 실제 store 조회 5개 연결, `rebuild()` 및 S-01 통합 검증 | 격리 Oracle+실제 ES에서 거리/가격/익명 추천·예약 마감 제외 확인 |
-| 2 | store 이벤트 consumer와 증분 색인·매칭 연결 | 발행·예약·철회·변경이 재시작 후에도 반영되고 오래된 이벤트가 최신 문서를 덮어쓰지 않음 |
-| 3 | 기존 user 세션/CSRF와 search 연결, U-08 변경 이벤트 연결 | 로그인 고객이 대기를 관리하고 선호 저장 시 벡터 작업이 자동 등록됨 |
-| 4 | N-06 접수와 실제 알림 전달 | 적격 고객 전원 처리, user+slot 중복 방지, 취소/변경 후 발송 차단 |
+| 2 · 연결 완료 | store 이벤트 consumer와 증분 색인·매칭 운영 QA | 발행·예약·철회·변경이 재시작 후에도 반영되고 오래된 이벤트가 최신 문서를 덮어쓰지 않음 |
+| 3 · 인증 완료 | user 세션/CSRF·활성 구독 연결 | 선호 변경 시 벡터 자동 갱신은 후순위 |
+| 4 · 백엔드 완료 | 실제 브라우저 알림 전달 QA | 서버 연결/큐/재검증 완료. 서비스 계정·실제 구독으로 수신 확인 필요 |
 | 5 | 실제 로그인 → 선호 → 대기 → 발행 → 알림 → 예약 통합 QA | 예약 완료·대기 종료·슬롯 마감까지 일관되게 확인 |
 
 운영 배포 준비는 위 코드 연결과 병행할 수 있다. 서버 `.env`에 `ELASTIC_PASSWORD`를 설정하고, v2 DDL을 적용한 뒤 새 이미지와 ES를 배포해야 한다. 실제 운영 환경의 인증 접속과 health, 인덱스 초기 구축은 배포 후 따로 확인한다. 설정·명령은 [Docker 실행과 운영 ES 연결](search.md#docker-실행과-운영-es-연결)을 따른다.
@@ -147,15 +157,15 @@ store가 저장하는 이벤트를 durable consumer로 전달해 `SearchIndexSer
 
 완료 기준: 중복·역순 이벤트와 consumer 재시작에도 최신 검색 문서가 유지된다. 발행 이벤트 한 건은 같은 jobId를 재사용하고, 예약·철회된 슬롯은 검색과 알림 후보에서 빠진다. 인덱스 재구축 중 변경도 전환 후 반영된다.
 
-### P0-3. user 인증·알림 설정·선호 저장 API
+### P0-3. user 인증·알림 설정 — 연결 완료, 벡터 자동 갱신은 후순위
 
-이미 구현된 카카오 세션 인증/CUSTOMER 역할/CSRF를 `SearchUserAccess.customer`에 연결하고, `notificationsEnabled`의 원본 소유 도메인과 실제 조회를 연결한다. 구현된 U-08의 `text`와 expectedVersion 계약을 보존하면서 선호 저장과 변경 이벤트를 같은 트랜잭션에서 처리한다. 기존 저장 후 같은 값을 `replace`에 다시 넘기면 동일 입력으로 이벤트가 생략될 수 있으므로, 저장 경로를 정합화하거나 이벤트 처리를 공통화한다. 공개 검색의 인증 사용자 식별도 함께 확인한다.
+카카오 세션/JWT·현재 CUSTOMER 원장 역할·CSRF를 `SearchUserAccessAdapter`와 공통 보안 경계로 연결했다. `notificationsEnabled`는 현재 유효한 로그인 세션의 활성 구독을 조회한다. 대기 동의만으로 구독을 생성하지 않는다.
 
-완료 기준: 실제 로그인 사용자는 본인 대기만 조회·변경할 수 있다. 인증·역할·CSRF 실패를 구분하고, 선호 저장 후 별도 수동 명령 없이 VECTOR 작업이 생성된다. 선호 변경 중 이전 응답은 저장되지 않는다.
+U-08 저장과 임베딩 변경 이벤트 연결은 구현 가능하지만 사용자 결정에 따라 MVP 후순위로 미룬다. 진행한다면 기존 text·expectedVersion을 보존하고 원본 저장과 작업 생성을 원자적으로 처리해야 한다.
 
-### P0-4. 실제 notification 접수와 전달
+### P0-4. notification 백엔드 연결 — 완료, 실기기 수신 검증 남음
 
-`SearchNotificationGateway.dispatch`를 N-06 접수에 연결한다. notification이 user+slot 중복 방지·사용자 알림 설정·발송 제한·대기 버전/동의·슬롯 최종 유효성을 확인하고 실제 전달을 책임진다.
+`SearchNotificationGateway.dispatch`를 `NotificationService`의 N-06 접수에 연결했다. notification이 user+slot 중복 방지·사용자 알림 설정·발송 제한·대기 버전/동의·슬롯 최종 유효성을 확인하고 실제 전달을 책임진다.
 
 완료 기준: 5명을 넘는 적격 고객 전원이 처리되고, 한 사용자의 여러 대기는 하나의 알림 요청으로 합쳐진다. 재시도해도 중복 알림을 보내지 않으며 취소·수정·예약·철회된 조건의 알림은 발송되지 않는다.
 

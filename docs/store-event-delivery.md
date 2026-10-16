@@ -7,7 +7,7 @@
 - 매장 생성·수정, 시술 생성·수정: `STORE_CHANGED`, 전체 매장 문서 인덱싱 접수.
 - 일반 슬롯 생성: `CREATED`, 전체 문서 인덱싱과 기존 활성 대기 대상 매칭 접수.
 - 빈자리 발행: `PUBLISHED`, 전체 문서 인덱싱과 해당 발행 버전 매칭 접수.
-- 예약·취소·완료·노쇼·철회·만료: 전체 문서 인덱싱 접수. 실제 알림 마감 전달은 별도 연결 범위다.
+- 예약·취소·완료·노쇼·철회·만료: 전체 문서 인덱싱 접수. notification은 발송 직전 슬롯을 재검증하고 목록 재조회 때 마감을 반영한다. 마감 전용 SSE 이벤트는 현재 계약에 없다([알림 통합](store-notification-integration.md)).
 
 문서는 전달 시점의 원장을 다시 읽는다. 검색 문서의 단조 증가 `search_version`은 오래된 문서의 역전 반영을 막는다. 발행 매칭은 `revalidate`를 통과하고 현재 `publicationVersion`이 같은 경우에만 접수한다. 접수 후 변경도 search가 작업 실행 시 다시 검증한다. `MatchService.submit`의 이벤트 ID 중복 검증과 같은 DB 트랜잭션의 search 큐 저장·store ack로 재전달의 중복 효과를 막는다. `PROCESSED`는 search 큐 접수 완료이며 실제 매칭·색인·알림 완료가 아니다.
 
