@@ -2,13 +2,23 @@ package com.bintime.user.repository;
 
 import com.bintime.user.entity.UserAccount;
 import jakarta.persistence.*;
+import java.util.Optional;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 @Repository
 @Lazy
+@Profile("!api-docs")
 public class UserAccountRepository {
   @PersistenceContext private EntityManager em;
+
+  private final JdbcClient jdbc;
+
+  public UserAccountRepository(JdbcClient jdbc) {
+    this.jdbc = jdbc;
+  }
 
   public UserAccount find(String id) {
     return em.find(UserAccount.class, id);
@@ -16,19 +26,6 @@ public class UserAccountRepository {
 
   public UserAccount lock(String id) {
     return em.find(UserAccount.class, id, LockModeType.PESSIMISTIC_WRITE);
-  }
-import java.util.Optional;
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
-@Repository
-@Profile("!api-docs")
-public class UserAccountRepository {
-  private final JdbcClient jdbc;
-
-  public UserAccountRepository(JdbcClient jdbc) {
-    this.jdbc = jdbc;
   }
 
   public Optional<Account> findByKakaoSubject(String subject) {
