@@ -105,6 +105,19 @@ src/main/java/com/bintime/
 
 패키지 루트는 `com.bintime`이며 Gradle을 사용한다. 인프라 실행 설정은 [infra/README.md](infra/README.md)를 참고한다.
 
+## 로컬·배포 DB 연결
+
+기본 Spring 프로필은 `local`이다. 저장소 루트 `.env`의 설정을 `application-local.properties`에서 읽고, `compose.dev.yaml`도 같은 값으로 Oracle·Redis를 구성한다.
+
+```bash
+# 최초 1회. 기존 .env가 있으면 필요한 키만 추가한다.
+cp -n .env.example .env
+docker compose -f compose.dev.yaml up --detach --wait --wait-timeout 600
+./gradlew bootRun
+```
+
+IntelliJ에서도 Working directory를 저장소 루트로 지정하면 동일하게 실행된다. `application-prod.properties`는 배포 Compose가 서버 `.env`에서 주입하는 환경 변수를 사용한다. 서버 템플릿은 `.env.prod.example`이다. 프로필별 설정과 DataGrip 연결값은 [인프라 안내](infra/README.md#환경별-설정-파일)를 참고한다.
+
 ## API 계약 및 Swagger
 
 [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 이름과 요청·응답 스키마를 맞췄으며 실제 처리 로직은 아직 없다.

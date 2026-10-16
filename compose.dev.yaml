@@ -4,12 +4,14 @@ services:
   oracle:
     image: container-registry.oracle.com/database/free:23.26.3.0-lite
     environment:
-      ORACLE_PWD: BinTimeAdminLocal123
+      ORACLE_PWD: ${ORACLE_PWD:?Set ORACLE_PWD in .env}
+      DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     ports:
-      - '127.0.0.1:1521:1521'
+      - '127.0.0.1:${ORACLE_PORT:?Set ORACLE_PORT in .env}:1521'
     volumes:
       - oracle-data:/opt/oracle/oradata
-      - ./infra/oracle/local-setup:/opt/oracle/scripts/setup:ro
+      - ./infra/oracle/local-setup:/opt/oracle/scripts/startup:ro
     healthcheck:
       test: [CMD, /opt/oracle/checkDBStatus.sh]
       interval: 15s
@@ -19,13 +21,15 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: [redis-server, --appendonly, 'yes', --requirepass, BinTimeRedisLocal123]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    command: [/bin/sh, -c, 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
     ports:
-      - '127.0.0.1:6379:6379'
+      - '127.0.0.1:${REDIS_PORT:?Set REDIS_PORT in .env}:6379'
     volumes:
       - redis-data:/data
     healthcheck:
-      test: [CMD-SHELL, 'REDISCLI_AUTH=BinTimeRedisLocal123 redis-cli ping | grep -q PONG']
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
       interval: 10s
       timeout: 3s
       retries: 3
