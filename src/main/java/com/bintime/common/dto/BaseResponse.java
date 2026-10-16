@@ -26,7 +26,9 @@ public abstract class BaseResponse<T> {
     return resultType;
   }
 
-  @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true)
+  @Schema(
+      requiredMode = Schema.RequiredMode.REQUIRED,
+      types = {"object", "null"})
   public Success<T> getSuccess() {
     return success;
   }

@@ -8,6 +8,7 @@ import com.bintime.store.dto.WithdrawVacancyResponse;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,7 +38,58 @@ public class OwnerVacancyController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481a49fc5db03d18be940"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "items": [
+                                  {
+                                    "id": "vac_001",
+                                    "storeId": "shop_moment",
+                                    "sourceReservationId": "rsv_old",
+                                    "reason": "CANCELLATION",
+                                    "status": "DRAFT",
+                                    "resourceId": "staff_01",
+                                    "availableFrom": "2026-10-16T17:00:00+09:00",
+                                    "availableUntil": "2026-10-16T18:00:00+09:00",
+                                    "originalServiceId": "svc_nail_01",
+                                    "originalPrice": 50000,
+                                    "publishedSlotId": null,
+                                    "publishedAt": null,
+                                    "occurredAt": "2026-10-16T14:10:00+09:00",
+                                    "version": 1
+                                  }
+                                ],
+                                "page": {
+                                  "nextCursor": null,
+                                  "hasNext": false
+                                },
+                                "counts": {
+                                  "awaitingPublication": 2,
+                                  "published": 1,
+                                  "filled": 0
+                                }
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/owner/stores/{storeId}/vacancies"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(
       value = "/api/v1/owner/stores/{storeId}/vacancies",
@@ -71,7 +123,69 @@ public class OwnerVacancyController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481ae89e8eb205f157f7e"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "vacancy": {
+                                  "id": "vac_001",
+                                  "storeId": "shop_moment",
+                                  "sourceReservationId": "rsv_old",
+                                  "reason": "CANCELLATION",
+                                  "status": "PUBLISHED",
+                                  "resourceId": "staff_01",
+                                  "availableFrom": "2026-10-16T17:00:00+09:00",
+                                  "availableUntil": "2026-10-16T18:00:00+09:00",
+                                  "originalServiceId": "svc_nail_01",
+                                  "originalPrice": 50000,
+                                  "publishedSlotId": "slot_1700",
+                                  "publishedAt": "2026-10-16T14:20:00+09:00",
+                                  "occurredAt": "2026-10-16T14:10:00+09:00",
+                                  "version": 2
+                                },
+                                "slot": {
+                                  "id": "slot_1700",
+                                  "storeId": "shop_moment",
+                                  "serviceId": "svc_nail_01",
+                                  "resourceId": "staff_01",
+                                  "startAt": "2026-10-16T17:00:00+09:00",
+                                  "endAt": "2026-10-16T18:00:00+09:00",
+                                  "status": "AVAILABLE",
+                                  "bookable": true,
+                                  "unavailableReason": null,
+                                  "source": "VACANCY",
+                                  "vacancyId": "vac_001",
+                                  "publicationVersion": 3,
+                                  "price": {
+                                    "original": 50000,
+                                    "payable": 35000,
+                                    "discountPercent": 30,
+                                    "currency": "KRW"
+                                  },
+                                  "version": 3
+                                },
+                                "matchingStatus": "QUEUED"
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/owner/stores/{storeId}/vacancies/{vacancyId}/publish"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PostMapping(
       value = "/api/v1/owner/stores/{storeId}/vacancies/{vacancyId}/publish",
@@ -98,7 +212,68 @@ public class OwnerVacancyController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481799276c9f05e1a32ec"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "vacancy": {
+                                  "id": "vac_001",
+                                  "storeId": "shop_moment",
+                                  "sourceReservationId": "rsv_old",
+                                  "reason": "CANCELLATION",
+                                  "status": "WITHDRAWN",
+                                  "resourceId": "staff_01",
+                                  "availableFrom": "2026-10-16T17:00:00+09:00",
+                                  "availableUntil": "2026-10-16T18:00:00+09:00",
+                                  "originalServiceId": "svc_nail_01",
+                                  "originalPrice": 50000,
+                                  "publishedSlotId": "slot_1700",
+                                  "publishedAt": "2026-10-16T14:20:00+09:00",
+                                  "occurredAt": "2026-10-16T14:10:00+09:00",
+                                  "version": 3
+                                },
+                                "slot": {
+                                  "id": "slot_1700",
+                                  "storeId": "shop_moment",
+                                  "serviceId": "svc_nail_01",
+                                  "resourceId": "staff_01",
+                                  "startAt": "2026-10-16T17:00:00+09:00",
+                                  "endAt": "2026-10-16T18:00:00+09:00",
+                                  "status": "BLOCKED",
+                                  "bookable": false,
+                                  "unavailableReason": "BLOCKED",
+                                  "source": "VACANCY",
+                                  "vacancyId": "vac_001",
+                                  "publicationVersion": 3,
+                                  "price": {
+                                    "original": 50000,
+                                    "payable": 35000,
+                                    "discountPercent": 30,
+                                    "currency": "KRW"
+                                  },
+                                  "version": 4
+                                }
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/owner/stores/{storeId}/vacancies/{vacancyId}/withdraw"
+                            }
+                          }
+                          """)))
   @ApiResponse(
       responseCode = "409",
       description = "VACANCY_ALREADY_FILLED: 이미 예약된 빈자리",

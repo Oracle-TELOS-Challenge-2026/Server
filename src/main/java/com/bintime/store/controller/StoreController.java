@@ -8,6 +8,7 @@ import com.bintime.store.dto.StoreServiceListResponse;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
@@ -34,7 +35,49 @@ public class StoreController {
               + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481d581b5ce3d62ce1c3e"))
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "items": [
+                                  {
+                                    "code": "NAIL",
+                                    "label": "네일"
+                                  },
+                                  {
+                                    "code": "HAIR",
+                                    "label": "헤어"
+                                  },
+                                  {
+                                    "code": "EYELASH",
+                                    "label": "속눈썹"
+                                  },
+                                  {
+                                    "code": "SKIN",
+                                    "label": "피부관리"
+                                  }
+                                ]
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/stores/categories"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(value = "/api/v1/stores/categories", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<CategoryListResponse>> getCategories() {
@@ -51,7 +94,91 @@ public class StoreController {
               + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4817ea5c4e613c28f0b7a"))
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "shop_moment",
+                                "name": "네일 모먼트",
+                                "category": "NAIL",
+                                "description": "취향을 함께 고민하는 네일 공간",
+                                "address": "서울 성동구 연무장길 18, 2층",
+                                "location": {
+                                  "latitude": 37.5445,
+                                  "longitude": 127.0557
+                                },
+                                "imageUrl": "https://example.com/moment.jpg",
+                                "rating": {
+                                  "average": 4.9,
+                                  "count": 12
+                                },
+                                "timezone": "Asia/Seoul",
+                                "openingHours": [
+                                  {
+                                    "dayOfWeek": "MON",
+                                    "opensAt": "09:00",
+                                    "closesAt": "20:00",
+                                    "closed": false
+                                  },
+                                  {
+                                    "dayOfWeek": "TUE",
+                                    "opensAt": "09:00",
+                                    "closesAt": "20:00",
+                                    "closed": false
+                                  },
+                                  {
+                                    "dayOfWeek": "WED",
+                                    "opensAt": "09:00",
+                                    "closesAt": "20:00",
+                                    "closed": false
+                                  },
+                                  {
+                                    "dayOfWeek": "THU",
+                                    "opensAt": "09:00",
+                                    "closesAt": "20:00",
+                                    "closed": false
+                                  },
+                                  {
+                                    "dayOfWeek": "FRI",
+                                    "opensAt": "09:00",
+                                    "closesAt": "20:00",
+                                    "closed": false
+                                  },
+                                  {
+                                    "dayOfWeek": "SAT",
+                                    "opensAt": "09:00",
+                                    "closesAt": "20:00",
+                                    "closed": false
+                                  },
+                                  {
+                                    "dayOfWeek": "SUN",
+                                    "opensAt": "09:00",
+                                    "closesAt": "20:00",
+                                    "closed": false
+                                  }
+                                ],
+                                "version": 1
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/stores/{storeId}"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(value = "/api/v1/stores/{storeId}", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<StoreDetailResponse>> getStore(
@@ -68,7 +195,48 @@ public class StoreController {
               + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48116b811ca85ed7225b1"))
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "items": [
+                                  {
+                                    "id": "svc_nail_01",
+                                    "storeId": "shop_moment",
+                                    "category": "NAIL",
+                                    "name": "원컬러 젤 네일",
+                                    "durationMinutes": 60,
+                                    "basePrice": 50000,
+                                    "currency": "KRW",
+                                    "active": true,
+                                    "version": 1
+                                  }
+                                ],
+                                "page": {
+                                  "nextCursor": null,
+                                  "hasNext": false
+                                }
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/stores/{storeId}/services"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(
       value = "/api/v1/stores/{storeId}/services",
@@ -92,7 +260,58 @@ public class StoreController {
               + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48115b8d0d7fbaa43a726"))
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "items": [
+                                  {
+                                    "id": "slot_1700",
+                                    "storeId": "shop_moment",
+                                    "serviceId": "svc_nail_01",
+                                    "resourceId": "staff_01",
+                                    "startAt": "2026-10-16T17:00:00+09:00",
+                                    "endAt": "2026-10-16T18:00:00+09:00",
+                                    "status": "AVAILABLE",
+                                    "bookable": true,
+                                    "unavailableReason": null,
+                                    "source": "VACANCY",
+                                    "vacancyId": "vac_001",
+                                    "publicationVersion": 3,
+                                    "price": {
+                                      "original": 50000,
+                                      "payable": 35000,
+                                      "discountPercent": 30,
+                                      "currency": "KRW"
+                                    },
+                                    "version": 3
+                                  }
+                                ],
+                                "page": {
+                                  "nextCursor": null,
+                                  "hasNext": false
+                                }
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/stores/{storeId}/slots"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(value = "/api/v1/stores/{storeId}/slots", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<ReservationSlotListResponse>>
@@ -123,7 +342,50 @@ public class StoreController {
               + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4817c8bb8ca01f9db0058"))
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "slot_1700",
+                                "storeId": "shop_moment",
+                                "serviceId": "svc_nail_01",
+                                "resourceId": "staff_01",
+                                "startAt": "2026-10-16T17:00:00+09:00",
+                                "endAt": "2026-10-16T18:00:00+09:00",
+                                "status": "AVAILABLE",
+                                "bookable": true,
+                                "unavailableReason": null,
+                                "source": "VACANCY",
+                                "vacancyId": "vac_001",
+                                "publicationVersion": 3,
+                                "price": {
+                                  "original": 50000,
+                                  "payable": 35000,
+                                  "discountPercent": 30,
+                                  "currency": "KRW"
+                                },
+                                "version": 3
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/stores/{storeId}/slots/{slotId}"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(
       value = "/api/v1/stores/{storeId}/slots/{slotId}",

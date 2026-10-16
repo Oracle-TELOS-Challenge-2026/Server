@@ -8,6 +8,7 @@ import com.bintime.chatting.dto.UpdateChatReadRequest;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -40,11 +41,86 @@ public class ChatRoomController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4813abd64ce628e66ba48"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "201", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "201",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "room_001",
+                                "store": {
+                                  "id": "shop_moment",
+                                  "name": "네일 모먼트",
+                                  "imageUrl": null
+                                },
+                                "customer": {
+                                  "id": "usr_001",
+                                  "displayName": "빈틈고객"
+                                },
+                                "status": "OPEN",
+                                "lastMessage": null,
+                                "unreadCount": 0,
+                                "lastReadSequence": 0,
+                                "createdAt": "2026-10-16T14:00:00+09:00"
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/chatting/rooms"
+                            }
+                          }
+                          """)))
   @ApiResponse(
       responseCode = "200",
       description = "기존 리소스 또는 동일 요청 재사용",
-      useReturnTypeSchema = true)
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "room_001",
+                                "store": {
+                                  "id": "shop_moment",
+                                  "name": "네일 모먼트",
+                                  "imageUrl": null
+                                },
+                                "customer": {
+                                  "id": "usr_001",
+                                  "displayName": "빈틈고객"
+                                },
+                                "status": "OPEN",
+                                "lastMessage": null,
+                                "unreadCount": 0,
+                                "lastReadSequence": 0,
+                                "createdAt": "2026-10-16T14:00:00+09:00"
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/chatting/rooms"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PostMapping(
       value = "/api/v1/chatting/rooms",
@@ -67,7 +143,54 @@ public class ChatRoomController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4814092c0d8b25f948a50"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "items": [
+                                  {
+                                    "id": "room_001",
+                                    "store": {
+                                      "id": "shop_moment",
+                                      "name": "네일 모먼트",
+                                      "imageUrl": null
+                                    },
+                                    "customer": {
+                                      "id": "usr_001",
+                                      "displayName": "빈틈고객"
+                                    },
+                                    "status": "OPEN",
+                                    "lastMessage": null,
+                                    "unreadCount": 0,
+                                    "lastReadSequence": 0,
+                                    "createdAt": "2026-10-16T14:00:00+09:00"
+                                  }
+                                ],
+                                "page": {
+                                  "nextCursor": null,
+                                  "hasNext": false
+                                }
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/chatting/rooms"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(value = "/api/v1/chatting/rooms", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<ChatRoomListResponse>> getChatRooms(
@@ -90,7 +213,34 @@ public class ChatRoomController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4810387e7d5894f2fa8d1"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "roomId": "room_001",
+                                "lastReadSequence": 1,
+                                "readAt": "2026-10-16T14:20:00+09:00"
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/chatting/rooms/{roomId}/read"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "400", description = "읽음 위치가 최신 메시지 sequence보다 큼", content = @Content)
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PutMapping(

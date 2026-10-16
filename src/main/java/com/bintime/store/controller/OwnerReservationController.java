@@ -6,6 +6,7 @@ import com.bintime.store.dto.UpdateReservationStatusResponse;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,7 +35,66 @@ public class OwnerReservationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4817c8755dc27b321fa8c"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "rsv_001",
+                                "store": {
+                                  "id": "shop_moment",
+                                  "name": "네일 모먼트",
+                                  "imageUrl": null
+                                },
+                                "service": {
+                                  "id": "svc_nail_01",
+                                  "name": "원컬러 젤 네일",
+                                  "durationMinutes": 60
+                                },
+                                "slotId": "slot_1700",
+                                "status": "CONFIRMED",
+                                "startAt": "2026-10-16T17:00:00+09:00",
+                                "endAt": "2026-10-16T18:00:00+09:00",
+                                "price": {
+                                  "original": 50000,
+                                  "payable": 35000,
+                                  "currency": "KRW"
+                                },
+                                "waitlistId": "wait_001",
+                                "cancelReasonCode": null,
+                                "canceledAt": null,
+                                "createdAt": "2026-10-16T14:20:00+09:00",
+                                "version": 1,
+                                "allowedActions": [
+                                  "VIEW_STORE",
+                                  "OPEN_CHAT",
+                                  "CANCEL"
+                                ],
+                                "customer": {
+                                  "id": "usr_001",
+                                  "displayName": "빈틈고객"
+                                },
+                                "resourceId": "staff_01"
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/owner/stores/{storeId}/reservations/{reservationId}"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(
       value = "/api/v1/owner/stores/{storeId}/reservations/{reservationId}",
@@ -59,7 +119,69 @@ public class OwnerReservationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481d7a2e4fba29a1d7554"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "reservation": {
+                                  "id": "rsv_001",
+                                  "store": {
+                                    "id": "shop_moment",
+                                    "name": "네일 모먼트",
+                                    "imageUrl": null
+                                  },
+                                  "service": {
+                                    "id": "svc_nail_01",
+                                    "name": "원컬러 젤 네일",
+                                    "durationMinutes": 60
+                                  },
+                                  "slotId": "slot_1700",
+                                  "status": "COMPLETED",
+                                  "startAt": "2026-10-16T17:00:00+09:00",
+                                  "endAt": "2026-10-16T18:00:00+09:00",
+                                  "price": {
+                                    "original": 50000,
+                                    "payable": 35000,
+                                    "currency": "KRW"
+                                  },
+                                  "waitlistId": "wait_001",
+                                  "cancelReasonCode": null,
+                                  "canceledAt": null,
+                                  "createdAt": "2026-10-16T14:20:00+09:00",
+                                  "version": 2,
+                                  "allowedActions": [
+                                    "VIEW_STORE",
+                                    "OPEN_CHAT",
+                                    "REBOOK"
+                                  ],
+                                  "customer": {
+                                    "id": "usr_001",
+                                    "displayName": "빈틈고객"
+                                  },
+                                  "resourceId": "staff_01"
+                                },
+                                "vacancy": null
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/owner/stores/{storeId}/reservations/{reservationId}/status"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PostMapping(
       value = "/api/v1/owner/stores/{storeId}/reservations/{reservationId}/status",

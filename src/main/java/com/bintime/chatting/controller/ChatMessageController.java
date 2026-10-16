@@ -6,6 +6,7 @@ import com.bintime.chatting.dto.SendChatMessageRequest;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,7 +36,51 @@ public class ChatMessageController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481ab99f8e9575674c9d5"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "items": [
+                                  {
+                                    "id": "msg_001",
+                                    "roomId": "room_001",
+                                    "sequence": 1,
+                                    "sender": {
+                                      "id": "usr_001",
+                                      "role": "CUSTOMER",
+                                      "displayName": "빈틈고객"
+                                    },
+                                    "clientMessageId": "550e8400-e29b-41d4-a716-446655440000",
+                                    "type": "TEXT",
+                                    "content": "내일 오후 4시 예약 가능한가요?",
+                                    "createdAt": "2026-10-16T14:10:00+09:00"
+                                  }
+                                ],
+                                "page": {
+                                  "hasOlder": false,
+                                  "nextBeforeSequence": null
+                                }
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/chatting/rooms/{roomId}/messages"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(
       value = "/api/v1/chatting/rooms/{roomId}/messages",
@@ -68,11 +113,80 @@ public class ChatMessageController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4818aa794f4d31bbcd63a"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "201", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "201",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "msg_001",
+                                "roomId": "room_001",
+                                "sequence": 1,
+                                "sender": {
+                                  "id": "usr_001",
+                                  "role": "CUSTOMER",
+                                  "displayName": "빈틈고객"
+                                },
+                                "clientMessageId": "550e8400-e29b-41d4-a716-446655440000",
+                                "type": "TEXT",
+                                "content": "내일 오후 4시 예약 가능한가요?",
+                                "createdAt": "2026-10-16T14:10:00+09:00"
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/chatting/rooms/{roomId}/messages"
+                            }
+                          }
+                          """)))
   @ApiResponse(
       responseCode = "200",
       description = "기존 리소스 또는 동일 요청 재사용",
-      useReturnTypeSchema = true)
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "msg_001",
+                                "roomId": "room_001",
+                                "sequence": 1,
+                                "sender": {
+                                  "id": "usr_001",
+                                  "role": "CUSTOMER",
+                                  "displayName": "빈틈고객"
+                                },
+                                "clientMessageId": "550e8400-e29b-41d4-a716-446655440000",
+                                "type": "TEXT",
+                                "content": "내일 오후 4시 예약 가능한가요?",
+                                "createdAt": "2026-10-16T14:10:00+09:00"
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/chatting/rooms/{roomId}/messages"
+                            }
+                          }
+                          """)))
   @ApiResponse(
       responseCode = "409",
       description = "동일 clientMessageId로 다른 내용의 메시지 전송",

@@ -8,6 +8,7 @@ import com.bintime.store.dto.ReservationResponse;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -40,7 +41,61 @@ public class ReservationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481278f63f09125038da1"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "201", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "201",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "rsv_001",
+                                "store": {
+                                  "id": "shop_moment",
+                                  "name": "네일 모먼트",
+                                  "imageUrl": null
+                                },
+                                "service": {
+                                  "id": "svc_nail_01",
+                                  "name": "원컬러 젤 네일",
+                                  "durationMinutes": 60
+                                },
+                                "slotId": "slot_1700",
+                                "status": "CONFIRMED",
+                                "startAt": "2026-10-16T17:00:00+09:00",
+                                "endAt": "2026-10-16T18:00:00+09:00",
+                                "price": {
+                                  "original": 50000,
+                                  "payable": 35000,
+                                  "currency": "KRW"
+                                },
+                                "waitlistId": "wait_001",
+                                "cancelReasonCode": null,
+                                "canceledAt": null,
+                                "createdAt": "2026-10-16T14:20:00+09:00",
+                                "version": 1,
+                                "allowedActions": [
+                                  "VIEW_STORE",
+                                  "OPEN_CHAT",
+                                  "CANCEL"
+                                ]
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/reservations"
+                            }
+                          }
+                          """)))
   @ApiResponse(
       responseCode = "409",
       description =
@@ -68,7 +123,74 @@ public class ReservationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4817b813ad3029a4c241c"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "items": [
+                                  {
+                                    "id": "rsv_001",
+                                    "store": {
+                                      "id": "shop_moment",
+                                      "name": "네일 모먼트",
+                                      "imageUrl": null
+                                    },
+                                    "service": {
+                                      "id": "svc_nail_01",
+                                      "name": "원컬러 젤 네일",
+                                      "durationMinutes": 60
+                                    },
+                                    "slotId": "slot_1700",
+                                    "status": "CONFIRMED",
+                                    "startAt": "2026-10-16T17:00:00+09:00",
+                                    "endAt": "2026-10-16T18:00:00+09:00",
+                                    "price": {
+                                      "original": 50000,
+                                      "payable": 35000,
+                                      "currency": "KRW"
+                                    },
+                                    "waitlistId": "wait_001",
+                                    "cancelReasonCode": null,
+                                    "canceledAt": null,
+                                    "createdAt": "2026-10-16T14:20:00+09:00",
+                                    "version": 1,
+                                    "allowedActions": [
+                                      "VIEW_STORE",
+                                      "OPEN_CHAT",
+                                      "CANCEL"
+                                    ]
+                                  }
+                                ],
+                                "page": {
+                                  "nextCursor": null,
+                                  "hasNext": false
+                                },
+                                "counts": {
+                                  "upcoming": 2,
+                                  "past": 1,
+                                  "canceled": 0
+                                }
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/reservations/me"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(value = "/api/v1/reservations/me", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<ReservationListResponse>>
@@ -98,7 +220,61 @@ public class ReservationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481ec9983fd64ba822751"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "rsv_001",
+                                "store": {
+                                  "id": "shop_moment",
+                                  "name": "네일 모먼트",
+                                  "imageUrl": null
+                                },
+                                "service": {
+                                  "id": "svc_nail_01",
+                                  "name": "원컬러 젤 네일",
+                                  "durationMinutes": 60
+                                },
+                                "slotId": "slot_1700",
+                                "status": "CONFIRMED",
+                                "startAt": "2026-10-16T17:00:00+09:00",
+                                "endAt": "2026-10-16T18:00:00+09:00",
+                                "price": {
+                                  "original": 50000,
+                                  "payable": 35000,
+                                  "currency": "KRW"
+                                },
+                                "waitlistId": "wait_001",
+                                "cancelReasonCode": null,
+                                "canceledAt": null,
+                                "createdAt": "2026-10-16T14:20:00+09:00",
+                                "version": 1,
+                                "allowedActions": [
+                                  "VIEW_STORE",
+                                  "OPEN_CHAT",
+                                  "CANCEL"
+                                ]
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/reservations/{reservationId}"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(
       value = "/api/v1/reservations/{reservationId}",
@@ -120,7 +296,79 @@ public class ReservationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48174b700df232299fa77"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "reservation": {
+                                  "id": "rsv_001",
+                                  "store": {
+                                    "id": "shop_moment",
+                                    "name": "네일 모먼트",
+                                    "imageUrl": null
+                                  },
+                                  "service": {
+                                    "id": "svc_nail_01",
+                                    "name": "원컬러 젤 네일",
+                                    "durationMinutes": 60
+                                  },
+                                  "slotId": "slot_1700",
+                                  "status": "CANCELED",
+                                  "startAt": "2026-10-16T17:00:00+09:00",
+                                  "endAt": "2026-10-16T18:00:00+09:00",
+                                  "price": {
+                                    "original": 50000,
+                                    "payable": 35000,
+                                    "currency": "KRW"
+                                  },
+                                  "waitlistId": "wait_001",
+                                  "cancelReasonCode": "CUSTOMER_REQUEST",
+                                  "canceledAt": "2026-10-16T14:20:00+09:00",
+                                  "createdAt": "2026-10-16T14:20:00+09:00",
+                                  "version": 2,
+                                  "allowedActions": [
+                                    "VIEW_STORE",
+                                    "OPEN_CHAT",
+                                    "REBOOK"
+                                  ]
+                                },
+                                "vacancy": {
+                                  "id": "vac_001",
+                                  "storeId": "shop_moment",
+                                  "sourceReservationId": "rsv_old",
+                                  "reason": "CANCELLATION",
+                                  "status": "DRAFT",
+                                  "resourceId": "staff_01",
+                                  "availableFrom": "2026-10-16T17:00:00+09:00",
+                                  "availableUntil": "2026-10-16T18:00:00+09:00",
+                                  "originalServiceId": "svc_nail_01",
+                                  "originalPrice": 50000,
+                                  "publishedSlotId": null,
+                                  "publishedAt": null,
+                                  "occurredAt": "2026-10-16T14:10:00+09:00",
+                                  "version": 1
+                                }
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/reservations/{reservationId}/cancel"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PostMapping(
       value = "/api/v1/reservations/{reservationId}/cancel",

@@ -71,6 +71,17 @@ class ApiContractTests {
                 .path("schema");
         JsonNode envelope = resolve(doc, schema);
         assertThat(envelope.path("properties").has("meta")).isTrue();
+        assertThat(envelope.at("/properties/success/type").toString()).contains("object");
+        JsonNode example =
+            operation
+                .path("responses")
+                .path(contract.path("status").asText())
+                .at("/content/application~1json/examples/success/value");
+        assertThat(example.path("resultType").asText()).isEqualTo("SUCCESS");
+        assertThat(example.at("/success/data")).isEqualTo(contract.path("responseExample"));
+        assertThat(example.path("error").isNull()).isTrue();
+        assertThat(example.at("/meta/path").asText()).isEqualTo(path);
+
         assertExampleFields(
             doc,
             resolve(doc, envelope.path("properties").path("success"))

@@ -38,7 +38,59 @@ public class NotificationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481649c12da127fb36943"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "items": [
+                                  {
+                                    "id": "noti_001",
+                                    "type": "VACANCY_MATCHED",
+                                    "title": "원하던 시간에 빈자리가 생겼어요",
+                                    "body": "네일 모먼트 · 10월 17일 16:00 · 35,000원",
+                                    "target": {
+                                      "storeId": "shop_moment",
+                                      "slotId": "slot_17_1600",
+                                      "publicationVersion": 2,
+                                      "waitlistIds": [
+                                        "wait_001"
+                                      ]
+                                    },
+                                    "action": {
+                                      "type": "OPEN_SLOT",
+                                      "path": "/customer/shops/shop_moment?slotId=slot_17_1600"
+                                    },
+                                    "availability": "AVAILABLE",
+                                    "readAt": null,
+                                    "createdAt": "2026-10-16T14:20:00+09:00"
+                                  }
+                                ],
+                                "page": {
+                                  "nextCursor": null,
+                                  "hasNext": false
+                                },
+                                "unreadCount": 1
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/notifications"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(value = "/api/v1/notifications", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<NotificationListResponse>>
@@ -65,7 +117,50 @@ public class NotificationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48110a228da3a4f12e85a"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "noti_001",
+                                "type": "VACANCY_MATCHED",
+                                "title": "원하던 시간에 빈자리가 생겼어요",
+                                "body": "네일 모먼트 · 10월 17일 16:00 · 35,000원",
+                                "target": {
+                                  "storeId": "shop_moment",
+                                  "slotId": "slot_17_1600",
+                                  "publicationVersion": 2,
+                                  "waitlistIds": [
+                                    "wait_001"
+                                  ]
+                                },
+                                "action": {
+                                  "type": "OPEN_SLOT",
+                                  "path": "/customer/shops/shop_moment?slotId=slot_17_1600"
+                                },
+                                "availability": "AVAILABLE",
+                                "readAt": "2026-10-16T14:20:00+09:00",
+                                "createdAt": "2026-10-16T14:20:00+09:00"
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/notifications/{notificationId}/read"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PatchMapping(
       value = "/api/v1/notifications/{notificationId}/read",

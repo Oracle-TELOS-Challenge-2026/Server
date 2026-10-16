@@ -8,6 +8,7 @@ import com.bintime.search.dto.WaitlistResponse;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -41,7 +42,74 @@ public class WaitlistController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481b491eafe6165c139c9"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "201", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "201",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "wait_001",
+                                "status": "ACTIVE",
+                                "source": "NATURAL_LANGUAGE",
+                                "conditions": {
+                                  "storeId": null,
+                                  "category": "NAIL",
+                                  "serviceId": null,
+                                  "windowStart": "2026-10-17T15:00:00+09:00",
+                                  "windowEnd": "2026-10-17T18:00:00+09:00",
+                                  "location": {
+                                    "latitude": 37.5445,
+                                    "longitude": 127.0557
+                                  },
+                                  "radiusMeters": 3000,
+                                  "maxPrice": 60000,
+                                  "keywords": [
+                                    "원컬러"
+                                  ]
+                                },
+                                "store": null,
+                                "service": null,
+                                "availability": "AVAILABLE",
+                                "offers": [
+                                  {
+                                    "id": "offer_001",
+                                    "slotId": "slot_17_1600",
+                                    "publicationVersion": 2,
+                                    "storeId": "shop_moment",
+                                    "storeName": "네일 모먼트",
+                                    "serviceId": "svc_nail_01",
+                                    "serviceName": "원컬러 젤 네일",
+                                    "startAt": "2026-10-17T16:00:00+09:00",
+                                    "endAt": "2026-10-17T17:00:00+09:00",
+                                    "originalPrice": 50000,
+                                    "payablePrice": 35000,
+                                    "currency": "KRW",
+                                    "imageUrl": null,
+                                    "validatedAt": "2026-10-16T14:20:00+09:00"
+                                  }
+                                ],
+                                "reservationId": null,
+                                "createdAt": "2026-10-16T14:00:00+09:00",
+                                "version": 1
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/search/waitlists"
+                            }
+                          }
+                          """)))
   @ApiResponse(
       responseCode = "409",
       description = "DUPLICATE_WAITLIST: 동일한 ACTIVE 대기 조건이 존재",
@@ -68,7 +136,88 @@ public class WaitlistController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481cd9cf8d1076661e3cf"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "items": [
+                                  {
+                                    "id": "wait_001",
+                                    "status": "ACTIVE",
+                                    "source": "NATURAL_LANGUAGE",
+                                    "conditions": {
+                                      "storeId": null,
+                                      "category": "NAIL",
+                                      "serviceId": null,
+                                      "windowStart": "2026-10-17T15:00:00+09:00",
+                                      "windowEnd": "2026-10-17T18:00:00+09:00",
+                                      "location": {
+                                        "latitude": 37.5445,
+                                        "longitude": 127.0557
+                                      },
+                                      "radiusMeters": 3000,
+                                      "maxPrice": 60000,
+                                      "keywords": [
+                                        "원컬러"
+                                      ]
+                                    },
+                                    "store": null,
+                                    "service": null,
+                                    "availability": "AVAILABLE",
+                                    "offers": [
+                                      {
+                                        "id": "offer_001",
+                                        "slotId": "slot_17_1600",
+                                        "publicationVersion": 2,
+                                        "storeId": "shop_moment",
+                                        "storeName": "네일 모먼트",
+                                        "serviceId": "svc_nail_01",
+                                        "serviceName": "원컬러 젤 네일",
+                                        "startAt": "2026-10-17T16:00:00+09:00",
+                                        "endAt": "2026-10-17T17:00:00+09:00",
+                                        "originalPrice": 50000,
+                                        "payablePrice": 35000,
+                                        "currency": "KRW",
+                                        "imageUrl": null,
+                                        "validatedAt": "2026-10-16T14:20:00+09:00"
+                                      }
+                                    ],
+                                    "reservationId": null,
+                                    "createdAt": "2026-10-16T14:00:00+09:00",
+                                    "version": 1
+                                  }
+                                ],
+                                "page": {
+                                  "nextCursor": null,
+                                  "hasNext": false
+                                },
+                                "counts": {
+                                  "active": 2,
+                                  "fulfilled": 0,
+                                  "canceled": 0,
+                                  "expired": 0
+                                }
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/search/waitlists/me"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(value = "/api/v1/search/waitlists/me", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<WaitlistListResponse>> getMyWaitlists(
@@ -96,7 +245,74 @@ public class WaitlistController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4817c935cd20b6950f87a"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "wait_001",
+                                "status": "ACTIVE",
+                                "source": "NATURAL_LANGUAGE",
+                                "conditions": {
+                                  "storeId": null,
+                                  "category": "NAIL",
+                                  "serviceId": null,
+                                  "windowStart": "2026-10-17T15:00:00+09:00",
+                                  "windowEnd": "2026-10-17T18:00:00+09:00",
+                                  "location": {
+                                    "latitude": 37.5445,
+                                    "longitude": 127.0557
+                                  },
+                                  "radiusMeters": 3000,
+                                  "maxPrice": 60000,
+                                  "keywords": [
+                                    "원컬러"
+                                  ]
+                                },
+                                "store": null,
+                                "service": null,
+                                "availability": "AVAILABLE",
+                                "offers": [
+                                  {
+                                    "id": "offer_001",
+                                    "slotId": "slot_17_1600",
+                                    "publicationVersion": 2,
+                                    "storeId": "shop_moment",
+                                    "storeName": "네일 모먼트",
+                                    "serviceId": "svc_nail_01",
+                                    "serviceName": "원컬러 젤 네일",
+                                    "startAt": "2026-10-17T16:00:00+09:00",
+                                    "endAt": "2026-10-17T17:00:00+09:00",
+                                    "originalPrice": 50000,
+                                    "payablePrice": 35000,
+                                    "currency": "KRW",
+                                    "imageUrl": null,
+                                    "validatedAt": "2026-10-16T14:20:00+09:00"
+                                  }
+                                ],
+                                "reservationId": null,
+                                "createdAt": "2026-10-16T14:00:00+09:00",
+                                "version": 1
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/search/waitlists/{waitlistId}"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(
       value = "/api/v1/search/waitlists/{waitlistId}",
@@ -117,7 +333,57 @@ public class WaitlistController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481959feaea05c12928b2"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "wait_001",
+                                "status": "ACTIVE",
+                                "source": "NATURAL_LANGUAGE",
+                                "conditions": {
+                                  "storeId": null,
+                                  "category": "NAIL",
+                                  "serviceId": null,
+                                  "windowStart": "2026-10-17T15:00:00+09:00",
+                                  "windowEnd": "2026-10-17T18:00:00+09:00",
+                                  "location": {
+                                    "latitude": 37.5445,
+                                    "longitude": 127.0557
+                                  },
+                                  "radiusMeters": 3000,
+                                  "maxPrice": 60000,
+                                  "keywords": [
+                                    "원컬러"
+                                  ]
+                                },
+                                "store": null,
+                                "service": null,
+                                "availability": "WAITING",
+                                "offers": [],
+                                "reservationId": null,
+                                "createdAt": "2026-10-16T14:00:00+09:00",
+                                "version": 2
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/search/waitlists/{waitlistId}"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PatchMapping(
       value = "/api/v1/search/waitlists/{waitlistId}",
@@ -142,7 +408,57 @@ public class WaitlistController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48168ac03e08aa5df488c"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "wait_001",
+                                "status": "CANCELED",
+                                "source": "NATURAL_LANGUAGE",
+                                "conditions": {
+                                  "storeId": null,
+                                  "category": "NAIL",
+                                  "serviceId": null,
+                                  "windowStart": "2026-10-17T15:00:00+09:00",
+                                  "windowEnd": "2026-10-17T18:00:00+09:00",
+                                  "location": {
+                                    "latitude": 37.5445,
+                                    "longitude": 127.0557
+                                  },
+                                  "radiusMeters": 3000,
+                                  "maxPrice": 60000,
+                                  "keywords": [
+                                    "원컬러"
+                                  ]
+                                },
+                                "store": null,
+                                "service": null,
+                                "availability": "CLOSED",
+                                "offers": [],
+                                "reservationId": null,
+                                "createdAt": "2026-10-16T14:00:00+09:00",
+                                "version": 2
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/search/waitlists/{waitlistId}/cancel"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PostMapping(
       value = "/api/v1/search/waitlists/{waitlistId}/cancel",

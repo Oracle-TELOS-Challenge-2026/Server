@@ -9,6 +9,7 @@ import com.bintime.user.dto.UserProfileResponse;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,7 +39,56 @@ public class UserController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481da8f4dd06507d4f48e"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "usr_001",
+                                "displayName": "빈틈고객",
+                                "roles": [
+                                  "CUSTOMER"
+                                ],
+                                "ownedStoreIds": [],
+                                "location": {
+                                  "latitude": 37.5445,
+                                  "longitude": 127.0557,
+                                  "accuracyMeters": 30,
+                                  "source": "DEVICE",
+                                  "observedAt": "2026-10-16T14:00:00+09:00",
+                                  "savedAt": "2026-10-16T14:00:02+09:00"
+                                },
+                                "preferences": {
+                                  "categories": [
+                                    "NAIL"
+                                  ],
+                                  "keywords": [
+                                    "심플",
+                                    "원컬러"
+                                  ],
+                                  "maxPrice": 60000
+                                },
+                                "version": 1
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/users/me"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(value = "/api/v1/users/me", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<UserProfileResponse>> getMyProfile() {
@@ -57,7 +107,56 @@ public class UserController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481a7b8f6e7e95f7578bc"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "usr_001",
+                                "displayName": "빈틈고객",
+                                "roles": [
+                                  "CUSTOMER"
+                                ],
+                                "ownedStoreIds": [],
+                                "location": {
+                                  "latitude": 37.5445,
+                                  "longitude": 127.0557,
+                                  "accuracyMeters": 30,
+                                  "source": "DEVICE",
+                                  "observedAt": "2026-10-16T14:00:00+09:00",
+                                  "savedAt": "2026-10-16T14:00:02+09:00"
+                                },
+                                "preferences": {
+                                  "categories": [
+                                    "NAIL"
+                                  ],
+                                  "keywords": [
+                                    "심플",
+                                    "원컬러"
+                                  ],
+                                  "maxPrice": 60000
+                                },
+                                "version": 2
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/users/me"
+                            }
+                          }
+                          """)))
   @ApiResponse(
       responseCode = "409",
       description = "VERSION_CONFLICT: expectedVersion 불일치",
@@ -84,7 +183,37 @@ public class UserController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481518e1ac2ed5c1a795b"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "latitude": 37.5445,
+                                "longitude": 127.0557,
+                                "accuracyMeters": 30,
+                                "source": "DEVICE",
+                                "observedAt": "2026-10-16T14:00:00+09:00",
+                                "savedAt": "2026-10-16T14:20:00+09:00"
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/users/me/location"
+                            }
+                          }
+                          """)))
   @ApiResponse(
       responseCode = "409",
       description = "STALE_LOCATION: 저장된 위치보다 오래된 관측 시각",
@@ -130,7 +259,40 @@ public class UserController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4811b914ee86f66a91271"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "categories": [
+                                  "NAIL"
+                                ],
+                                "keywords": [
+                                  "심플",
+                                  "원컬러"
+                                ],
+                                "maxPrice": 60000,
+                                "version": 2
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/users/me/preferences"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PutMapping(
       value = "/api/v1/users/me/preferences",

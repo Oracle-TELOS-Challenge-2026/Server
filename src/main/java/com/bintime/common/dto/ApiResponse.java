@@ -13,6 +13,15 @@ public final class ApiResponse<T> extends BaseResponse<T> {
   }
 
   @Override
+  @Schema(
+      requiredMode = Schema.RequiredMode.REQUIRED,
+      allowableValues = {"SUCCESS"},
+      example = "SUCCESS")
+  public ResultType getResultType() {
+    return super.getResultType();
+  }
+
+  @Override
   public ApiResponse<T> withMeta(ResponseMeta meta) {
     return new ApiResponse<>(getSuccess().data(), meta);
   }

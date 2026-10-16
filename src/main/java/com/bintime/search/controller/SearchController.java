@@ -6,6 +6,7 @@ import com.bintime.search.dto.StoreSearchResponse;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,7 +36,71 @@ public class SearchController {
               + "현재는 계약 정의 단계이며 비즈니스 로직은 미구현(501)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4813b97d4c57041a4e79d"))
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "items": [
+                                  {
+                                    "store": {
+                                      "id": "shop_moment",
+                                      "name": "네일 모먼트",
+                                      "category": "NAIL",
+                                      "imageUrl": null,
+                                      "rating": {
+                                        "average": 4.9,
+                                        "count": 12
+                                      }
+                                    },
+                                    "location": {
+                                      "latitude": 37.5445,
+                                      "longitude": 127.0557
+                                    },
+                                    "distanceMeters": 220,
+                                    "walkingMinutes": null,
+                                    "bestSlot": {
+                                      "id": "slot_1700",
+                                      "serviceId": "svc_nail_01",
+                                      "serviceName": "원컬러 젤 네일",
+                                      "startAt": "2026-10-16T17:00:00+09:00",
+                                      "originalPrice": 50000,
+                                      "payablePrice": 35000,
+                                      "currency": "KRW",
+                                      "source": "VACANCY",
+                                      "version": 3
+                                    },
+                                    "recommendationReasons": [
+                                      "NEARBY",
+                                      "MATCHED_CATEGORY"
+                                    ]
+                                  }
+                                ],
+                                "page": {
+                                  "nextCursor": null,
+                                  "hasNext": false
+                                },
+                                "snapshotAt": "2026-10-16T14:20:00+09:00"
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/search/stores"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(value = "/api/v1/search/stores", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<StoreSearchResponse>> searchStores(
@@ -93,7 +158,50 @@ public class SearchController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481c99aade960e5397683"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "200",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "referenceTime": "2026-10-16T14:00:00+09:00",
+                                "timezone": "Asia/Seoul",
+                                "conditions": {
+                                  "storeId": null,
+                                  "category": "NAIL",
+                                  "serviceId": null,
+                                  "windowStart": "2026-10-17T15:00:00+09:00",
+                                  "windowEnd": "2026-10-17T18:00:00+09:00",
+                                  "location": {
+                                    "latitude": 37.5445,
+                                    "longitude": 127.0557
+                                  },
+                                  "radiusMeters": 3000,
+                                  "maxPrice": 60000,
+                                  "keywords": []
+                                },
+                                "resolution": "RESOLVED",
+                                "missingFields": [],
+                                "clarificationQuestion": null
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/search/intents/analyze"
+                            }
+                          }
+                          """)))
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PostMapping(
       value = "/api/v1/search/intents/analyze",

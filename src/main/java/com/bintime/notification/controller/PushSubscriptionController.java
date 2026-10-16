@@ -5,6 +5,7 @@ import com.bintime.notification.dto.RegisterPushSubscriptionRequest;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,11 +35,62 @@ public class PushSubscriptionController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48156a1d6f67cc3cbd034"))
   @SecurityRequirement(name = "sessionCookie")
-  @ApiResponse(responseCode = "201", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "201",
+      description = "명세상 성공 응답 (미구현)",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "push_001",
+                                "createdAt": "2026-10-16T14:20:00+09:00",
+                                "expiresAt": null
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/notifications/push-subscriptions"
+                            }
+                          }
+                          """)))
   @ApiResponse(
       responseCode = "200",
       description = "기존 리소스 또는 동일 요청 재사용",
-      useReturnTypeSchema = true)
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {
+                            "resultType": "SUCCESS",
+                            "success": {
+                              "data": {
+                                "id": "push_001",
+                                "createdAt": "2026-10-16T14:20:00+09:00",
+                                "expiresAt": null
+                              }
+                            },
+                            "error": null,
+                            "meta": {
+                              "timestamp": "2026-10-16T14:20:00",
+                              "path": "/api/v1/notifications/push-subscriptions"
+                            }
+                          }
+                          """)))
   @ApiResponse(
       responseCode = "409",
       description = "SUBSCRIPTION_IN_USE: 다른 계정에 연결된 endpoint",
