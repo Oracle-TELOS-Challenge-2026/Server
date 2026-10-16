@@ -37,6 +37,7 @@ CREATE TABLE store_shops (
  rating_average NUMBER(3,2) DEFAULT 0 NOT NULL,
  rating_count NUMBER(10,0) DEFAULT 0 NOT NULL,
  version_no NUMBER(10,0) DEFAULT 1 NOT NULL,
+ search_version NUMBER(19,0) DEFAULT 1 NOT NULL,
                              store_id      VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                              owner_user_id VARCHAR2(64 BYTE) NOT NULL,
                              name          VARCHAR2(100 CHAR) NOT NULL,
@@ -319,6 +320,7 @@ COMMENT ON COLUMN notification_subscriptions.auth_secret IS '브라우저 PushSu
 
 -- Store API persistence extensions (included for a fresh schema).
 ALTER TABLE store_shops ADD CONSTRAINT ck_shop_hours CHECK (opening_hours_json IS JSON (STRICT));
+ALTER TABLE store_shops ADD CONSTRAINT ck_shop_search_version CHECK (search_version>=1);
 ALTER TABLE store_shops ADD CONSTRAINT ck_shop_timezone CHECK (timezone='Asia/Seoul');
 ALTER TABLE store_shops ADD CONSTRAINT ck_shop_summary CHECK (rating_average BETWEEN 0 AND 5 AND rating_count>=0 AND version_no>=1);
 ALTER TABLE store_services ADD CONSTRAINT ck_service_active CHECK(active_yn IN ('Y','N') AND version_no>=1);

@@ -229,6 +229,8 @@ public class StoreApplicationService {
   }
 
   private void event(Slot s, String type) {
+    // 호출자는 매장 잠금을 보유한다. 업무 상태와 검색 버전은 같은 트랜잭션으로 커밋한다.
+    shop(s.storeId).searchVersion++;
     StoreEvent e = new StoreEvent();
     e.id = id("evt_");
     e.type = type;
@@ -379,6 +381,7 @@ public class StoreApplicationService {
           s.active = r.active() ? "Y" : "N";
           s.version = 1L;
           db.save(s);
+          shop.searchVersion++;
           return serviceDto(shop, s);
         });
   }
@@ -417,6 +420,7 @@ public class StoreApplicationService {
           s.version = 1L;
           s.createdAt = now();
           db.save(s);
+          shop.searchVersion++;
           return ownerSlotDto(s);
         });
   }
@@ -435,6 +439,7 @@ public class StoreApplicationService {
       s.openingHours = json.writeValueAsString(r.openingHours());
     }
     s.version++;
+    s.searchVersion++;
     return shopDto(s);
   }
 
@@ -455,6 +460,7 @@ public class StoreApplicationService {
     }
     if (r.active() != null) s.active = r.active() ? "Y" : "N";
     s.version++;
+    shop.searchVersion++;
     return serviceDto(shop, s);
   }
 

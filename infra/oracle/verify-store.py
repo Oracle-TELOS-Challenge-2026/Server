@@ -63,6 +63,8 @@ INSERT INTO store_slots(slot_id,store_id,service_id,start_at,end_at,available_fr
 COMMIT;
 ''')
     load(migrated, (ROOT / 'infra/oracle/migrations/02-store-api.sql').read_text())
+    load(migrated, (ROOT / 'infra/oracle/migrations/06-store-search-catalog.sql').read_text())
+    load(migrated, (ROOT / 'infra/oracle/migrations/06-store-search-catalog.sql').read_text())
     load(migrated, '''
 DECLARE n NUMBER;
 BEGIN
@@ -79,6 +81,7 @@ END;
     fresh, password = create_schema()
     load(fresh, (ROOT / 'infra/oracle/local-setup/01ddl.sql').read_text())
     print('Fresh schema created: ' + fresh, flush=True)
+    load(fresh, (ROOT / 'infra/oracle/migrations/06-store-search-catalog.sql').read_text())
     load(fresh, (ROOT / "docs/sql/search-oracle.sql").read_text())
     tests(fresh, password)
     print('Fresh and migrated Oracle schemas: validation, API flow and contention tests passed.')
