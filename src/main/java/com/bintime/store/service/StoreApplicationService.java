@@ -1198,7 +1198,7 @@ public class StoreApplicationService {
         s.id,
         s.name,
         s.category,
-        s.description,
+        s.description == null ? "" : s.description,
         s.address,
         new StoreDetailResponse.Location(s.latitude, s.longitude),
         s.imageUrl,

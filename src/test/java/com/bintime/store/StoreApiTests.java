@@ -173,6 +173,44 @@ class StoreApiTests {
   }
 
   @Test
+  void storeDescriptionIsAlwaysAStringWithoutRewritingExistingNulls() throws Exception {
+    JsonNode created =
+        ok(
+            "POST",
+            BASE + "/owner/stores",
+            "alice",
+            "store-without-description",
+            shopRequest(),
+            201);
+    String store = created.path("id").asText();
+    assertThat(created.path("description").isTextual()).isTrue();
+    assertThat(created.path("description").asText()).isEmpty();
+    assertThat(
+            db.queryForObject(
+                "select description from store_shops where store_id=?", String.class, store))
+        .isNull();
+
+    JsonNode detail = ok("GET", BASE + "/stores/" + store, null, null, null, 200);
+    assertThat(detail.path("description").isTextual()).isTrue();
+    assertThat(detail.path("description").asText()).isEmpty();
+
+    JsonNode updated =
+        ok(
+            "PATCH",
+            ownerPath(store),
+            "alice",
+            null,
+            Map.of("description", "매장 소개", "expectedVersion", 1),
+            200);
+    assertThat(updated.path("description").asText()).isEqualTo("매장 소개");
+    assertThat(
+            ok("GET", BASE + "/stores/" + store, null, null, null, 200)
+                .path("description")
+                .asText())
+        .isEqualTo("매장 소개");
+  }
+
+  @Test
   void customerBecomesOwnerOnStoreCreationAndCanStillBookAsCustomer() throws Exception {
     String own = shop("alice");
     assertThat(
