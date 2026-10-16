@@ -39,6 +39,10 @@ public class PushSubscriptionController {
       responseCode = "200",
       description = "기존 리소스 또는 동일 요청 재사용",
       useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "409",
+      description = "SUBSCRIPTION_IN_USE: 다른 계정에 연결된 endpoint",
+      content = @Content)
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PostMapping(
       value = "/api/v1/notifications/push-subscriptions",

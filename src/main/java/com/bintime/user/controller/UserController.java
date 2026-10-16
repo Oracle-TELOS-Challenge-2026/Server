@@ -58,6 +58,10 @@ public class UserController {
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481a7b8f6e7e95f7578bc"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "409",
+      description = "VERSION_CONFLICT: expectedVersion 불일치",
+      content = @Content)
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PatchMapping(
       value = "/api/v1/users/me",
@@ -81,6 +85,10 @@ public class UserController {
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481518e1ac2ed5c1a795b"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "409",
+      description = "STALE_LOCATION: 저장된 위치보다 오래된 관측 시각",
+      content = @Content)
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PutMapping(
       value = "/api/v1/users/me/location",

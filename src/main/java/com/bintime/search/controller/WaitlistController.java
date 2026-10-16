@@ -42,6 +42,10 @@ public class WaitlistController {
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481b491eafe6165c139c9"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(responseCode = "201", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(
+      responseCode = "409",
+      description = "DUPLICATE_WAITLIST: 동일한 ACTIVE 대기 조건이 존재",
+      content = @Content)
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PostMapping(
       value = "/api/v1/search/waitlists",

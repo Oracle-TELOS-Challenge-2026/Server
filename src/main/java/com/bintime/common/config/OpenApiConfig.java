@@ -13,7 +13,6 @@ import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import io.swagger.v3.oas.models.media.Content;
 import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
-import io.swagger.v3.oas.models.responses.ApiResponse;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
@@ -84,44 +83,23 @@ public class OpenApiConfig {
                   item.readOperations()
                       .forEach(
                           operation -> {
-                            for (String code :
-                                new String[] {
-                                  "400", "401", "403", "404", "409", "422", "429", "500", "501",
-                                  "503"
-                                }) {
-                              operation
-                                  .getResponses()
-                                  .addApiResponse(
-                                      code,
-                                      new ApiResponse()
-                                          .description("공통 실패 응답 (resultType=FAILURE)")
-                                          .content(
-                                              new Content()
-                                                  .addMediaType(
-                                                      "application/json",
-                                                      new MediaType()
-                                                          .schema(
-                                                              new Schema<>()
-                                                                  .$ref(
-                                                                      "#/components/schemas/ApiErrorResponse")))));
-                            }
-                            if (path.endsWith("/notifications/stream")) {
-                              operation
-                                  .getResponses()
-                                  .addApiResponse(
-                                      "410",
-                                      new ApiResponse()
-                                          .description("STREAM_CURSOR_EXPIRED: 새 연결 후 알림함 재조회")
-                                          .content(
-                                              new Content()
-                                                  .addMediaType(
-                                                      "application/json",
-                                                      new MediaType()
-                                                          .schema(
-                                                              new Schema<>()
-                                                                  .$ref(
-                                                                      "#/components/schemas/ApiErrorResponse")))));
-                            }
+                            // 각 API에 명시한 오류만 공통 봉투로 문서화하고 성공 응답은 유지한다.
+                            operation
+                                .getResponses()
+                                .forEach(
+                                    (code, response) -> {
+                                      if (code.matches("[45]\\d{2}")) {
+                                        response.content(
+                                            new Content()
+                                                .addMediaType(
+                                                    "application/json",
+                                                    new MediaType()
+                                                        .schema(
+                                                            new Schema<>()
+                                                                .$ref(
+                                                                    "#/components/schemas/ApiErrorResponse"))));
+                                      }
+                                    });
                           }));
     };
   }

@@ -95,6 +95,63 @@ class ApiContractTests {
   }
 
   @Test
+  void swaggerOnlyDocumentsDeclaredResponsesInEveryGroup() throws Exception {
+    for (String group : new String[] {"all", "public", "internal"}) {
+      JsonNode doc = getDoc(group);
+      for (var path : doc.path("paths").properties()) {
+        for (var method : path.getValue().properties()) {
+          JsonNode operation = method.getValue();
+          var codes = new HashSet<String>();
+          for (var response : operation.path("responses").properties()) {
+            codes.add(response.getKey());
+            if (Integer.parseInt(response.getKey()) >= 400) {
+              assertThat(response.getValue().at("/content/application~1json/schema/$ref").asText())
+                  .isEqualTo("#/components/schemas/ApiErrorResponse");
+              assertThat(response.getValue().path("description").asText())
+                  .doesNotContain("공통 실패 응답");
+            }
+          }
+          var expected = new HashSet<String>();
+          expected.add("501");
+          for (JsonNode contract : contracts()) {
+            if (contract.path("path").asText().equals(path.getKey())
+                && contract.path("method").asText().equalsIgnoreCase(method.getKey())) {
+              expected.add(contract.path("status").asText());
+              switch (contract.path("id").asText()) {
+                case "U-05", "U-06", "ST-06", "ST-16", "S-03", "N-04", "C-04" ->
+                    expected.add("409");
+                case "C-05" -> expected.add("400");
+              }
+            }
+          }
+          if (path.getKey().equals("/api/v1/notifications/stream")) expected.add("410");
+          if (java.util.Set.of(
+                  "dispatchNotification",
+                  "registerPushSubscription",
+                  "createChatRoom",
+                  "sendMessage")
+              .contains(operation.path("operationId").asText())) {
+            expected.add("200");
+          }
+          assertThat(codes)
+              .as("%s %s", group, path.getKey())
+              .containsExactlyInAnyOrderElementsOf(expected);
+          for (String code : expected) {
+            int status = Integer.parseInt(code);
+            JsonNode response = operation.path("responses").path(code);
+            if (status == 204 || (status >= 300 && status < 400)) {
+              assertThat(response.path("content").isMissingNode()).isTrue();
+            } else if (status < 300 && !path.getKey().endsWith("/notifications/stream")) {
+              JsonNode schema = resolve(doc, response.at("/content/application~1json/schema"));
+              assertThat(schema.at("/properties/success").isMissingNode()).isFalse();
+            }
+          }
+        }
+      }
+    }
+  }
+
+  @Test
   void swaggerUiSelectsTheCompleteApiGroupByDefault() throws Exception {
     JsonNode config = getDoc("swagger-config");
     assertThat(config.path("urls.primaryName").asText()).isEqualTo("all");

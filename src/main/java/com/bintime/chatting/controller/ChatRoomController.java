@@ -91,6 +91,7 @@ public class ChatRoomController {
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4810387e7d5894f2fa8d1"))
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(responseCode = "200", description = "명세상 성공 응답 (미구현)", useReturnTypeSchema = true)
+  @ApiResponse(responseCode = "400", description = "읽음 위치가 최신 메시지 sequence보다 큼", content = @Content)
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @PutMapping(
       value = "/api/v1/chatting/rooms/{roomId}/read",

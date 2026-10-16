@@ -58,3 +58,10 @@ Controller는 `ResponseEntity<ApiResponse<UserProfileResponse>>`처럼 성공 �
 - SSE와 WebSocket은 프레임을 유지한다. 스트림 시작 전 HTTP 오류는 공통 실패 응답이다.
 - Swagger·Actuator·정적 리소스에는 이 API 봉투를 적용하지 않는다.
 - 이 변경은 사용자가 요청한 새로운 응답 계약이며 기존 Notion v0.1의 data/meta 봉투보다 우선한다. 각 도메인의 요청·응답 데이터 필드는 그대로 유지한다.
+
+## Swagger 응답 표시
+
+- 성공 응답은 각 Controller에 선언한 상태와 반환 DTO 스키마로 표시한다. 204·리다이렉트에는 본문이 없고 SSE는 `text/event-stream`을 사용한다.
+- 오류 상태를 모든 API에 일괄 추가하지 않는다. 전역 예외 처리기의 응답도 자동 추가하지 않으며 각 API의 `@ApiResponse`에 명시한 오류만 공통 `ApiErrorResponse` 스키마로 표시한다. 오류별 설명은 유지한다.
+- 현재 모든 Controller는 미구현이므로 `501`을 명시한다. 각 API 설명에 명시한 충돌 `409`, 채팅 읽음 위치 오류 `400`, 알림 스트림의 `410 STREAM_CURSOR_EXPIRED`는 향후 구현할 해당 API 전용 계약이다. 도메인 기능 구현 시 실제로 발생하는 오류를 해당 API에 추가한다.
+- 문서에 공통 오류를 나열하지 않아도 입력 바인딩 실패나 예상하지 못한 서버 오류는 기존 예외 처리기에 따라 공통 실패 응답으로 반환한다.

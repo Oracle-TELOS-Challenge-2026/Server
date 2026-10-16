@@ -108,6 +108,10 @@ public class NotificationController {
                               + " 시간에 빈자리가 생겼어요\",\"body\":\"네일 모먼트 · 10월 17일 16:00 ·"
                               + " 35,000원\",\"target\":{\"storeId\":\"shop_moment\",\"slotId\":\"slot_17_1600\",\"publicationVersion\":2,\"waitlistIds\":[\"wait_001\"]},\"action\":{\"type\":\"OPEN_SLOT\",\"path\":\"/customer/shops/shop_moment?slotId=slot_17_1600\"},\"availability\":\"AVAILABLE\",\"readAt\":null,\"createdAt\":\"2026-10-16T14:20:00+09:00\"}}\n\n"
                               + ": heartbeat\n")))
+  @ApiResponse(
+      responseCode = "410",
+      description = "STREAM_CURSOR_EXPIRED: 새 연결 후 알림함 재조회",
+      content = @Content)
   @ApiResponse(responseCode = "501", description = "계약 골격만 정의되어 아직 구현되지 않음", content = @Content)
   @GetMapping(value = "/api/v1/notifications/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   public ResponseEntity<SseEmitter> streamNotifications(
