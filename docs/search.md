@@ -184,6 +184,8 @@ Compose는 `ELASTIC_PASSWORD`를 앱의 `SEARCH_ELASTICSEARCH_PASSWORD`로 전�
 
 ## Store 카탈로그 연결 및 초기 색인
 
+배포 `compose.yaml`은 `SEARCH_INDEX_REBUILD=false`, `BINTIME_STORE_EVENT_DELIVERY_ENABLED=true`, `SEARCH_SCHEDULING_ENABLED=true`를 기본값으로 앱에 전달한다. 서버 `.env` 또는 셸 환경에서 덮어쓸 수 있다. 재색인용 `compose.reindex.yaml` 같은 override에 false가 남아 있으면 그 값이 우선하므로 정상 운영에서는 해당 파일을 제외한다. `.env`와 Compose 변경은 `docker compose restart`만으로 적용되지 않으며 `up -d --no-deps --no-build --force-recreate --wait --wait-timeout 180 app`으로 앱을 재생성한다. FCM 운영 환경에서는 기존 `-f compose.yaml -f compose.fcm.yaml` 조합을 유지한다. 설정 파일만 변경한 경우 이미지 재빌드는 필요하지 않다.
+
 `StoreSearchCatalogService`의 실제 Bean을 사용한다. store의 Repository를 search에서 직접 조회하지 않는다. 로컬 `BINTIME_APP`에는 2026-10-16 migration 06을 적용해 `STORE_SHOPS.SEARCH_VERSION`을 추가했다. 기동 시 현재 store 이벤트 엔티티가 요구하는 migration 07도 추가 적용했으며, 두 작업에서 기존 20개 테이블의 행 수를 보존했다. 운영 DB에는 자동 적용하지 않는다.
 
 초기 인덱스/alias가 없거나 전체 재구축이 필요할 때 운영자가 명시적으로 실행한다. DB 스키마 검증 후 현재 store export 전체를 읽고 새 인덱스를 만든 다음 alias를 전환한다. 별도 공개 관리 API는 추가하지 않았다.
