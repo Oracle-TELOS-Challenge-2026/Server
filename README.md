@@ -77,7 +77,7 @@ Controller마다 입력 Port를 만들거나 모든 Service에 인터페이스�
 
 ## 파일 구조
 
-user·store·search는 실제 기능에 필요한 Service·Repository 및 연동 경계를 구현했다. notification·chatting의 Controller·DTO 계약 골격은 유지한다.
+user·store·search·notification은 실제 기능에 필요한 Service·Repository 및 연동 경계를 구현했다. chatting의 Controller·DTO 계약 골격은 유지한다.
 
 ```text
 src/main/java/com/bintime/
@@ -137,9 +137,9 @@ DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 �
 
 카카오 로그인 시작·콜백·로그아웃·CSRF 조회는 구현되어 있다. `/api/v1/auth/**`, `/api/v1/users/**`에는 세션 인증과 상태 변경 시 CSRF 검증을 적용한다. Swagger는 로그인 없이 접근한다. 설정과 프론트 연동은 [카카오 로그인 실행](docs/kakao-login.md)을 참고한다. `api-docs` 프로필은 DB·로그인 없이 문서를 검토하는 용도이며 API 실행 기능은 비활성화한다.
 
-store·search는 카카오 세션 쿠키·CSRF와 연결되었으며 선택적으로 Bearer JWT도 지원한다. 공개 조회와 보호 API의 구분은 [store 인증 계약](docs/store-auth.md), [search 인증 계약](docs/search-auth.md)을 참고한다. search 대기 API는 현재 DB 역할이 CUSTOMER인 본인 데이터만 허용한다. 알림 전역 설정과 실제 전달은 별도 연결이 필요하다.
+store·search는 카카오 세션 쿠키·CSRF와 연결되었으며 선택적으로 Bearer JWT도 지원한다. 공개 조회와 보호 API의 구분은 [store 인증 계약](docs/store-auth.md), [search 인증 계약](docs/search-auth.md)을 참고한다. search 대기 API는 현재 DB 역할이 CUSTOMER인 본인 데이터만 허용한다. 매칭 알림은 활성 세션의 FID 구독과 대기의 명시적 동의를 확인해 notification에 접수한다([store 알림 통합](docs/store-notification-integration.md)).
 
-notification·chatting의 골격 Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 필수 입력 바인딩은 그 전에 요청을 거절할 수 있다. 실제 SSE/WS 전송은 후속 구현이다.
+notification은 알림 저장·목록·읽음·SSE·FCM 발송 작업을 구현했다. 실제 푸시에는 [FCM 설정](infra/README.md#fcm-알림-설정)과 브라우저 FID 등록이 필요하다. chatting의 골격 Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 필수 입력 바인딩은 그 전에 요청을 거절할 수 있다. 실제 채팅 WS 전송은 후속 구현이다.
 
 ### 공통 JSON 응답
 
@@ -158,7 +158,7 @@ notification·chatting의 골격 Controller에 도달한 유효한 요청은 공
 
 204·205·리다이렉트는 본문 없이 유지하고, SSE·WebSocket은 각 전송 프레임을 유지한다. Swagger와 Actuator 응답에는 API 봉투를 적용하지 않는다. 상세 사용법은 [공통 응답 계약](docs/contracts/response.md)을 참고한다.
 
-Notion v0.1의 알림 대상·슬롯 상태와 기존 기획 간 차이 및 store·search에서 적용한 정책은 [계약 문서](docs/contracts/api.md)에 기록했다. 실제 알림 전달과 도메인 간 미연결 항목은 후속 구현이다.
+Notion v0.1의 알림 대상·슬롯 상태와 기존 기획 간 차이 및 store·search에서 적용한 정책은 [계약 문서](docs/contracts/api.md)에 기록했다. 실제 기기 수신·배포 환경 QA는 자동 통합 테스트와 별도로 진행한다.
 
 ## 예약 연결 흐름
 
