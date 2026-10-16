@@ -162,7 +162,7 @@ Spring의 `prod` 프로필은 로컬 `.env`를 직접 읽지 않는다. 서버�
 `.env`는 Git·Docker 이미지에 포함하지 않는다.
 
 필요할 때 저장소 루트에서 `bash deploy.sh`를 실행한다. Docker Desktop과 Java 21이 필요하다.
-최초 통합 배포에는 아래 프론트 빌드도 준비해야 한다. 스크립트는 서버 인증서·로그인 복귀 주소·프론트 파일 확인, 빌드·테스트, ARM64 이미지와 인프라 설정 전송, 자동 갱신 타이머 활성화, 서버 설정에 따른 FCM 선택, Compose 설정 검증, 컨테이너 실행, Nginx 검증·리로드, 내부·외부 HTTPS 상태와 화면 응답 확인을 수행한다.
+Vercel 운영 방식에서는 `/api` 프록시 배포가 먼저 필요하다. IP 직접 호스팅 방식의 최초 배포에는 아래 프론트 빌드도 준비한다. 스크립트는 서버 인증서·로그인 시작 및 콜백 주소·프록시 또는 프론트 파일 확인, 빌드·테스트, ARM64 이미지와 인프라 설정 전송, 자동 갱신 타이머 활성화, 서버 설정에 따른 FCM 선택, Compose 설정 검증, 컨테이너 실행, Nginx 검증·리로드, 내부·외부 HTTPS 상태와 IP 화면 응답 확인을 수행한다.
 DB 마이그레이션과 Elasticsearch 최초 색인은 자동 실행하지 않는다. 앱 쓰기를 중지하고 백업한 뒤 해당 환경에 필요한 SQL을 먼저 적용한다. search v1 환경은 [v2 전환 절차](../docs/search-schema-v2.md), store는 migration `06`·`07`, FCM은 `002`·`003`, 채팅은 [채팅 DB 안내](../docs/chatting-db.md)를 확인한다. 최초 ES 인덱스/alias 생성은 [초기 색인 안내](../docs/search.md#store-카탈로그-연결-및-초기-색인)에 따라 별도 수행한다.
 최초 인증서 발급을 마친 서버를 대상으로 한다. 인증서가 없으면 설정을 덮어쓰기 전에 중단한다.
 SSH 키 기본 경로는 `~/Downloads/team3/team-3-1.key`이며 다른 PC에서는 `BINTIME_SSH_KEY=/키/경로 bash deploy.sh`로 지정한다.
@@ -180,17 +180,43 @@ Compose나 Nginx 설정을 바꿨다면 해당 설정 파일도 서버의 같은
 서버 `.env`는 별도 관리하고 Git·이미지에 넣지 않는다.
 Redis 데이터는 Docker 볼륨에 보존되며 `docker compose down --volumes`는 데이터를 삭제한다.
 
-### 프론트와 API를 같은 주소에서 제공
+### Vercel의 같은 주소 API 프록시
 
-운영 화면 주소는 **`https://140.238.19.165`**로 통일한다. Vercel 화면에서 IP API를 호출하면
+운영 화면은 `https://frontend-oracle.vercel.app`을 사용한다. 브라우저는 상대 경로 `/api/...`로
+요청하고 Vercel이 `https://140.238.19.165/api/...`로 전달한다. API rewrite는 SPA catch-all보다
+먼저 배치한다. 서버 `~/bintime/.env`에는 아래 두 값을 함께 설정한다.
+
+```dotenv
+FRONTEND_URL=https://frontend-oracle.vercel.app
+KAKAO_REDIRECT_URI=https://frontend-oracle.vercel.app/api/v1/auth/oauth/kakao/callback
+```
+
+카카오 Developers의 기존 **REST API 키**에도 위 콜백 URI를 추가한다. Vercel 프록시와 콜백
+등록 후 서버 설정을 반영한다. `deploy.sh`는 Vercel의 비로그인 `/api/v1/users/me`가 JSON 401을
+반환하는지 검사하고, HTML을 반환하거나 시작·콜백 호스트가 다르면 배포 전에 중단한다.
+서버 설정 반영 시 앱 컨테이너가 재생성되므로 기존 메모리 로그인 세션은 종료된다.
+
+Nginx는 전달된 호스트 중 등록된 `frontend-oracle.vercel.app`만 받아 콜백의 외부 주소를 복원한다.
+다른 호스트 및 클라이언트의 `Forwarded`·전달 포트·접두사 헤더는 신뢰하지 않는다.
+`bt_session`은 Domain 미지정·Secure·HttpOnly·Path=/·SameSite=None을 유지하며, Cookie와
+Set-Cookie는 프록시가 전달해야 한다. 인증 API는 공유 캐시하지 않는다.
+
+전환 후 Vercel 주소에서 새로 로그인하고 `/api/v1/users/me` 200, 새로고침, CSRF·로그아웃을 확인한다.
+채팅의 Vercel 경유 WebSocket 101·송수신과 SSE 지속 수신도 별도 검증해야 한다.
+REST 정상 응답만으로 실시간 연결까지 검증된 것은 아니다. Vercel 호스트 쿠키는 IP에 전달되지
+않으므로 로그인과 API 호출을 IP·Vercel 사이에 섞지 않는다. 이전 IP 콜백 등록과 정적 파일은
+검증 중 되돌릴 수 있도록 유지한다.
+
+### IP 직접 호스팅으로 되돌리는 경우
+
+이 방식에서는 화면 주소를 **`https://140.238.19.165`**로 통일한다. Vercel 화면에서 IP API를 호출하면
 아이폰의 사이트 간 쿠키 제한으로 `bt_session`이 전송되지 않는다. Nginx가 프론트 정적 파일을
 제공하고 `/api/`(OAuth·WebSocket·SSE 포함), Swagger, 상태 확인은 기존 Spring으로 전달한다.
 클라이언트 로그인 로직이나 DB 스키마는 바꾸지 않는다.
 
-1. 서버 `~/bintime/.env`의 `FRONTEND_URL=https://140.238.19.165`를 설정한다. 기존 Vercel 값이
-   남아 있으면 `deploy.sh`가 빌드 전에 중단한다. 로그인 후 이동과 채팅 WebSocket Origin,
+1. 서버 `~/bintime/.env`의 `FRONTEND_URL=https://140.238.19.165`를 설정한다. 로그인 후 이동과 채팅 WebSocket Origin,
    FCM 알림 클릭 주소가 모두 이 값을 사용한다. 카카오 로그인 콜백 URI는 기존
-   `https://140.238.19.165/api/v1/auth/oauth/kakao/callback`을 유지한다.
+   `https://140.238.19.165/api/v1/auth/oauth/kakao/callback`으로 함께 되돌린다.
 2. 카카오 Developers의 **JavaScript SDK 도메인**에 `https://140.238.19.165`를 추가한다.
    기존 localhost·Vercel 등록은 개발용으로 유지할 수 있다.
 3. 프론트 저장소는 `https://github.com/Oracle-TELOS-Challenge-2026/Frontend`다.
@@ -237,12 +263,13 @@ BINTIME_FRONTEND_DIST=../Frontend/dist bash deploy.sh
 
 최초 인증서 발급 및 HTTPS 전환을 완료한 뒤 사용하는 주소는 다음과 같다.
 
-- 화면·API 주소: `https://140.238.19.165`
+- 운영 화면·브라우저 API 주소: `https://frontend-oracle.vercel.app` 및 같은 호스트의 `/api/...`
+- Oracle API 원본: `https://140.238.19.165/api/...`
 - 상태 확인: `https://140.238.19.165/healthz`
 - Swagger: `https://140.238.19.165/swagger-ui/index.html`
 
-Nginx가 `https://140.238.19.165`, `http://127.0.0.1:5173`, `http://localhost:5173`, `https://frontend-oracle.vercel.app`에 대한 CORS와 API OPTIONS 사전 요청을 처리한다. 운영 로그인·채팅·푸시는 IP 화면 주소를 사용한다. Vercel CORS 허용만으로 아이폰의 사이트 간 쿠키 제한이 해제되지는 않는다. 5173은 프론트 개발 PC의 포트이므로 API 서버에 열지 않는다. 이 설정은 Nginx를 거치는 배포 API에 적용된다.
-프론트 API 주소도 위 HTTPS 주소로 지정한다. HTTP 주소로 보내는 OPTIONS 요청은 리다이렉트가 CORS 오류로 보일 수 있다.
+Nginx가 `https://140.238.19.165`, `http://127.0.0.1:5173`, `http://localhost:5173`, `https://frontend-oracle.vercel.app`에 대한 CORS와 API OPTIONS 사전 요청을 처리한다. 운영 화면은 Vercel의 같은 주소 `/api` 프록시를 사용한다. Vercel CORS 허용만으로 아이폰의 사이트 간 쿠키 제한이 해제되지는 않는다. 5173은 프론트 개발 PC의 포트이므로 API 서버에 열지 않는다. 이 설정은 Nginx를 거치는 배포 API에 적용된다.
+HTTP 주소로 보내는 OPTIONS 요청은 리다이렉트가 CORS 오류로 보일 수 있다.
 
 ### IP 인증서와 자동 갱신
 

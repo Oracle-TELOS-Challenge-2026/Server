@@ -16,7 +16,7 @@ if [[ -n "$BINTIME_FRONTEND_DIST" ]]; then
   has_frontend=1
 fi
 
-# 공개 설정과 화면 파일을 먼저 확인해 로그인 복귀 주소만 바뀌는 배포를 막는다.
+# OAuth 시작·콜백 주소와 실제 프록시를 먼저 확인한다.
 ssh -i "$BINTIME_KEY" opc@140.238.19.165 bash -s -- "$has_frontend" <<'PREFLIGHT'
 set -euo pipefail
 cd ~/bintime
@@ -25,13 +25,34 @@ sudo -n test -s infra/certbot/conf/live/140.238.19.165/privkey.pem
 frontend_origin=$(
   sudo -n docker compose -f compose.yaml config --environment </dev/null |
     awk '/^FRONTEND_URL=/ { sub(/^FRONTEND_URL=/, ""); print; found=1 }
-         END { if (!found) print "https://140.238.19.165" }'
+         END { if (!found) print "https://frontend-oracle.vercel.app" }'
 )
-if [[ "$frontend_origin" != https://140.238.19.165 ]]; then
-  echo '서버 ~/bintime/.env의 FRONTEND_URL을 https://140.238.19.165로 변경하세요.' >&2
+callback_uri=$(
+  sudo -n docker compose -f compose.yaml config --environment </dev/null |
+    awk '/^KAKAO_REDIRECT_URI=/ { sub(/^KAKAO_REDIRECT_URI=/, ""); print; found=1 }
+         END { if (!found) print "https://frontend-oracle.vercel.app/api/v1/auth/oauth/kakao/callback" }'
+)
+case "$frontend_origin" in
+  https://140.238.19.165|https://frontend-oracle.vercel.app) ;;
+  *) echo 'FRONTEND_URL은 등록된 IP 또는 Vercel 운영 주소여야 합니다.' >&2; exit 1 ;;
+esac
+if [[ "$callback_uri" != "$frontend_origin/api/v1/auth/oauth/kakao/callback" ]]; then
+  echo 'KAKAO_REDIRECT_URI와 FRONTEND_URL의 운영 호스트를 맞추세요.' >&2
   exit 1
 fi
-if [[ "$1" == 0 && ! -s infra/frontend/dist/index.html ]]; then
+if [[ "$frontend_origin" == https://frontend-oracle.vercel.app ]]; then
+  # SPA의 HTML 200을 정상 API로 오인하지 않도록 비로그인 JSON 401을 검사한다.
+  curl --silent --show-error --connect-timeout 5 --max-time 15 --include \
+    "$frontend_origin/api/v1/users/me" |
+    python3 -c '
+import json, sys
+headers, _, body = sys.stdin.read().replace("\r\n", "\n").partition("\n\n")
+if not headers.startswith("HTTP/") or headers.splitlines()[0].split()[1] != "401" or "application/json" not in headers.lower():
+    sys.exit("Vercel /api 프록시가 준비되지 않았습니다.")
+if not isinstance(json.loads(body), dict):
+    sys.exit("Vercel /api 응답이 JSON 객체가 아닙니다.")
+'
+elif [[ "$1" == 0 && ! -s infra/frontend/dist/index.html ]]; then
   echo '최초 배포에는 BINTIME_FRONTEND_DIST=/프론트/dist bash deploy.sh를 사용하세요.' >&2
   exit 1
 fi
@@ -100,5 +121,7 @@ REMOTE
 
 curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
   https://140.238.19.165/healthz
-curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
-  --output /dev/null https://140.238.19.165/
+if [[ "$has_frontend" == 1 ]]; then
+  curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
+    --output /dev/null https://140.238.19.165/
+fi
