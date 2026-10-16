@@ -62,6 +62,8 @@ class SearchBehaviorTests {
     service = new WaitlistService(db, rules, catalog, clock, tx);
     matching = new MatchService(db, tx, clock);
     var vectors = new PersonalizationService(db, ai, users, tx, clock, "text-embedding-3-small");
+    var similarity = mock(NotificationSimilarityService.class);
+    when(similarity.matches(anyString(), any())).thenReturn(true);
     worker =
         new SearchWorker(
             db,
@@ -76,7 +78,8 @@ class SearchBehaviorTests {
             users,
             clock,
             vectors,
-            mock(SearchIndexService.class));
+            mock(SearchIndexService.class),
+            similarity);
   }
 
   @AfterEach

@@ -6,6 +6,20 @@
 
 대기·자동 알림과 Oracle 벡터 캐시는 유지하고, 동의는 현재 조건만 저장한다. [7개 테이블 DDL 및 전환 절차](search-schema-v2.md)를 따른다. 사용자 벡터·선호 revision·생성 lease는 `search_user_vector`에 통합했고, 매장 전체 문서를 Oracle에 복제하지 않고 `search_store_vector`에 벡터만 캐시한다. 슬롯 이벤트의 중복 제거와 공개 jobId는 `search_work`가 관리한다.
 
+## 알림 대상의 벡터 유사도 기준
+
+필수 조건과 활성 동의를 만족한 뒤 `NotificationSimilarityService`가 사용자 선호 벡터와 매장 소개·카테고리·전체 시술명을 결합한 기존 매장 벡터를 비교한다. 두 벡터는 같은 `search.ai.embedding-model`과 1,536차원을 사용한다. 매장과 시술의 별도 가중치나 독립된 시술 벡터 테이블은 도입하지 않는다. `search_store_vector`의 기존 설명 벡터에 시술명이 포함된다.
+
+정규화된 내적의 **원시 코사인 유사도 [-1, 1]**를 사용하며 `search.matching.minimum-similarity` 기본값은 **0.5**, 경계는 **이상(>=)**이다. ES 추천용 `cosineSimilarity + 1.0` 점수와 다르며 예약 확률이 아니다. 운영 `.env`의 `SEARCH_MATCHING_MINIMUM_SIMILARITY`를 Compose가 앱에 전달한다. 인원이 적더라도 기준을 낮추거나 조건을 완화하지 않으며 최소 발송 인원은 없다. 기준을 통과한 전원에게 보내고 사용자·슬롯 중복 알림은 기존 규칙으로 막는다.
+
+SLOT/INTENT가 필수 조건을 만족하는 제안과 NOTIFY 작업을 기록한 뒤, NOTIFY 접수와 notification의 최종 FCM guard에서 같은 기준을 재확인한다. 따라서 제안 목록에 있다는 사실만으로 알림 발송 대상이 확정되는 것은 아니다. 선호 변경 revision·입력 해시, 매장 설명 해시, 모델·차원이 현재 원본과 맞는 캐시만 사용한다. 알림 저장 이후 선호나 설명이 바뀌어 기준 미달이면 기존 알림 이력은 유지하고 미제출 푸시는 건너뛴다. 이미 FCM에 제출한 푸시는 회수할 수 없다.
+
+벡터가 없거나 오래됐으면 VECTOR/STORE_VECTOR 생성을 영속 큐에 요청하고 `MATCH_VECTORS_PENDING`으로 알림 판단을 보류한다. 이 대기는 NOTIFY의 일반 재시도 한도를 소모하지 않으며 다음 시도에서 슬롯·동의·대기를 먼저 재검증한다. 선호가 없는 사용자는 보내지 않는다. OpenAI 호출은 벡터 작업에서만 수행하며 매칭·notification 트랜잭션 안에서는 호출하지 않는다. 같은 사용자 또는 같은 매장 설명의 진행 중인 생성 요청은 합친다.
+
+벡터 생성 작업이 영구 오류 또는 재시도 한도 초과로 FAILED이면 자동 알림 재시도로 생성 작업을 무한히 다시 만들지 않는다. `USER_MATCH_VECTOR_FAILED` / `STORE_MATCH_VECTOR_FAILED`로 구분하며 원인 해결 후 해당 VECTOR/STORE_VECTOR와 NOTIFY 작업을 운영 복구 절차로 재처리한다. 새 선호 저장은 새 VECTOR 작업을 생성하고 매장·시술 변경은 기존 outbox 경로로 새 STORE_VECTOR를 생성한다. 본문·벡터·키는 로그에 출력하지 않는다. 실제 점수는 `logging.level.com.bintime.search.service.NotificationSimilarityService=DEBUG`에서 사용자/매장 ID·점수·기준·통과 여부로 확인할 수 있다.
+
+0.5는 합의한 초기 운영값이다. 실제 한국어 데모 문장과 매장 설명으로 점수 분포를 확인해 조정해야 하며, 부정 표현의 정확한 분류를 보장하는 규칙은 아니다. 유사도가 높아도 시간·거리·가격·카테고리·특정 매장/시술 조건을 우회하지 않는다.
+
 ## 범위와 의존 작업
 
 ### 기본 지도 매장 조회
@@ -30,7 +44,7 @@ store의 조회 계약은 `StoreSearchCatalogService` 하나로 연결한다. �
 
 ## 확정한 정책과 HTTP 계약 변경
 
-- 필수 조건에 일치하는 고객 전원이 대상이다. top-5/top-k나 유사도 임계값은 없다. 여러 대기가 일치하면 N-06 matches에 ID/버전을 묶는다.
+- 필수 조건과 사용자/매장·시술 벡터의 코사인 유사도 기준(기본 0.5 이상)을 통과한 고객 전원이 대상이다. top-5/top-k 인원 제한은 없다. 여러 대기가 일치하면 N-06 matches에 ID/버전을 묶는다.
 - 시술 시작부터 종료까지 희망 구간에 포함한다. 동일 instant의 서로 다른 offset은 동일하게 판단한다. 거리 계산은 지구 반경 6,371,008.8m의 구면 직선거리다. 가격 경계는 포함하며 원 단위 KRW 정수다.
 - 매장/카테고리/시술 ID는 정확히 일치한다. keywords는 필수 필터가 아니다. 특정 매장 이외 대체 매장을 자동 추천하지 않는다.
 - **S-03/S-06에 notificationConsent=true가 필수로 추가됐다.** 기존 클라이언트 변경이 필요하다. 조건 전체 교체 시 동의 시각·조건 버전을 현재 대기 행에 갱신하며 과거 동의 이력은 저장하지 않는다. WaitlistConditions의 nullable 필드와 S-08 publicationVersion도 키를 반드시 보내야 하며 null과 누락은 다르다.
@@ -60,7 +74,7 @@ OpenAI Responses의 strict JSON Schema로 부분 조건을 추출한다. 기준 
 
 API 키 누락/401/403/할당량 소진/잘못된 요청·응답은 재시도 없이 FAILED, 일반 429/408/409/5xx/연결 실패는 기존 제한된 재시도로 처리한다. 원문, 키, Authorization 헤더, 응답 벡터는 로그에 기록하지 않는다. HTTP 503의 retryable도 오류 종류에 따라 다르다. 인증/할당량 실패 후 키나 계정 상태를 고치면 새 생성 작업을 등록한다.
 
-매장 벡터는 실제 매장/시술 설명으로 생성하며 슬롯 시각·가격만 바뀐 경우 다시 생성하지 않는다. SLOT 매칭 작업에서는 OpenAI를 호출하지 않는다. 인덱스에 벡터가 없는 매장도 필수 조건 검색과 매칭에서 제외하지 않는다. 자연어의 '경력 3년 이상' 같은 선호는 유사도에 느슨하게 반영하며 정형 필수 필터로 자동 승격하지 않는다.
+매장 벡터는 실제 매장/시술 설명으로 생성하며 슬롯 시각·가격만 바뀐 경우 다시 생성하지 않는다. SLOT 매칭 작업에서는 OpenAI를 호출하지 않는다. 인덱스에 벡터가 없는 매장도 지도·필수 조건 검색과 제안 생성에는 포함한다. 알림 접수·전달은 최신 사용자/매장 벡터가 준비된 뒤 유사도 기준을 통과해야 한다. 자연어의 '경력 3년 이상' 같은 선호는 유사도에 느슨하게 반영하며 정형 필수 필터로 자동 승격하지 않는다.
 
 참고: [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs), [Embeddings](https://developers.openai.com/api/docs/guides/embeddings), [Elasticsearch PIT/search_after](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/paginate-search-results).
 

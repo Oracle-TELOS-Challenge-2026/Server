@@ -43,7 +43,8 @@ public class InternalNotificationController {
           "X-Internal-Token 내부 인증. userId+slotId로 중복 방지. 무효 후보는 200"
               + " \\{notificationId:null,status:SKIPPED\\}. 일반 수락은 202.\n\n"
               + "- INTERNAL — 외부 접근 불가, 내부 인증 또는 모듈 호출\n\n"
-              + "활성 동의·대기 버전·슬롯·세션 구독을 확인해 저장하고 영속 발송 작업을 등록합니다.",
+              + "활성 동의·대기 버전·슬롯·세션 구독과 사용자/매장·시술 벡터의 코사인 유사도 기준을 확인합니다. "
+              + "벡터 미준비는 503으로 보류하고 기준 미달은 SKIPPED입니다. 실제 푸시 직전에도 재검증합니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48197a045fff04c9ff16e"))
   @ApiResponse(

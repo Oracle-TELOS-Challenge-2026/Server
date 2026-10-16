@@ -152,9 +152,11 @@ class SearchNotificationConnectionTests {
     for (int n = 0; n < 7; n++) {
       String user = "notify-user-" + n;
       db.update(
-          "insert into user_accounts(user_id,display_name,role_code) values(?,?,'CUSTOMER')",
+          "insert into user_accounts(user_id,display_name,role_code,preferences_json)"
+              + " values(?,?,'CUSTOMER',?)",
           user,
-          user);
+          user,
+          "{\"text\":\"젤 네일을 선호해요\"}");
       var principal = new BintimePrincipal(user, "CUSTOMER");
       var session = new MockHttpSession();
       var security = SecurityContextHolder.createEmptyContext();
@@ -197,7 +199,7 @@ class SearchNotificationConnectionTests {
             owner, shop.id(), "notify-slot", new CreateSlotRequest(service.id(), start));
     var events = new StoreEventDelivery(storeDb, catalog, matching, indexes, tx, clock);
     events.deliver();
-    for (int n = 0; n < 8; n++) search.poll();
+    pollSearch(8);
     assertThat(db.queryForObject("select count(*) from notification_alerts", Integer.class))
         .isEqualTo(7);
     assertThat(db.queryForObject("select count(*) from notification_dedup", Integer.class))
@@ -210,7 +212,7 @@ class SearchNotificationConnectionTests {
                   .matches())
           .hasSize(2);
     events.deliver();
-    for (int n = 0; n < 3; n++) search.poll();
+    pollSearch(3);
     delivery.run();
     delivery.run();
     verify(fcm, times(7)).send(anyString(), any(), any(BooleanSupplier.class));
@@ -227,7 +229,7 @@ class SearchNotificationConnectionTests {
             "notify-second",
             new CreateSlotRequest(service.id(), start.plusHours(2)));
     events.deliver();
-    for (int n = 0; n < 5; n++) search.poll();
+    pollSearch(5);
     assertThat(db.queryForObject("select count(*) from notification_alerts", Integer.class))
         .isEqualTo(14);
     for (WaitlistResponse intent : intents.subList(0, 2))
@@ -249,5 +251,16 @@ class SearchNotificationConnectionTests {
                 Integer.class))
         .isEqualTo(7);
     assertThat(waitlists.get("notify-user-1", intents.get(2).id()).status()).isEqualTo("FULFILLED");
+  }
+
+  private void pollSearch(int cycles) {
+    for (int i = 0; i < cycles; i++) {
+      // 벡터 준비 대기의 재시도 시각만 당겨 실제 스케줄러 없이 전체 경로를 검증한다.
+      db.update(
+          "update search_work set available_at=? where status='QUEUED' and"
+              + " last_error='MATCH_VECTORS_PENDING'",
+          clock.millis());
+      search.poll();
+    }
   }
 }

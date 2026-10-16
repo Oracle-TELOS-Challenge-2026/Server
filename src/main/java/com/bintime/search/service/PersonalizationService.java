@@ -63,12 +63,38 @@ public class PersonalizationService {
 
   /** 운영 명령과 다른 내부 유스케이스가 호출할 최초 생성/재생성 진입점. */
   public void requestRefresh(String user) {
+    requestRefresh(user, false);
+  }
+
+  public void requestMatchingRefresh(String user) {
+    requestRefresh(user, true);
+  }
+
+  private void requestRefresh(String user, boolean matching) {
     users.explicitPreferences(user);
     tx.executeWithoutResult(
         t -> {
           db.lockUser(user);
+          // 같은 사용자에 대한 벡터 준비 대기는 기존 작업을 재사용한다.
+          if (db.jdbc()
+              .queryForList(
+                  "select payload from search_work where kind='VECTOR' and status in"
+                      + " ('QUEUED','RUNNING')",
+                  String.class)
+              .contains(user)) return;
+          // 생성 작업이 최종 실패했다면 알림 재시도로 유료 호출을 무한 재생성하지 않는다.
+          if (matching
+              && db.jdbc()
+                  .queryForList(
+                      "select payload from search_work where kind='VECTOR' and status='FAILED'",
+                      String.class)
+                  .contains(user)) throw new EmbeddingFailure("USER_MATCH_VECTOR_FAILED", false);
           db.enqueue("VECTOR", user, clock.millis());
         });
+  }
+
+  public boolean hasPreferences(String user) {
+    return !empty(users.explicitPreferences(user));
   }
 
   private long version(String user) {
