@@ -35,6 +35,7 @@ class StoreApiTests {
   @Autowired JsonMapper json;
   @Autowired StoreApplicationService stores;
   @Autowired com.bintime.store.contract.SearchStoreCatalog catalog;
+  @Autowired com.bintime.search.service.WaitlistService waitlists;
 
   @MockitoBean(name = "storeClock")
   Clock clock;
@@ -64,6 +65,7 @@ class StoreApiTests {
   @BeforeEach
   void setup() {
     when(clock.instant()).thenReturn(NOW);
+    when(clock.millis()).thenReturn(NOW.toEpochMilli());
     when(clock.getZone()).thenReturn(ZoneOffset.UTC);
     for (String table : List.of("search_work", "search_intent", "search_offer"))
       db.update("delete from " + table);
@@ -230,6 +232,16 @@ class StoreApiTests {
     String shop = shop("owner"), svc = service(shop, 60), other = shop("owner");
     catalog.validate(conditions(shop, svc));
     assertThat(catalog.available(conditions(shop, svc), null, 20).items()).isEmpty();
+    var wait =
+        waitlists.create(
+            "alice",
+            "catalog-wait",
+            new com.bintime.search.dto.CreateWaitlistRequest(
+                "MANUAL", conditions(shop, svc), true));
+    assertThat(wait.status()).isEqualTo("ACTIVE");
+    var detail = waitlists.get("alice", wait.id());
+    assertThat(detail.store().id()).isEqualTo(shop);
+    assertThat(detail.service().id()).isEqualTo(svc);
     assertThat(catalog.describe(shop, svc).service().name()).isEqualTo("젤 네일");
     assertThat(catalog.describe(null, svc).store().id()).isEqualTo(shop);
     assertThat(catalog.describe(null, null).store()).isNull();

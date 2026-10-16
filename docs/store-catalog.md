@@ -45,3 +45,5 @@ FROM store_shops WHERE search_version IS NULL OR search_version < 1;
 StoreApiTests에서 실제 등록·예약·취소·발행·철회·재발행·만료 후 원장을 재조회한다. 참조 검증, 같은 시작 시각의 커서 순회, 필터 변경 거절, 가격·전체 시간·거리, 원시 100행 이후 적격 공급, 1,000개 초과 ID 재검증, 빈 매장·전체 시술 설명·검색 버전·롤백·멱등·경합을 검증한다.
 
 `infra/oracle/verify-store.py`는 기존 스키마 변경과 신규 스키마 양쪽에서 같은 테스트를 실행하고 06 재실행도 확인한다. 검증용 BT_STORE_ 스키마만 생성하며 앱 DB를 변경하지 않는다. 실제 search 사용자 인증·알림·ES 전체 흐름은 별도 QA다.
+
+2026-10-16 최종 검증: `./gradlew format test build --no-daemon` 성공. 전체 154건 중 151건 통과, 외부 연동 3건 제외. 격리 Oracle의 기존 변경·신규 스키마 양쪽에서도 StoreApiTests 22건이 통과했다. 실제 search 대기 등록·상세 조회, 검색 버전의 경합·멱등 재생·DB 실패 롤백까지 확인했다. BINTIME_APP과 운영 DB에는 06을 적용하지 않았다.

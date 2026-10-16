@@ -13,6 +13,8 @@ S-01~08은 MVC Service/JDBC Repository와 OpenAI·Elasticsearch Adapter로 처�
 - user: `SearchUserAccess.explicitPreferences`는 구현된 `UserPreferenceService`를 통해 `user_accounts.preferences_json` 전체를 조회한다. `UserPreferenceService.replace`는 자유로운 JSON 저장과 동기 `UserPreferencesChanged` 이벤트를 같은 트랜잭션에서 처리하며, search 소비자는 revision과 VECTOR 작업을 같은 트랜잭션에 기록한다. `customer`의 인증/CUSTOMER/CSRF와 `notificationsEnabled`의 실제 구현 연결은 별도 의존 작업이다. U-04~08 프로필·위치·선호 저장 HTTP API는 구현되어 있다. U-08 저장을 이 변경 이벤트 경로에 연결하는 작업은 아직 남아 있다.
 - store: `SearchStoreCatalog.validate`는 실제 매장·카테고리·시술 관계를 검증한다. `describe`는 표시용 이름을 제공한다. `available`과 `export`는 cursor가 null일 때 첫 페이지이며 nextCursor=null까지 누락 없이 순회한다. `revalidate`는 현재 AVAILABLE이며 미래인 슬롯만 반환한다. 슬롯 start/end와 가격은 실제 원장 값이다. 문서 version은 매장·서비스·슬롯의 모든 검색 관련 변경마다 증가한다.
 - store 커밋 후 `MatchService.submit(eventId, slotId, publicationVersion)`와 `SearchIndexService.changed(전체문서)`를 생산자 outbox 등으로 재전달해야 한다. 슬롯 삭제/매장 비공개는 slots=[] tombstone을 전달한다. 예약 완료는 user/intent/version/reservationId를 담아 `WaitlistService.fulfilled`로 전달한다. 검색 도메인이 예약을 확정하지 않는다.
+
+store의 조회 계약은 `StoreSearchCatalogService`로 연결되어 있다. 필터·커서·검색 전용 버전 및 06 DB 변경은 [store 카탈로그 계약](store-catalog.md)을 참고한다. 이벤트 전달·search 사용자 인증·실제 알림 연결은 별도로 남아 있다.
 - notification: `SearchNotificationGateway.dispatch`는 N-06 DTO를 접수한다. 동일 user+slot을 중복 발송하지 않고, 최종 동의·발송 제한·대기 ID/버전과 슬롯 유효성을 재확인한다. 취소와 외부 발송 사이의 경쟁은 수신자의 최종 검증 계약으로 닫는다. 검색 DB 잠금을 외부 호출 동안 유지하지 않는다.
 
 기존 JPA Waitlist(`search_waitlists`)와 새 `search_intent`는 별도 저장 모델이다. `WaitlistReservationService`는 두 모델을 지원하며 store 예약과 같은 트랜잭션에서 조건 검증과 완료 처리를 수행한다. search는 다른 도메인의 Repository를 호출하지 않는다.

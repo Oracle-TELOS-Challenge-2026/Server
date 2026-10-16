@@ -82,6 +82,8 @@ Oracle DDL은 암묵적으로 커밋하므로 백업·쓰기 중단 후 SQL을 �
 
 ## 검증
 
+SearchStoreCatalog의 원장 조회와 검색 버전은 [카탈로그 계약](store-catalog.md)을 따른다. 기존 store API DB에는 [06-store-search-catalog.sql](../infra/oracle/migrations/06-store-search-catalog.sql)을 별도로 적용해야 한다. 최신 초기 SQL에는 포함되어 있다. 자동 적용은 하지 않는다.
+
 ```sh
 ./gradlew format
 ./gradlew test
