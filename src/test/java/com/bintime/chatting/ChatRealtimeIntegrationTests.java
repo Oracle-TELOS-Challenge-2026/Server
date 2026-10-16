@@ -105,7 +105,9 @@ class ChatRealtimeIntegrationTests {
     var customerSocket = connect(customer);
     var ownerSocket = connect(owner);
     subscribe(customerSocket, room, 0, 0);
+    assertReadSnapshot(customerSocket, 0, 0);
     subscribe(ownerSocket, room, 0, 0);
+    assertReadSnapshot(ownerSocket, 0, 0);
 
     var first =
         request(
@@ -184,7 +186,25 @@ class ChatRealtimeIntegrationTests {
                 .path("sequence")
                 .asLong())
         .isEqualTo(3);
-    var reconnected = connect(customer);
+    request(
+        owner,
+        "PUT",
+        "/api/v1/chatting/rooms/" + room + "/read",
+        "offline-read",
+        Map.of("lastReadSequence", 3),
+        200);
+    assertThat(
+            frame(ownerSocket, "room.read.updated")
+                .path("payload")
+                .path("lastReadSequence")
+                .asLong())
+        .isEqualTo(3);
+    // A fresh HTTP session must restore the persisted peer cursor too.
+    var relogged = login("customer");
+    var rooms = request(relogged, "GET", "/api/v1/chatting/rooms", "unused", Map.of(), 200);
+    assertThat(rooms.path("items").get(0).path("lastReadSequence").asLong(-1)).isZero();
+    assertThat(rooms.path("items").get(0).path("peerReadSequence").asLong(-1)).isEqualTo(3);
+    var reconnected = connect(relogged);
     subscribe(reconnected, room, 1, 3);
     assertThat(
             frame(reconnected, "message.created")
@@ -200,6 +220,9 @@ class ChatRealtimeIntegrationTests {
                 .path("sequence")
                 .asLong())
         .isEqualTo(3);
+    assertReadSnapshot(reconnected, 0, 3);
+    subscribe(reconnected, room, 3, 3);
+    assertReadSnapshot(reconnected, 0, 3);
     assertThat(
             db.queryForObject(
                 "select count(*) from chatting_messages where room_id=?", Long.class, room))
@@ -228,7 +251,11 @@ class ChatRealtimeIntegrationTests {
             .header("Content-Type", "application/json")
             .header("X-CSRF-Token", browser.csrf())
             .header("Idempotency-Key", key)
-            .method(method, HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)))
+            .method(
+                method,
+                method.equals("GET")
+                    ? HttpRequest.BodyPublishers.noBody()
+                    : HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)))
             .build();
     var response = browser.client().send(request, HttpResponse.BodyHandlers.ofString());
     assertThat(response.statusCode()).describedAs(response.body()).isEqualTo(status);
@@ -261,6 +288,15 @@ class ChatRealtimeIntegrationTests {
                 .path("replayThroughSequence")
                 .asLong())
         .isEqualTo(through);
+  }
+
+  private void assertReadSnapshot(Socket connection, long customer, long owner) throws Exception {
+    for (var expected : List.of(Map.entry("customer", customer), Map.entry("owner", owner))) {
+      var payload = frame(connection, "room.read.updated").path("payload");
+      assertThat(payload.path("userId").asText()).isEqualTo(expected.getKey());
+      assertThat(payload.path("lastReadSequence").asLong(-1)).isEqualTo(expected.getValue());
+      assertThat(payload.path("readAt").isNull()).isEqualTo(expected.getValue() == 0);
+    }
   }
 
   private void send(Socket connection, String type, Map<String, Object> payload) {

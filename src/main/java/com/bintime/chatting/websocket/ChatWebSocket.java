@@ -213,6 +213,9 @@ public class ChatWebSocket extends TextWebSocketHandler
     // Publish the subscription before replay; draining from its DB cursor joins replay to live
     // data.
     drain(c, room);
+    // Read cursors can advance while disconnected without creating a new message.
+    if (c.subscriptions.containsKey(room))
+      for (var read : chats.readSnapshots(c.principal.userId(), room)) readUpdate(c, read);
     // Status revisions do not advance message_sequence. Rehydrate cards on EVERY reconnect.
     proposalSnapshot(c, room);
   }
@@ -351,7 +354,9 @@ public class ChatWebSocket extends TextWebSocketHandler
       var positions = c.readSequences.get(event.read().roomId());
       long sequence = event.read().lastReadSequence();
       // Commit callbacks can arrive out of order; never regress the peer's read cursor.
-      if (sequence <= positions.getOrDefault(event.userId(), 0L)) return;
+      Long previous = positions.get(event.userId());
+      // The first snapshot must include zero, even when no read row exists yet.
+      if (previous != null && sequence <= previous) return;
       send(
           c,
           "room.read.updated",

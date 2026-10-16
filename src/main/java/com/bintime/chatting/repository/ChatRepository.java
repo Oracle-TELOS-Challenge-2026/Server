@@ -118,6 +118,7 @@ public class ChatRepository {
       """
       select r.*,s.owner_user_id,s.name as store_name,s.image_url,c.display_name as customer_name,
        coalesce(rp.last_read_sequence,0) as read_sequence,
+       coalesce(peer.last_read_sequence,0) as peer_read_sequence,
        (select count(*) from chatting_messages x where x.room_id=r.room_id
          and x.sender_id<>? and x.message_sequence>coalesce(rp.last_read_sequence,0)) as unread_count,
        m.message_id as last_id,m.sender_id as last_sender,m.client_message_id as last_client,
@@ -128,6 +129,8 @@ public class ChatRepository {
           from chatting_rooms r join store_shops s on s.store_id=r.store_id
           join user_accounts c on c.user_id=r.customer_id
           left join chatting_read_positions rp on rp.room_id=r.room_id and rp.user_id=?
+          left join chatting_read_positions peer on peer.room_id=r.room_id
+           and peer.user_id=case when r.customer_id=? then s.owner_user_id else r.customer_id end
           left join chatting_messages m on m.room_id=r.room_id and m.message_sequence=r.last_sequence
           left join user_accounts sender on sender.user_id=m.sender_id
           """
@@ -135,14 +138,14 @@ public class ChatRepository {
 
   public ChatRoomResponse view(String user, String room) {
     return jdbc
-        .query(VIEW + " where r.room_id=?", (r, n) -> listing(r).value(), user, user, room)
+        .query(VIEW + " where r.room_id=?", (r, n) -> listing(r).value(), user, user, user, room)
         .stream()
         .findFirst()
         .orElse(null);
   }
 
   public List<Listing> list(String user, OffsetDateTime before, String beforeId, int limit) {
-    var args = new ArrayList<Object>(List.of(user, user, user, user));
+    var args = new ArrayList<Object>(List.of(user, user, user, user, user));
     String sql = VIEW + " where (r.customer_id=? or s.owner_user_id=?)";
     if (before != null) {
       sql +=
@@ -185,6 +188,7 @@ public class ChatRepository {
             last,
             r.getInt("unread_count"),
             r.getLong("read_sequence"),
+            r.getLong("peer_read_sequence"),
             time(r, "created_at"));
     OffsetDateTime activity = time(r, "last_message_at");
     return new Listing(response, activity == null ? response.createdAt() : activity);

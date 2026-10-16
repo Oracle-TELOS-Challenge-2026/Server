@@ -82,6 +82,7 @@ public class ChatRoomController {
                                 "lastMessage": null,
                                 "unreadCount": 0,
                                 "lastReadSequence": 0,
+                                "peerReadSequence": 0,
                                 "createdAt": "2026-10-16T14:00:00+09:00"
                               }
                             },
@@ -122,6 +123,7 @@ public class ChatRoomController {
                                 "lastMessage": null,
                                 "unreadCount": 0,
                                 "lastReadSequence": 0,
+                                "peerReadSequence": 0,
                                 "createdAt": "2026-10-16T14:00:00+09:00"
                               }
                             },
@@ -157,7 +159,10 @@ public class ChatRoomController {
   @Operation(
       operationId = "getChatRooms",
       summary = "C-02 · 참여 채팅방 목록 조회",
-      description = "고객은 본인, 사장님은 소유 매장 방만. 최신 메시지 시각 내림차순.\n\n" + "- 로그인한 채팅방 참여자 (고객/소유 매장 사장님)",
+      description =
+          "고객은 본인, 사장님은 소유 매장 방만. 최신 메시지 시각 내림차순. lastReadSequence는 본인, peerReadSequence는 상대방 읽음"
+              + " 위치이며 기록이 없으면 0.\n\n"
+              + "- 로그인한 채팅방 참여자 (고객/소유 매장 사장님)",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4814092c0d8b25f948a50"))
   @SecurityRequirement(name = "sessionCookie")
@@ -193,6 +198,7 @@ public class ChatRoomController {
                                     "lastMessage": null,
                                     "unreadCount": 0,
                                     "lastReadSequence": 0,
+                                    "peerReadSequence": 0,
                                     "createdAt": "2026-10-16T14:00:00+09:00"
                                   }
                                 ],

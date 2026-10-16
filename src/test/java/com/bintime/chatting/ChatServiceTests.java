@@ -85,6 +85,9 @@ class ChatServiceTests {
     assertThat(first.status()).isEqualTo(201);
     assertThat(first.data().unreadCount()).isZero();
     assertThat(first.data().lastReadSequence()).isZero();
+    assertThat(first.data().peerReadSequence()).isZero();
+    String legacy = json.writeValueAsString(first.data()).replace("\"peerReadSequence\":0,", "");
+    assertThat(json.readValue(legacy, ChatRoomResponse.class).peerReadSequence()).isZero();
     assertThat(first.data().lastMessage()).isNull();
     chats.send("owner", first.data().id(), new SendChatMessageRequest("reply", "예약 가능합니다"));
     assertThat(chats.create("customer", "create", request)).isEqualTo(first);
@@ -123,6 +126,7 @@ class ChatServiceTests {
     failure(404, "ROOM_NOT_FOUND", () -> chats.history("outsider", room, null, 20));
     failure(404, "ROOM_NOT_FOUND", () -> chats.send("outsider", room, message("foreign")));
     failure(404, "ROOM_NOT_FOUND", () -> chats.read("outsider", room, 0L));
+    failure(404, "ROOM_NOT_FOUND", () -> chats.readSnapshots("outsider", room));
     assertThat(chats.list("outsider", null, 20).items()).isEmpty();
     db.update("update store_shops set owner_user_id='owner2' where store_id='shop'");
     failure(404, "ROOM_NOT_FOUND", () -> chats.latest("owner", room));
@@ -185,6 +189,41 @@ class ChatServiceTests {
     failure(400, "INVALID_READ_SEQUENCE", () -> chats.read("customer", room, 5L));
     failure(400, "INVALID_SEQUENCE", () -> chats.read("customer", room, -1L));
     assertThat(committed.stream().filter(ChatService.ReadCommitted.class::isInstance)).hasSize(1);
+  }
+
+  @Test
+  void roomViewsRestoreTheOtherParticipantsReadPosition() {
+    String room = room();
+    assertThat(repository.view("customer", room).peerReadSequence()).isZero();
+    assertThat(chats.readSnapshots("customer", room))
+        .containsExactly(
+            new ChatService.ReadCommitted("customer", new ChatReadResponse(room, 0L, null)),
+            new ChatService.ReadCommitted("owner", new ChatReadResponse(room, 0L, null)));
+    chats.send("customer", room, message("one"));
+    chats.send("owner", room, message("two"));
+    chats.read("customer", room, 1L);
+    chats.read("owner", room, 2L);
+    // A stray read row must not be mistaken for the other room participant.
+    db.update("insert into chatting_read_positions values(?, 'outsider', 0, null)", room);
+
+    var reloaded =
+        new ChatService(
+            repository,
+            tx,
+            clock,
+            json,
+            publisher,
+            org.mockito.Mockito.mock(com.bintime.store.contract.StoreReservationPort.class));
+    var customer = reloaded.list("customer", null, 20).items().getFirst();
+    var owner = reloaded.list("owner", null, 20).items().getFirst();
+    assertThat(customer.lastReadSequence()).isEqualTo(1);
+    assertThat(customer.peerReadSequence()).isEqualTo(2);
+    assertThat(owner.lastReadSequence()).isEqualTo(2);
+    assertThat(owner.peerReadSequence()).isEqualTo(1);
+    assertThat(reloaded.readSnapshots("customer", room))
+        .extracting(ChatService.ReadCommitted::userId)
+        .containsExactly("customer", "owner");
+    assertThat(reloaded.list("outsider", null, 20).items()).isEmpty();
   }
 
   @Test

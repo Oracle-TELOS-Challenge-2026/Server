@@ -14,6 +14,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.ActiveProfiles;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles({"test", "api-docs"})
@@ -61,6 +62,20 @@ class ApiContractTests {
     } else if (node.isArray()) {
       for (JsonNode child : node) assertNoNullReference(child);
     }
+  }
+
+  @Test
+  void chatRoomsDocumentPeerReadSequenceAndItsDefaultInListExamples() throws Exception {
+    JsonNode doc = getDoc("all");
+    JsonNode schema = doc.at("/components/schemas/ChatRoomResponse");
+    assertThat(stringValues(schema.path("required"))).contains("peerReadSequence");
+    assertThat(schema.at("/properties/peerReadSequence/type").asText()).isEqualTo("integer");
+    assertThat(schema.at("/properties/peerReadSequence/minimum").asLong(-1)).isZero();
+    JsonNode example =
+        doc.at(
+            "/paths/~1api~1v1~1chatting~1rooms/get/responses/200/content/application~1json/examples/success/value");
+    JsonNode response = example.isString() ? mapper.readTree(example.asText()) : example;
+    assertThat(response.at("/success/data/items/0/peerReadSequence").asLong(-1)).isZero();
   }
 
   @Test
@@ -583,7 +598,15 @@ class ApiContractTests {
         new String[] {"/contracts/notion-api.json", "/contracts/chat-booking-proposals.json"}) {
       try (var stream = getClass().getResourceAsStream(resource)) {
         assertThat(stream).as(resource).isNotNull();
-        for (JsonNode contract : mapper.readTree(stream)) combined.add(contract);
+        for (JsonNode contract : mapper.readTree(stream)) {
+          // Extend old examples in memory; keep the original Notion snapshot intact.
+          if (contract.path("id").asText().equals("C-01"))
+            ((ObjectNode) contract.path("responseExample")).put("peerReadSequence", 0);
+          if (contract.path("id").asText().equals("C-02"))
+            for (JsonNode room : contract.path("responseExample").path("items"))
+              ((ObjectNode) room).put("peerReadSequence", 0);
+          combined.add(contract);
+        }
       }
     }
     return combined;

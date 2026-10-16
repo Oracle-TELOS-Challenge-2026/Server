@@ -83,6 +83,8 @@ store 발행 → search 매칭 → 알림 접수·발송의 연결과 통합 테
 
 구독 경계와 실시간 전달은 DB의 방별 sequence 커서를 공유한다. 커밋 후 콜백 순서가 바뀌어도 DB에서 오름차순으로 읽고, 읽음 이벤트도 같은 연결에서 이전 값으로 돌아가지 않는다. 구독하지 않은 방에도 참여자라면 `message.send`·`room.read`를 보낼 수 있지만 해당 방의 실시간 이벤트는 받지 않는다. 수신 UI는 `message.id` 또는 방별 `sequence`로 중복을 제거하고 읽음 위치는 최댓값으로 병합한다. 자신의 메시지도 `message.ack`와 `message.created` 양쪽으로 올 수 있으며 순서는 보장하지 않는다.
 
+성공한 `room.subscribe`마다 메시지 재생 후 고객·현재 사장님의 저장된 읽음 위치를 각각 `room.read.updated`로 복원한다. 동일 연결의 재구독, `afterSequence`가 최신인 재접속에도 동일하다. 읽음 행이 없으면 `lastReadSequence=0`, `readAt=null`을 최초 이벤트로 보내며 이후 중복·과거 이벤트는 억제한다. 참여자가 아닌 사용자에게는 읽음 위치를 공개하지 않는다. REST `ChatRoomResponse.peerReadSequence`는 상대방, `lastReadSequence`는 본인 값이다. REST와 이벤트 순서가 엇갈릴 수 있으므로 사용자별 최댓값을 유지하고 내 메시지의 `sequence > peerReadSequence`일 때만 미읽음 `1`을 표시한다. 기존 읽음 테이블을 사용하며 마이그레이션은 없다.
+
 브라우저 WebSocket 프로토콜의 Ping에 자동으로 Pong을 응답한다. JSON `ping`에도 JSON `pong`을 반환한다. 세션 만료·로그아웃·계정 변경 시 연결을 닫으며 heartbeat는 HTTP 세션 유휴 시간을 연장하지 않는다. Origin은 `FRONTEND_URL`의 origin 한 개만 허용한다. 로컬 개발 시 프론트·API 호스트를 모두 `localhost`로 맞추고 쿠키로 로그인해야 한다. Bearer·URL 토큰·개발용 사용자 헤더는 채팅 인증에 사용하지 않는다.
 
 현재 전송·전송 제한은 단일 앱 프로세스 기준이다. DB는 메시지를 보존하지만 앱 재시작 때 소켓은 닫히므로 저장한 `afterSequence`로 재구독한다. 여러 앱 인스턴스로 확장하려면 프로세스 간 이벤트 전달을 추가해야 한다. 이미지·파일 첨부와 채팅 FCM 발송은 포함하지 않는다.

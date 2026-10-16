@@ -645,6 +645,57 @@ class ChatWebSocketTests {
     assertThat(updates).containsExactly(9L);
   }
 
+  @Test
+  void subscribeRestoresZeroAndResubscribeRestoresTheLatestReadPosition() throws Exception {
+    authenticate(socket);
+    latest.set(9);
+    when(chats.readSnapshots("alice", "room"))
+        .thenReturn(
+            List.of(new ChatService.ReadCommitted("bob", new ChatReadResponse("room", 0L, null))));
+    subscribe(socket, 9);
+    assertThat(lastFrame(socket).path("type").asText()).isEqualTo("room.read.updated");
+    var initial = lastFrame(socket).path("payload");
+    assertThat(initial.path("userId").asText()).isEqualTo("bob");
+    assertThat(initial.path("lastReadSequence").asLong(-1)).isZero();
+    assertThat(initial.path("readAt").isNull()).isTrue();
+
+    var at = OffsetDateTime.now(clock);
+    when(chats.readSnapshots("alice", "room"))
+        .thenReturn(
+            List.of(new ChatService.ReadCommitted("bob", new ChatReadResponse("room", 9L, at))));
+    // Replacing a subscription must refresh reads even when no message needs replaying.
+    subscribe(socket, 9);
+    assertThat(lastFrame(socket).path("payload").path("lastReadSequence").asLong()).isEqualTo(9);
+    AtomicInteger checked = new AtomicInteger();
+    when(chats.latest("alice", "room"))
+        .thenAnswer(
+            invocation -> {
+              checked.incrementAndGet();
+              return latest.get();
+            });
+    handler.readCommitted(
+        new ChatService.ReadCommitted("bob", new ChatReadResponse("room", 4L, at)));
+    pollUntil(() -> checked.get() >= 1);
+    send(socket, "ping", "old-read-barrier", Map.of());
+    handler.readCommitted(
+        new ChatService.ReadCommitted("bob", new ChatReadResponse("room", 9L, at)));
+    pollUntil(() -> checked.get() >= 2);
+    send(socket, "ping", "read-snapshot-barrier", Map.of());
+    assertThat(
+            frames(socket).stream()
+                .filter(frame -> "room.read.updated".equals(frame.path("type").asText()))
+                .map(frame -> frame.path("payload").path("lastReadSequence").asLong())
+                .toList())
+        .containsExactly(0L, 9L);
+
+    handler.afterConnectionClosed(socket.session, CloseStatus.NORMAL);
+    Socket reconnect = open("read-reconnect");
+    authenticate(reconnect);
+    subscribe(reconnect, 9);
+    assertThat(deliveredSequences(reconnect)).isEmpty();
+    assertThat(lastFrame(reconnect).path("payload").path("lastReadSequence").asLong()).isEqualTo(9);
+  }
+
   private void authenticateHttpSession(BintimePrincipal principal) {
     http.setAttribute(
         HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,

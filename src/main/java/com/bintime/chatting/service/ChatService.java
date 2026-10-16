@@ -385,6 +385,19 @@ public class ChatService {
     return db.proposalMessages(participant(user, roomId, false), 1001);
   }
 
+  public List<ReadCommitted> readSnapshots(String user, String roomId) {
+    actor(user, false);
+    var room = participant(user, roomId, false);
+    return List.of(room.customer(), room.owner()).stream()
+        .map(
+            participant -> {
+              var read = db.read(roomId, participant);
+              return new ReadCommitted(
+                  participant, new ChatReadResponse(roomId, read.sequence(), read.at()));
+            })
+        .toList();
+  }
+
   public ChatReadResponse read(String user, String id, Long sequence) {
     sequence(sequence, true);
     id(id);

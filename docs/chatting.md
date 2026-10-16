@@ -18,6 +18,12 @@
 
 목록·이력 limit은 1~100이다. 메시지는 공백만으로 구성할 수 없고 최대 2000자다. 사용자·방·매장·clientMessageId는 DB 계약의 최대 64 UTF-8 바이트를 따른다. 타인의 방은 404이며 `READ_ONLY` 방은 이력·읽음 처리는 가능하지만 새 메시지는 409다.
 
+채팅방 응답의 `lastReadSequence`는 본인, `peerReadSequence`는 상대방의 마지막 읽음 위치다. 기존 `chatting_read_positions`에서 방의 고객·현재 매장 사장님만 조회하며 기록이 없으면 `0`이다. 새로고침·재로그인 후에도 GET 목록에서 복원한다. 방 생성 API의 동일 멱등 키 응답은 최초 스냅샷이므로 최신 읽음 위치는 GET 목록 또는 구독 이벤트로 확인한다.
+
+```json
+{ "id": "room_001", "lastReadSequence": 42, "peerReadSequence": 39 }
+```
+
 HTTP 멱등 키는 최초 응답 데이터와 HTTP 상태를 24시간 재생한다. 같은 키로 다른 본문을 보내면 409다. 메시지의 `(방, 발신자, clientMessageId)` 중복 제거는 24시간 이후에도 유지되며 다른 내용으로 재사용하면 409다. REST와 WS에서 같은 clientMessageId를 재사용하면 한 번만 저장된다. HTTP 멱등 재생은 최초 상태(201 포함)를 유지하므로 새 키로 기존 메시지를 요청한 경우의 200과 구분한다.
 
 ## 브라우저 연결 예시
@@ -54,6 +60,8 @@ socket.onmessage = ({ data }) => {
 연결 후 5초 안에 인증한다. 4401·4403 또는 세션 무효화에 따른 1008 종료는 로그인·CSRF 상태부터 확인하고 무한 재시도하지 않는다. 프레임 스키마·오류·heartbeat·제한은 [실시간 계약](contracts/realtime.md#채팅-websocket--c-ws)에 정의한다. Swagger의 Try it out은 REST 전용이다.
 
 재연결 때 해당 방에서 연속으로 받은 마지막 sequence를 `afterSequence`로 전송한다. `room.subscribed`의 `replayThroughSequence`까지 재생한 뒤 실시간 메시지를 받는다. `room.resync_required`의 `reason=MESSAGE_GAP`, `subscriptionActive=false`이면 구독되지 않은 상태이므로 REST 이력을 페이지로 조회·병합하고 최신 sequence로 다시 구독한다. `reason=PROPOSAL_STATE_LIMIT`, `subscriptionActive=true`이면 기존 구독을 유지하며 REST로 카드 상태만 보완하고 같은 연결에서 재구독하지 않는다. 서버 이벤트는 HTTP 공통 응답 봉투 없이 `{type, requestId, payload}`다. 본인 메시지는 ACK·이벤트 양쪽으로 올 수 있으므로 ID로 합친다.
+
+성공한 `room.subscribe`마다 메시지 재생 후 양쪽 참여자의 DB 읽음 위치를 `room.read.updated`로 전달한다. 같은 연결의 재구독과 메시지 재생이 없는 재연결에도 전달하며, 기록이 없으면 `lastReadSequence=0`, `readAt=null`이다. 이후 같은 구독에서 동일하거나 더 작은 읽음 이벤트는 보내지 않는다. 프런트도 REST의 `peerReadSequence`와 상대방 `userId`의 이벤트를 최댓값으로 병합한다. **내 메시지의 `sequence > peerReadSequence`인 경우에만 `1`을 표시**한다. 읽음 복구를 위한 DB 변경이나 마이그레이션은 없다.
 
 현재 한 앱 컨테이너에서 동작한다. 재시작 시 메시지 원장은 유지되고 연결은 재구독해야 한다. 다중 앱 간 브로드캐스트, 첨부 파일, 채팅 푸시는 구현 범위에 포함하지 않는다. Nginx의 기존 Upgrade 설정을 사용하며 별도 외부 포트를 열지 않는다.
 

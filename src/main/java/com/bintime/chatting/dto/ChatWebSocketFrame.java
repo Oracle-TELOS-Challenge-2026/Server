@@ -117,7 +117,9 @@ public record ChatWebSocketFrame(
   public record ReadAck(String roomId, Long lastReadSequence, OffsetDateTime readAt)
       implements Payload {}
 
-  @Schema(name = "ChatReadUpdatedPayload", description = "room.read.updated")
+  @Schema(
+      name = "ChatReadUpdatedPayload",
+      description = "room.read.updated: 구독·재구독 시 양쪽 읽음 위치도 전달. 기록이 없으면 0/readAt=null. 최댓값으로 병합")
   public record ReadUpdated(
       String roomId, String userId, Long lastReadSequence, OffsetDateTime readAt)
       implements Payload {}
