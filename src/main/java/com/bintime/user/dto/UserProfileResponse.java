@@ -22,7 +22,10 @@ public record UserProfileResponse(
         UserLocationResponse location,
     @Schema(description = "preferences", requiredMode = Schema.RequiredMode.REQUIRED)
         Preferences preferences,
-    @Schema(description = "리소스 버전", requiredMode = Schema.RequiredMode.REQUIRED, example = "1")
+    @Schema(
+            description = "이름·선호도가 공유하는 버전. 수정 요청의 expectedVersion으로 사용",
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            example = "1")
         Long version) {
   @Schema(name = "UserProfileResponsePreferences")
   public record Preferences(
@@ -35,5 +38,15 @@ public record UserProfileResponse(
               requiredMode = Schema.RequiredMode.REQUIRED,
               nullable = true,
               example = "60000")
-          Long maxPrice) {}
+          Long maxPrice,
+      @Schema(
+              description = "자유 입력 선호도. 미등록 시 빈 문자열",
+              requiredMode = Schema.RequiredMode.REQUIRED,
+              maxLength = 2000)
+          String text) {
+    public Preferences {
+      // 기존 JSON과 신규 가입 기본값에는 text 필드가 없어도 읽을 수 있어야 한다.
+      text = text == null ? "" : text;
+    }
+  }
 }

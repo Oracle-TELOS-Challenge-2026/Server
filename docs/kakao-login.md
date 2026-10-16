@@ -1,6 +1,6 @@
 # 카카오 로그인 실행
 
-구현한 API는 U-01(로그인 시작), U-02(콜백), U-03(로그아웃), U-09(CSRF 조회)다. 경로와 응답 봉투는 기존 Swagger 계약을 유지한다. 사용자 프로필·위치·선호도와 다른 도메인의 인증·권한 적용은 후속 구현이다.
+구현한 API는 U-01(로그인 시작), U-02(콜백), U-03(로그아웃), U-09(CSRF 조회)다. 경로와 응답 봉투는 기존 Swagger 계약을 유지한다. 사용자 프로필·위치·선호도(U-04~U-08)도 구현되어 있다. DB 마이그레이션과 사용법은 [사용자 API](user-profile.md)를 참고한다. 다른 도메인의 인증·권한 적용은 각 기능 구현 시 진행한다.
 
 ## 로컬 설정
 
@@ -44,6 +44,10 @@ SELECT table_name FROM user_tables WHERE table_name = 'USER_ACCOUNTS';
 3. 프론트에서 `GET /api/v1/auth/csrf`를 `credentials: 'include'`로 호출한다. 성공 시 `success.data.csrfToken`을 보관한다.
 4. `POST /api/v1/auth/logout`을 같은 쿠키와 `X-CSRF-Token` 헤더로 호출한다. 성공은 204이고 이후 CSRF 조회는 401이다.
 
+카카오 콜백은 성공 시 `code`·`state`, 동의 거절 등 실패 시 `error`·`state`와 선택적인 `error_description`을 받는다. 따라서 Swagger에서 이 query들을 일괄 필수로 선언하지 않는다. `code`와 `error`는 각 성공·실패 경로에서 전달되는 대체 값이며, 누락되거나 잘못된 `state`로는 인증이 성립하지 않는다. 실제 콜백 처리는 Spring Security가 담당하고 실패 시 기존 `/login?error=OAUTH_FAILED`로 이동한다.
+
+로그아웃의 `X-CSRF-Token`은 Swagger에서도 필수 헤더다. 누락·불일치는 Spring Security가 403 `CSRF_INVALID`로 처리한다. 컨트롤러의 헤더 바인딩이 optional인 것은 MVC의 400 응답보다 이 보안 검증 결과를 일관되게 사용하기 위해서다.
+
 ```javascript
 const API = 'http://localhost:8080';
 const response = await fetch(`${API}/api/v1/auth/csrf`, { credentials: 'include' });
@@ -56,7 +60,7 @@ await fetch(`${API}/api/v1/auth/logout`, {
 });
 ```
 
-개발 중 프론트와 백엔드 주소는 모두 `localhost`로 통일한다. `127.0.0.1`과 섞으면 쿠키 호스트가 달라진다. Swagger는 별도 로그인 없이 열리며, 같은 백엔드 origin에서 먼저 로그인하면 브라우저 쿠키를 사용한다. 쿠키를 Authorize 입력란에 직접 붙이지 않는다. `GET /api/v1/users/me`는 로그인하지 않으면 401, 로그인한 상태에서는 아직 501이다.
+개발 중 프론트와 백엔드 주소는 모두 `localhost`로 통일한다. `127.0.0.1`과 섞으면 쿠키 호스트가 달라진다. Swagger는 별도 로그인 없이 열리며, 같은 백엔드 origin에서 먼저 로그인하면 브라우저 쿠키를 사용한다. 쿠키를 Authorize 입력란에 직접 붙이지 않는다. `GET /api/v1/users/me`는 로그인하지 않으면 401, 로그인한 상태에서는 DB의 본인 프로필을 반환한다. 사용자 API용 DB 마이그레이션을 먼저 적용한다.
 
 ## 다른 도메인에서 사용자 확인
 

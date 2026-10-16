@@ -2,7 +2,7 @@
 
 출처: [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4) 및 [공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 2026-10-16 조회 기준의 구현 제안 계약이다.
 
-45개 HTTP 경로(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01·U-02·U-03·U-09는 카카오 로그인·세션·CSRF로 구현했다. 나머지는 Controller·DTO 계약 골격으로, Controller에 도달한 요청에 공통 실패 JSON과 501 상태를 반환한다.
+45개 HTTP 경로(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01~U-09는 카카오 로그인·세션·CSRF 및 사용자 프로필·위치·선호도로 구현했다. 나머지는 Controller·DTO 계약 골격으로, Controller에 도달한 요청에 공통 실패 JSON과 501 상태를 반환한다. 사용자 DB 변경과 연동 방법은 [사용자 API](../user-profile.md)를 참고한다.
 
 Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`의 세션 인증·CSRF를 적용한다. 다른 도메인의 인증·권한은 해당 기능 구현 시 연결한다. `api-docs` 프로필은 문서 열람용으로 보안 필터와 DB 의존성을 제외한다. 자세한 설정은 [카카오 로그인](../kakao-login.md)을 따른다.
 
@@ -12,7 +12,7 @@ Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`의 세션 인증·CSRF�
 - DTO는 도메인의 `dto` 패키지에 Java record로 정의한다. 공통 HTTP 봉투만 `common.dto`에 둔다. DTO를 도메인 엔티티로 공유하지 않는다.
 - JSON 응답은 `BaseResponse<T>` 상속 기반의 `resultType/success.data/error/meta(timestamp,path)` 구조다. 기존 Notion의 최상위 data는 success.data로 이동한다. 목록의 items/page/counts 구조는 그 안에 유지한다. 204·OAuth redirect·SSE·WebSocket은 봉투 예외다. 자세한 계약은 [response.md](response.md)를 따른다.
 - ID는 String, 오프셋 포함 시각은 OffsetDateTime, 날짜는 LocalDate, 금액은 정수 원이다. Web Push expirationTime은 Unix epoch 밀리초다.
-- PATCH의 생략/명시적 null 구분, 필수 nullable 필드 존재 검사, 필드 간 조건 검증은 실제 구현 시 보완해야 한다. 현재 record와 Swagger 메타데이터만으로 런타임 검증이 구현된 것은 아니다.
+- 사용자 API는 필수값·범위와 U-08의 필수 nullable `maxPrice` 키 존재 여부를 검증한다. 나머지 골격의 PATCH 생략/명시적 null 구분 및 필드 간 검증은 실제 구현 시 보완한다.
 - Swagger 첫 화면의 `all` 그룹은 전체 HTTP API 45개를 표시한다. `public`은 43개, `internal`은 2개를 표시한다. 내부 인증의 구체적인 방식은 미정이며 내부 계약은 외부 고객의 호출용이 아니다.
 - Notion 예시에서 생략된 선택 필드(reason, openingHours 등)는 공통 규약을 기준으로 포함한다. ST-08은 OWNER 조회 시 customer/resourceId가 추가된다.
 

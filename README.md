@@ -120,7 +120,7 @@ IntelliJ에서도 Working directory를 저장소 루트로 지정하면 동일�
 
 ## API 계약 및 Swagger
 
-[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 이름과 요청·응답 스키마를 맞췄고, 카카오 로그인 4개 API부터 처리 로직을 연결했다.
+[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)를 기준으로 REST·SSE 45개와 채팅 WebSocket 프레임을 정의했다. 도메인별로 Controller·DTO 이름과 요청·응답 스키마를 맞췄고, 카카오 로그인 4개와 사용자 프로필·위치·선호도 5개 API의 처리 로직을 연결했다.
 
 - [API별 Controller·DTO 이름 매핑](docs/contracts/api.md)
 - [SSE·WebSocket 계약](docs/contracts/realtime.md)
@@ -137,7 +137,7 @@ DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 �
 
 카카오 로그인 시작·콜백·로그아웃·CSRF 조회는 구현되어 있다. `/api/v1/auth/**`, `/api/v1/users/**`에는 세션 인증과 상태 변경 시 CSRF 검증을 적용한다. Swagger는 로그인 없이 접근한다. 설정과 프론트 연동은 [카카오 로그인 실행](docs/kakao-login.md)을 참고한다. `api-docs` 프로필은 DB·로그인 없이 문서를 검토하는 용도이며 API 실행 기능은 비활성화한다.
 
-로그인 외의 Controller 계약 골격은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 필수 입력 바인딩이나 user 도메인의 인증·CSRF 검증은 그 전에 요청을 거절할 수 있다. 프로필·예약·AI·SSE/WS와 다른 도메인의 인증·권한은 각 기능 구현 시 연결한다.
+사용자 도메인 외의 Controller 계약 골격은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 필수 입력 바인딩이나 user 도메인의 인증·CSRF 검증은 그 전에 요청을 거절할 수 있다. 예약·AI·SSE/WS와 다른 도메인의 인증·권한은 각 기능 구현 시 연결한다. 사용자 API를 실행하기 전 [마이그레이션과 연동 안내](docs/user-profile.md)를 확인한다.
 
 ### 공통 JSON 응답
 

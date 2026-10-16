@@ -25,7 +25,7 @@ import org.springframework.context.annotation.Configuration;
             title = "BinTime API",
             version = "v0.1-contract",
             description =
-                "카카오 로그인·콜백·로그아웃·CSRF 조회는 구현되어 있습니다. 나머지는 Notion 명세 기반 계약 골격으로 501을 반환합니다."
+                "카카오 로그인·사용자 프로필·위치·선호도 API는 구현되어 있습니다. 나머지는 Notion 명세 기반 계약 골격으로 501을 반환합니다."
                     + " C-WS는 HTTP operation이 아닌 ChatWebSocketFrame 스키마와"
                     + " docs/contracts/realtime.md를 참고하세요."))
 @SecurityScheme(
