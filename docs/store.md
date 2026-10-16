@@ -18,7 +18,7 @@ ST-01~17과 사장님 등록 API 3개를 Oracle 원장에 구현한다. Controll
 
 영업시간은 MON~SUN 각 1개씩 7개를 제출한다. 휴무일은 opensAt/closesAt가 null, 영업일은 `HH:mm`이고 opensAt < closesAt다. 자정을 넘는 영업은 지원하지 않는다. 일반 슬롯 전체가 영업시간 안에 들어가야 한다. 영업시간 변경은 신규 일반 슬롯에 적용하며 기존 공급·예약을 자동 취소하지 않는다.
 
-PATCH에서 생략한 필드는 유지하고 명시적 null은 `400 NULL_PATCH_FIELD`로 거절한다. 소개 삭제는 빈 문자열을 제출한다. Oracle에서는 빈 문자열이 NULL로 저장되므로 이후 조회에서는 description=null일 수 있다. 매장·시술 수정은 expectedVersion이 필수이며 가격·상태 변경에도 버전을 증가시킨다.
+PATCH에서 생략한 필드는 유지하고 명시적 null은 `400 NULL_PATCH_FIELD`로 거절한다. 소개 삭제는 빈 문자열을 제출한다. Oracle에서는 빈 문자열이 NULL로 저장되지만, 매장 응답의 description은 기존·신규 데이터 모두 빈 문자열 `""`로 반환한다. 입력한 소개 문구는 그대로 반환한다. 매장·시술 수정은 expectedVersion이 필수이며 가격·상태 변경에도 버전을 증가시킨다.
 
 ## 예약 상태와 잠금
 
