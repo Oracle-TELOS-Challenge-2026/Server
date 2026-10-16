@@ -86,4 +86,4 @@ store MVP는 하나의 DB 트랜잭션에서 AVAILABLE → BOOKED로 확정하�
 
 ### 사용자 선호 임베딩 연동
 
-사용자 벡터 입력은 `user_accounts.preferences_json`의 자유로운 JSON 문자열 전체다. 내부 `UserPreferenceService`가 읽기/저장과 변경 이벤트를 제공하고 search가 OpenAI 호출/비동기 갱신/Oracle 벡터 저장을 맡는다. U-08은 categories·keywords·maxPrice·text와 사용자 버전을 저장하는 HTTP API로 구현했으며, 이 저장을 변경 이벤트 경로에 연결하는 작업은 아직 남아 있다. 다른 사용자의 선호 원문이나 벡터를 공개하는 새 HTTP API는 추가하지 않았다. 세부 오류와 마이그레이션/운영 명령은 [search 안내](../search.md)를 따른다.
+사용자 벡터 입력은 `user_accounts.preferences_json`의 자유로운 JSON 문자열 전체다. 내부 `UserPreferenceService`가 읽기/저장과 변경 이벤트를 제공하고 search가 OpenAI 호출/비동기 갱신/Oracle 벡터 저장을 맡는다. U-08은 categories·keywords·maxPrice·text와 사용자 버전을 저장하고 같은 트랜잭션에서 변경 이벤트를 발행해 VECTOR 작업을 등록한다. 200 응답은 선호 저장·작업 접수 성공이며 벡터 생성 완료는 아니다. 동일 입력은 기존 벡터를 재사용하고 OpenAI 일시 장애는 worker에서 재시도한다. 다른 사용자의 선호 원문이나 벡터를 공개하는 새 HTTP API는 추가하지 않았다. 세부 오류와 마이그레이션/운영 명령은 [search 안내](../search.md)를 따른다.
