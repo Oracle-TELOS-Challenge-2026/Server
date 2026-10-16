@@ -47,6 +47,8 @@ data: {"notification":{"id":"noti_001","type":"VACANCY_MATCHED"}}
 
 ## 채팅 WebSocket — C-WS
 
+저장 구조와 더미데이터 입력 규칙은 [채팅 DB 계약 v1](../chatting-db.md)을 따른다. 로컬·OCI에 같은 `004-chatting.sql`을 적용한다. 전송 기능은 아직 계약 단계다.
+
 - 주소: `wss://{api-host}/api/v1/chatting/ws`
 - 서브프로토콜: `bintime.chat.v1`
 - 세션 쿠키 및 Origin 검증 후 업그레이드. 장기 토큰을 URL에 넣지 않는다.
