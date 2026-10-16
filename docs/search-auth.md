@@ -25,9 +25,9 @@ Bearer JWT는 기존 `bintime.auth.store-jwt.*` 설정을 공유하며, JWT 발�
 명시적 선호도는 기존 `UserPreferenceService`로 읽는다. Swagger 전용 `api-docs` 프로필은
 DB 없는 계약 조회를 위한 미연결 구현을 유지한다.
 
-알림 전역 설정과 실제 전달은 아직 연결되지 않았다. `notificationsEnabled()`와
-`SearchNotificationGateway`는 계속 503 미연결 오류를 반환한다. 대기 등록의
-`notificationConsent=true`를 전역 알림 설정으로 임의 변환하지 않는다.
-따라서 이 작업은 로그인 후 대기 등록·조회·수정·취소를 열며 실제 알림 발송 완료를 의미하지 않는다.
+`notificationsEnabled()`는 `NotificationSubscriptions.hasActive`로 유효한 세션에 연결된
+Firebase Installation ID 유무를 확인한다. `SearchNotificationGateway`는
+`NotificationService`에 연결된다. 대기 등록의 `notificationConsent=true`를 구독으로
+간주하지 않으며, 실제 FCM 발송에는 별도 설정과 활성 세션 구독이 필요하다.
 
 검증: SearchAuthenticationTests의 세션 기반 대기 CRUD·역할/소유권·CSRF·삭제 계정·공개/내부 API 경계와 StoreAuthenticationTests의 실제 RSA 서명 Bearer JWT search 요청이 통과했다. 전체 포맷·테스트·빌드도 통과했다. 실제 카카오 브라우저 로그인·배포 JWT 발급자와의 QA는 별도다.

@@ -1,10 +1,12 @@
 package com.bintime.user.adapter;
 
 import com.bintime.common.auth.CurrentActor;
+import com.bintime.notification.subscription.NotificationSubscriptions;
 import com.bintime.search.service.SearchFailure;
 import com.bintime.user.contract.SearchUserAccess;
 import com.bintime.user.service.UserPreferenceService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
@@ -16,10 +18,15 @@ import org.springframework.stereotype.Service;
 public class SearchUserAccessAdapter implements SearchUserAccess {
   private final CurrentActor actors;
   private final UserPreferenceService preferences;
+  private final ObjectProvider<NotificationSubscriptions> subscriptions;
 
-  public SearchUserAccessAdapter(CurrentActor actors, @Lazy UserPreferenceService preferences) {
+  public SearchUserAccessAdapter(
+      CurrentActor actors,
+      @Lazy UserPreferenceService preferences,
+      ObjectProvider<NotificationSubscriptions> subscriptions) {
     this.actors = actors;
     this.preferences = preferences;
+    this.subscriptions = subscriptions;
   }
 
   @Override
@@ -34,8 +41,7 @@ public class SearchUserAccessAdapter implements SearchUserAccess {
 
   @Override
   public boolean notificationsEnabled(String userId) {
-    // 전역 알림 설정 계약은 아직 연결되지 않았다. 대기 동의를 전역 설정으로 간주하지 않는다.
-    throw SearchFailure.unavailable();
+    return subscriptions.getObject().hasActive(userId);
   }
 
   @Override

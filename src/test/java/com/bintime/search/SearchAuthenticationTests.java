@@ -1,5 +1,6 @@
 package com.bintime.search;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -8,6 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.bintime.search.dto.*;
 import com.bintime.store.contract.SearchStoreCatalog;
+import com.bintime.user.adapter.SearchUserAccessAdapter;
+import com.bintime.user.contract.SearchUserAccess;
 import com.bintime.user.security.BintimePrincipal;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -35,6 +38,13 @@ class SearchAuthenticationTests {
   @Autowired JsonMapper json;
   @MockitoBean SearchStoreCatalog catalog;
   MockMvc mvc;
+
+  @Test
+  void searchUsesOneAdapterForSharedAuthenticationAndNotificationEligibility() {
+    var adapters = context.getBeansOfType(SearchUserAccess.class);
+    assertThat(adapters).hasSize(1);
+    assertThat(adapters.values().iterator().next()).isInstanceOf(SearchUserAccessAdapter.class);
+  }
 
   @BeforeEach
   void setup() {
