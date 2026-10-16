@@ -44,7 +44,7 @@
 | 예약 대기 관리 | 실제 store 검증/표시 조회 연결, 조건·동의·버전·멱등성·만료·영속 작업 구현 | 인증/알림 설정과 전체 사용자 흐름 QA |
 | 조건 검색 | 실제 store 카탈로그 연결·초기 색인·S-01/예약 후 재검증 통합 확인 | 증분 이벤트의 운영 연결·복구 QA |
 | 자연어 분석 | Responses 구조화 출력·서버 검증·추가 질문·장애 구분 구현 | 실제 사용자 요청 연결 및 자연어 품질 QA |
-| 사용자 벡터 | 자유로운 JSON 조회 → 작업 저장 → OpenAI → Oracle 캐시 구현 | U-08 변경 이벤트 자동 갱신은 MVP 후순위 |
+| 사용자 벡터 | 자유로운 JSON 조회 → 작업 저장 → OpenAI → Oracle 캐시 구현 | U-08 저장과 VECTOR 작업의 원자적 등록 연결 완료 |
 | 매칭·알림 | store 이벤트·search 매칭·notification 접수/발송 worker 연결 및 Oracle 검증 완료 | 실제 브라우저/FCM 수신 QA |
 | 작업 복구 | DB claim·lease·재시도·중단 작업 회수 구현 | 운영 지표·보관 정책·장애 대응 검증 |
 | 예약과 대기 완료 | store 예약 트랜잭션에서 search 협력 서비스 호출 구현 | 실제 검색·알림을 거친 예약 전체 QA |
@@ -92,7 +92,7 @@ S-08 HTTP는 내부 토큰 미설정 시 403이다. 단일 애플리케이션의
 
 빈 선호는 캐시 벡터만 비우고 revision·lease를 관리하는 사용자 상태 행은 유지한다. UTF-8 8,000바이트 초과 입력은 자르지 않고 거절한다. 사용자별 30초 생성 lease로 동시 호출을 제어하며, 외부 API 호출 동안 DB 잠금을 유지하지 않는다. 영구 오류와 일시 오류의 재시도를 구분한다. 키·선호 원문·벡터는 로그에 출력하지 않는다.
 
-**U-08 선호 저장 HTTP API는 구현되어 있다.** 현재 `UserProfileService.savePreferences`는 `UserProfileRepository.updatePreferences`로 저장하며 `UserPreferencesChanged` 이벤트를 발행하지 않는다. 따라서 HTTP 저장 이후 VECTOR 작업이 자동 생성되는 연결은 남아 있다. 기존 `text` 자유 입력과 expectedVersion 계약을 보존하면서 내부 저장 경로와 이벤트 처리를 정합화해야 한다. 임베딩 입력은 저장된 JSON 전체이며 특정 필드만 추출하지 않는다. 최초 생성·수동 재생성 명령은 [운영 문서](search.md#사용자-벡터-생성-실행)에 있다.
+**U-08 선호 저장 HTTP API는 벡터 자동 갱신까지 연결했다.** `UserProfileService.savePreferences`는 `UserProfileRepository.updatePreferences` 저장 성공 후 같은 트랜잭션에서 `UserPreferencesChanged` 이벤트를 발행한다. search가 revision과 VECTOR 작업을 함께 기록하고 커밋 후 worker가 생성한다. `text` 자유 입력과 expectedVersion 계약을 유지하며 버전 충돌은 작업을 남기지 않는다. 임베딩 입력은 저장된 JSON 전체이며 특정 필드만 추출하지 않는다. 최초 생성·수동 재생성 명령은 [운영 문서](search.md#사용자-벡터-생성-실행)에 있다.
 
 ## 4. 영속화와 DB 반영
 

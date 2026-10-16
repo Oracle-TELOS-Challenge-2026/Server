@@ -1,5 +1,6 @@
 package com.bintime.user.service;
 
+import com.bintime.user.contract.UserPreferencesChanged;
 import com.bintime.user.dto.SaveLocationRequest;
 import com.bintime.user.dto.SavePreferencesRequest;
 import com.bintime.user.dto.UpdateProfileRequest;
@@ -11,6 +12,7 @@ import com.bintime.user.repository.UserProfileRepository;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -20,9 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Profile("!api-docs")
 public class UserProfileService {
   private final UserProfileRepository profiles;
+  private final ApplicationEventPublisher events;
 
-  public UserProfileService(UserProfileRepository profiles) {
+  public UserProfileService(UserProfileRepository profiles, ApplicationEventPublisher events) {
     this.profiles = profiles;
+    this.events = events;
   }
 
   @Transactional(readOnly = true)
@@ -79,6 +83,8 @@ public class UserProfileService {
     if (profiles.updatePreferences(userId, preferences, request.expectedVersion()) == 0) {
       throw conflict(userId, "VERSION_CONFLICT", "사용자 정보가 변경되었습니다. 다시 조회해 주세요.");
     }
+    // search 소비자가 같은 트랜잭션에 갱신 작업을 기록한다. OpenAI 호출은 커밋 후 worker가 수행한다.
+    events.publishEvent(new UserPreferencesChanged(userId));
     UserProfileResponse profile = getProfile(userId);
     return new UserPreferencesResponse(
         profile.preferences().categories(),
