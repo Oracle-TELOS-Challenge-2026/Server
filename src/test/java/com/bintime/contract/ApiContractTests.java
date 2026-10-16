@@ -19,6 +19,11 @@ import tools.jackson.databind.json.JsonMapper;
 @ActiveProfiles({"test", "api-docs"})
 class ApiContractTests {
   private static final Set<String> IMPLEMENTED = Set.of("U-01", "U-02", "U-03", "U-09");
+
+  private static boolean isImplemented(String id) {
+    return id.startsWith("S-") || id.startsWith("ST-") || IMPLEMENTED.contains(id);
+  }
+
   private final JsonMapper mapper = JsonMapper.builder().build();
   @LocalServerPort private int port;
 
@@ -44,10 +49,7 @@ class ApiContractTests {
       assertThat(operationIds.add(operation.path("operationId").asText())).isTrue();
       assertThat(operation.path("responses").has(contract.path("status").asText())).isTrue();
       assertThat(operation.path("responses").has("501"))
-          .isEqualTo(
-              !contract.path("id").asText().startsWith("S-")
-                  && !contract.path("id").asText().startsWith("ST-"));
-          .isEqualTo(!IMPLEMENTED.contains(contract.path("id").asText()));
+          .isEqualTo(!isImplemented(contract.path("id").asText()));
       assertThat(publicDoc.path("paths").has("/api/v1/chatting/ws")).isFalse();
 
       for (JsonNode query : contract.path("query")) {
@@ -129,8 +131,7 @@ class ApiContractTests {
             }
           }
           var expected = new HashSet<String>();
-          if (!path.getKey().contains("/search/")) expected.add("501");
-          else {
+          if (path.getKey().contains("/search/")) {
             expected.addAll(java.util.Set.of("400", "401", "403", "404", "503"));
             if (java.util.Set.of(
                     "createWaitlist", "updateWaitlist", "cancelWaitlist", "createMatchJob")
@@ -140,7 +141,7 @@ class ApiContractTests {
             if (contract.path("path").asText().equals(path.getKey())
                 && contract.path("method").asText().equalsIgnoreCase(method.getKey())) {
               expected.add(contract.path("status").asText());
-              if (!IMPLEMENTED.contains(contract.path("id").asText())) expected.add("501");
+              if (!isImplemented(contract.path("id").asText())) expected.add("501");
               switch (contract.path("id").asText()) {
                 case "U-01" -> expected.addAll(Set.of("400", "503"));
                 case "U-03" -> expected.addAll(Set.of("401", "403"));
