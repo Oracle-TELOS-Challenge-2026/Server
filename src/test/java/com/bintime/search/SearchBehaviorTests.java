@@ -53,7 +53,7 @@ class SearchBehaviorTests {
     when(catalog.available(any(), any(), anyInt())).thenReturn(new Page(List.of(slot()), null));
     when(catalog.revalidate(any())).thenReturn(List.of(slot()));
     when(users.notificationsEnabled(anyString())).thenReturn(true);
-    when(users.explicitPreferences(anyString())).thenReturn("원컬러");
+    when(users.explicitPreferences(anyString())).thenReturn("{\"preference\":\"원컬러\"}");
     when(ai.embed(any())).thenThrow(SearchFailure.unavailable());
     service = new WaitlistService(db, rules, catalog, clock, tx);
     matching = new MatchService(db, tx, clock);
@@ -474,7 +474,7 @@ class SearchBehaviorTests {
   }
 
   @Test
-  void oldUserVectorResponseCannotOverwriteChangedIntent() {
+  void waitlistEditsDoNotInvalidatePreferenceOnlyVector() {
     var first = service.create("u", "k", request(0));
     var tx = new TransactionTemplate(new DataSourceTransactionManager(db.jdbc().getDataSource()));
     var personalization =
@@ -482,16 +482,19 @@ class SearchBehaviorTests {
     doAnswer(
             a -> {
               service.update("u", first.id(), new UpdateWaitlistRequest(conditions(1), 1L, true));
-              return new float[1536];
+              float[] vector = new float[1536];
+              vector[0] = 1;
+              return vector;
             })
         .when(ai)
         .embed(any());
     personalization.refresh("u");
     assertThat(db.jdbc().queryForObject("select count(*) from search_vector", Integer.class))
-        .isZero();
+        .isEqualTo(1);
     doReturn(new float[1536]).when(ai).embed(any());
     personalization.refresh("u");
     assertThat(personalization.vector("u")).hasSize(1536);
+    verify(ai, times(1)).embed(any());
   }
 
   @Test
@@ -535,7 +538,9 @@ class SearchBehaviorTests {
                       "변경된 설명",
                       3,
                       List.of(slot())));
-              return new float[1536];
+              float[] vector = new float[1536];
+              vector[0] = 1;
+              return vector;
             })
         .when(ai)
         .embed(any());

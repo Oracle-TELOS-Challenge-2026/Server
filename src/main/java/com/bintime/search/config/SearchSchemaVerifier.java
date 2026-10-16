@@ -20,6 +20,7 @@ public class SearchSchemaVerifier implements ApplicationRunner {
   public void run(ApplicationArguments args) {
     var columns =
         Map.of(
+            "search_vector_generation", "user_id,lease_owner,lease_until",
             "search_intent",
                 "id,user_id,source,conditions_json,status,resource_version,created_at,consent_at,window_end,reservation_id",
             "search_consent", "intent_id,resource_version,consent_at,conditions_json",

@@ -63,3 +63,15 @@ tasks.register('format', JavaExec) {
 	args '--replace'
 	args fileTree('src').matching { include '**/*.java'; exclude '**/package-info.java', '**/BintimeApplication.java', '**/BintimeApplicationTests.java' }.files
 }
+
+// 실제 OpenAI 호출은 명시적으로 실행하는 별도 검증에서만 허용한다.
+tasks.register('testOpenAi', Test) {
+	group = 'verification'
+	description = 'Generate a user vector with the real OPENAI_API_KEY from .env'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform()
+	include '**/UserVectorLiveTests.class'
+	environment 'RUN_OPENAI_INTEGRATION', '1'
+	outputs.upToDateWhen { false }
+}

@@ -1,7 +1,9 @@
 package com.bintime.search.adapter;
 
 import com.bintime.search.dto.*;
+import com.bintime.search.model.EmbeddingVector;
 import com.bintime.search.port.IntentAiPort;
+import com.bintime.search.service.EmbeddingFailure;
 import com.bintime.search.service.SearchFailure;
 import java.net.*;
 import java.net.http.*;
@@ -77,24 +79,35 @@ public class OpenAiIntentAdapter implements IntentAiPort {
   }
 
   public float[] embed(String text) {
-    try {
-      JsonNode result =
-          post("/embeddings", Map.of("model", embeddingModel, "dimensions", 1536, "input", text));
-      var data = result.path("data").path(0).path("embedding");
-      if (!data.isArray() || data.size() != 1536) throw SearchFailure.unavailable();
-      float[] vector = new float[1536];
-      for (int i = 0; i < vector.length; i++) {
-        vector[i] = (float) data.path(i).asDouble();
-        if (!Float.isFinite(vector[i])) throw SearchFailure.unavailable();
-      }
-      return vector;
-    } catch (Exception e) {
-      throw SearchFailure.unavailable();
+    JsonNode result =
+        post(
+            "/embeddings",
+            Map.of(
+                "model",
+                embeddingModel,
+                "dimensions",
+                EmbeddingVector.DIMENSIONS,
+                "encoding_format",
+                "float",
+                "input",
+                text));
+    if (!embeddingModel.equals(result.path("model").asText())
+        || result.path("data").size() != 1
+        || result.path("data").path(0).path("index").asInt(-1) != 0)
+      throw EmbeddingFailure.invalidResponse();
+    var data = result.path("data").path(0).path("embedding");
+    if (!data.isArray() || data.size() != EmbeddingVector.DIMENSIONS)
+      throw EmbeddingFailure.invalidResponse();
+    float[] vector = new float[EmbeddingVector.DIMENSIONS];
+    for (int i = 0; i < vector.length; i++) {
+      if (!data.path(i).isNumber()) throw EmbeddingFailure.invalidResponse();
+      vector[i] = (float) data.path(i).asDouble();
     }
+    return EmbeddingVector.validate(vector);
   }
 
   private JsonNode post(String path, Object body) {
-    if (key.isBlank()) throw SearchFailure.unavailable();
+    if (key.isBlank()) throw new EmbeddingFailure("OPENAI_NOT_CONFIGURED", false);
     try {
       var request =
           HttpRequest.newBuilder(URI.create(base + path))
@@ -103,14 +116,35 @@ public class OpenAiIntentAdapter implements IntentAiPort {
               .header("Content-Type", "application/json")
               .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)))
               .build();
-      var result = client.send(request, HttpResponse.BodyHandlers.ofString());
-      if (result.statusCode() != 200) throw SearchFailure.unavailable();
-      return json.readTree(result.body());
+      var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+      int status = response.statusCode();
+      if (status == 401 || status == 403)
+        throw new EmbeddingFailure("OPENAI_AUTHENTICATION_FAILED", false);
+      if (status == 429) {
+        String code = "";
+        try {
+          code = json.readTree(response.body()).path("error").path("code").asText();
+        } catch (Exception ignored) {
+        }
+        if (code.equals("insufficient_quota"))
+          throw new EmbeddingFailure("OPENAI_QUOTA_EXHAUSTED", false);
+        throw new EmbeddingFailure("OPENAI_RATE_LIMITED", true);
+      }
+      if (status == 408 || status == 409 || status >= 500)
+        throw new EmbeddingFailure("OPENAI_UNAVAILABLE", true);
+      if (status != 200) throw new EmbeddingFailure("OPENAI_REQUEST_REJECTED", false);
+      try {
+        return json.readTree(response.body());
+      } catch (Exception e) {
+        throw EmbeddingFailure.invalidResponse();
+      }
+    } catch (SearchFailure failure) {
+      throw failure;
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw SearchFailure.unavailable();
-    } catch (Exception e) {
-      throw SearchFailure.unavailable();
+      throw new EmbeddingFailure("OPENAI_INTERRUPTED", true);
+    } catch (java.io.IOException e) {
+      throw new EmbeddingFailure("OPENAI_CONNECTION_FAILED", true);
     }
   }
 }

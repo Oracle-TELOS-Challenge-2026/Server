@@ -139,7 +139,7 @@ public class SearchController {
       content = @Content)
   @ApiResponse(
       responseCode = "503",
-      description = "외부 의존 기능 장애. 수동 입력 또는 재시도 가능 (retryable=true)",
+      description = "외부 의존 기능 장애. 오류 코드에 따라 retryable 반환",
       content = @Content)
   @GetMapping(value = "/api/v1/search/stores", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<StoreSearchResponse>> searchStores(
@@ -272,7 +272,7 @@ public class SearchController {
       content = @Content)
   @ApiResponse(
       responseCode = "503",
-      description = "외부 의존 기능 장애. 수동 입력 또는 재시도 가능 (retryable=true)",
+      description = "외부 의존 기능 장애. 오류 코드에 따라 retryable 반환",
       content = @Content)
   @PostMapping(
       value = "/api/v1/search/intents/analyze",

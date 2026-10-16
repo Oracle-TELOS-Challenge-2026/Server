@@ -39,7 +39,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         .contentType(MediaType.APPLICATION_JSON)
         .body(
             new ApiErrorResponse(
-                new ApiError(ex.code, ex.getMessage(), List.of(), ex.status.value() == 503),
+                new ApiError(ex.code, ex.getMessage(), List.of(), ex.retryable()),
                 ResponseMeta.now(request.getRequestURI())));
   }
 

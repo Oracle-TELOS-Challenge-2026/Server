@@ -91,3 +91,5 @@ python3 infra/oracle/verify-store.py
 ```
 
 StoreApiTests는 20개 API 흐름·입력·권한·버전·스냅샷·멱등성·커서·시간 경계·대기 완료/롤백과 동시 요청을 검증한다. Oracle 검증 스크립트는 기존 초기 스키마의 데이터 보존과 변경 SQL을 검증한 뒤 신규/변경 스키마 모두 ddl-auto=validate와 같은 API·경합 테스트를 실행한다. 테스트 계정은 BT_STORE_ 접두사를 가지며 앱 계정은 변경하지 않는다. 생성한 테스트 스키마는 결과 확인을 위해 남긴다. 초기 스키마가 이미 Git HEAD에 변경된 뒤에는 STORE_BASELINE_SQL에 변경 전 SQL 파일을 지정한다. 포트/컨테이너 변경은 STORE_ORACLE_PORT/STORE_ORACLE_CONTAINER로 지정한다.
+
+직접 API를 눌러보는 QA는 [로컬 QA 서버·Postman 실행 안내](../qa/store/README.md)를 참고한다. 격리된 Oracle 스키마와 36개 순차 요청을 제공한다.

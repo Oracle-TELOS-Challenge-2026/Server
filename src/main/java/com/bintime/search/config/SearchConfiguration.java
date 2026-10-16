@@ -19,7 +19,10 @@ public class SearchConfiguration {
 
   @Bean
   @ConditionalOnMissingBean
-  SearchUserAccess searchUserAccess() {
+  SearchUserAccess searchUserAccess(
+      org.springframework.beans.factory.ObjectProvider<
+              com.bintime.user.service.UserPreferenceService>
+          preferences) {
     return new SearchUserAccess() {
       public String customer(
           jakarta.servlet.http.HttpServletRequest r, String csrf, boolean mutation) {
@@ -34,7 +37,9 @@ public class SearchConfiguration {
       }
 
       public String explicitPreferences(String id) {
-        throw SearchFailure.unavailable();
+        var service = preferences.getIfAvailable();
+        if (service == null) throw SearchFailure.unavailable();
+        return service.explicitPreferences(id);
       }
     };
   }

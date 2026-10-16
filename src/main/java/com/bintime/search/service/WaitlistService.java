@@ -325,6 +325,7 @@ public class WaitlistService {
 
   private void followup(Intent i) {
     db.enqueue("INTENT", i.id() + ":" + i.version(), clock.millis());
+    // 최초 대기는 사용자 선호 벡터 생성도 요청한다. 이후 중복 작업은 입력 해시로 재사용한다.
     db.enqueue("VECTOR", i.userId(), clock.millis());
   }
 

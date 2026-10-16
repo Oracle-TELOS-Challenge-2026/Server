@@ -269,3 +269,4 @@ insert into search_user_lock(bucket_id) values(254);
 insert into search_user_lock(bucket_id) values(255);
 create table search_preference_revision(user_id varchar2(64) primary key,revision number(19) not null);
 create table search_store_projection(store_id varchar2(64) primary key,source_version number(19) not null,document_json clob not null,input_hash varchar2(64) not null,vector_hash varchar2(64),vector_model varchar2(64),vector_dimensions number(10),vector_json clob);
+create table search_vector_generation(user_id varchar2(64) primary key,lease_owner varchar2(64) not null,lease_until number(19) not null);

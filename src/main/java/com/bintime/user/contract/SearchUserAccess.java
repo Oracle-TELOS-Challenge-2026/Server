@@ -8,5 +8,6 @@ public interface SearchUserAccess {
 
   boolean notificationsEnabled(String userId);
 
+  /** 자연어를 포함하는 자유로운 JSON 전체. 원본을 특정 선호 DTO로 변환하지 않는다. */
   String explicitPreferences(String userId);
 }

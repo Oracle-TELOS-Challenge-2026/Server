@@ -81,3 +81,7 @@ Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며
 | ST-20 | store | POST `/api/v1/owner/stores/{storeId}/slots` | OwnerStoreController.createSlot | CreateSlotRequest | ReservationSlotResponse |
 
 store MVP는 하나의 DB 트랜잭션에서 AVAILABLE → BOOKED로 확정하며 별도 HELD API를 도입하지 않는다. 예약 상태는 CONFIRMED와 후속 최종 상태로 구분한다. 한 매장의 동시 예약 자원은 1개다. store의 입력·권한·멱등성·마이그레이션·영속 작업·운영 인증 조건은 [store.md](../store.md)를 따른다.
+
+### 사용자 선호 임베딩 연동
+
+사용자 벡터 입력은 `user_accounts.preferences_json`의 자유로운 JSON 문자열 전체다. user 공개 서비스가 읽기/저장과 변경 이벤트를 제공하고 search가 OpenAI 호출/비동기 갱신/Oracle 벡터 저장을 맡는다. U-08의 기존 HTTP DTO/501 상태는 유지하며 내부 `UserPreferenceService.replace`를 새 저장 API 구현에서 연결한다. 개인정보나 선호 원문/벡터를 공개하는 새 HTTP API는 추가하지 않았다. 세부 오류와 마이그레이션/운영 명령은 [search 안내](../search.md)를 따른다.

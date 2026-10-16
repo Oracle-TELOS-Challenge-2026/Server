@@ -98,14 +98,19 @@ public class SearchWorker {
               owner);
     } catch (Exception e) {
       int attempt = ((Number) row.get("ATTEMPTS")).intValue();
-      String status = attempt >= 5 ? "FAILED" : "QUEUED";
+      boolean retryable = !(e instanceof SearchFailure failure) || failure.retryable();
+      boolean busy =
+          e instanceof EmbeddingFailure failure
+              && failure.code.equals("USER_VECTOR_GENERATION_BUSY");
+      String status = !busy && (!retryable || attempt >= 5) ? "FAILED" : "QUEUED";
       db.jdbc()
           .update(
-              "update search_work set status=?,available_at=?,last_error=? where id=? and"
-                  + " lease_owner=?",
+              "update search_work set status=?,available_at=?,last_error=?,attempts=? where id=?"
+                  + " and lease_owner=?",
               status,
-              clock.millis() + Math.min(300000, 1000L * (1L << attempt)),
-              e.getClass().getSimpleName(),
+              clock.millis() + (busy ? 1000 : Math.min(300000, 1000L * (1L << attempt))),
+              e instanceof SearchFailure failure ? failure.code : e.getClass().getSimpleName(),
+              busy ? attempt - 1 : attempt,
               id,
               owner);
       if (kind.equals("SLOT")) {

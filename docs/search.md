@@ -4,7 +4,7 @@
 
 S-01~08은 MVC Service/JDBC Repository와 OpenAI·Elasticsearch Adapter로 처리한다. Oracle이 원본이며 Elasticsearch는 파생 인덱스다. 인증부터 실제 알림 수신까지는 아래 공개 계약의 실제 구현 연결이 필요하다. 기본 구현은 빈 결과나 성공을 위장하지 않고 401/403/503으로 거절한다. 테스트 대역은 `src/test`에만 있다.
 
-- user: `SearchUserAccess.customer`는 검증된 사용자 ID, CUSTOMER 역할과 변경 요청 CSRF를 검증한다. `notificationsEnabled`와 `explicitPreferences`를 제공한다. 선호 변경 커밋 후 `PersonalizationService.preferencesChanged`를 재전송 가능한 방식으로 호출한다.
+- user: `SearchUserAccess.explicitPreferences`는 구현된 `UserPreferenceService`를 통해 `user_accounts.preferences_json` 전체를 조회한다. `UserPreferenceService.replace`는 자유로운 JSON 저장과 동기 `UserPreferencesChanged` 이벤트를 같은 트랜잭션에서 처리하며, search 소비자는 revision과 VECTOR 작업을 같은 트랜잭션에 기록한다. `customer`의 인증/CUSTOMER/CSRF와 `notificationsEnabled`의 실제 구현 연결은 별도 의존 작업이다. 기존 U-08 HTTP 계약/501 골격은 변경하지 않았다. 해당 API 구현 시 `replace`를 호출한다.
 - store: `SearchStoreCatalog.validate`는 실제 매장·카테고리·시술 관계를 검증한다. `describe`는 표시용 이름을 제공한다. `available`과 `export`는 cursor가 null일 때 첫 페이지이며 nextCursor=null까지 누락 없이 순회한다. `revalidate`는 현재 AVAILABLE이며 미래인 슬롯만 반환한다. 슬롯 start/end와 가격은 실제 원장 값이다. 문서 version은 매장·서비스·슬롯의 모든 검색 관련 변경마다 증가한다.
 - store 커밋 후 `MatchService.submit(eventId, slotId, publicationVersion)`와 `SearchIndexService.changed(전체문서)`를 생산자 outbox 등으로 재전달해야 한다. 슬롯 삭제/매장 비공개는 slots=[] tombstone을 전달한다. 예약 완료는 user/intent/version/reservationId를 담아 `WaitlistService.fulfilled`로 전달한다. 검색 도메인이 예약을 확정하지 않는다.
 - notification: `SearchNotificationGateway.dispatch`는 N-06 DTO를 접수한다. 동일 user+slot을 중복 발송하지 않고, 최종 동의·발송 제한·대기 ID/버전과 슬롯 유효성을 재확인한다. 취소와 외부 발송 사이의 경쟁은 수신자의 최종 검증 계약으로 닫는다. 검색 DB 잠금을 외부 호출 동안 유지하지 않는다.
@@ -33,13 +33,23 @@ OpenAI Responses의 strict JSON Schema로 부분 조건을 추출한다. 기준 
 
 정상적인 비예약 요청은 UNSUPPORTED, 미해결 조건은 NEEDS_CLARIFICATION이다. 모델 거절·잘못된 구조·불완전한 응답·시간 초과·HTTP 장애는 503이며 수동 등록은 AI와 독립적으로 동작한다. connect timeout 3초, 요청 timeout 10초다.
 
-임베딩 기본값은 text-embedding-3-small/1536차원이다. 사용자 벡터는 명시적 선호와 확인된 ACTIVE 조건으로 생성한다. 모델·차원·입력 해시·원본 버전을 저장하고 변경 중 도착한 오래된 응답은 버린다. 매장 벡터는 실제 매장/시술 설명으로 생성하며 슬롯 시각·가격만 바뀐 경우 다시 생성하지 않는다. SLOT 매칭 작업에서는 OpenAI를 호출하지 않는다. 인덱스에 벡터가 없는 매장도 필수 조건 검색과 매칭에서 제외하지 않는다.
+임베딩 기본값은 text-embedding-3-small/1536차원이며 `POST /v1/embeddings`에 `encoding_format=float`을 명시한다. 사용자 입력은 자연어를 포함한 자유로운 JSON 전체다. 카테고리/키워드 DTO로 변환하거나 필드를 추출하지 않고, ACTIVE 대기 조건도 덧붙이지 않는다. user가 원본을 소유하고 OpenAI 호출과 벡터 생성/저장/활용은 search가 맡는다. 예: `{"preference":"네일에 관심이 있고 경력 3년 이상의 시술자가 있는 조용한 숍을 원해요","extra":{"memo":["심플한 디자인"]}}`.
+
+키/중첩 구조는 제한하지 않지만 유효한 JSON이어야 한다. 모델 입력 상한 내에서 보수적으로 처리하기 위해 UTF-8 8,000바이트까지 허용하며, 초과 시 잘라 보내지 않고 PREFERENCES_INPUT_TOO_LARGE로 실패한다. null/공백, JSON null, 빈 객체/배열/문자열은 호출하지 않고 기존 벡터를 제거한다. JSON의 공백/키 순서도 원문대로 전송하므로 문자가 달라지면 다른 입력 해시다.
+
+`search_vector`에는 모델·차원·입력 해시·선호 revision을 기록한다. 입력 형식 식별자 `preferences-json-v1`와 모델/차원을 해시에 포함해 이전 방식의 벡터를 재사용하지 않는다. 모델을 변경할 때는 사용자·매장 벡터를 함께 재생성하고 검색 인덱스도 재구축한다. 동일 입력/모델/차원의 정상 벡터는 API를 다시 호출하지 않는다. 저장 직전에 원문 해시와 revision을 재확인해 오래된 응답을 버리고 최신 작업을 등록한다. 검색 시에도 원문 해시/revision을 확인하므로 직접 SQL로 원문을 변경한 경우에도 오래된 벡터를 사용하지 않는다. 대기 변경 작업에서 VECTOR가 등록되어도 입력이 같으면 저장된 벡터를 재사용한다.
+
+`search_vector_generation`의 사용자별 30초 lease로 여러 인스턴스의 중복 호출을 제어한다. 외부 호출 동안 DB 트랜잭션/행 잠금을 유지하지 않는다. 이미 생성 중이면 작업을 대기시키며 외부 재시도 횟수를 차감하지 않는다. 중단된 lease는 만료 후 회수하고, lease owner가 바뀐 이전 worker는 저장하거나 새 lease를 지울 수 없다. 정상 응답은 모델명·단일 결과 index·1,536개 숫자·유한값·0이 아닌 norm을 검증한다.
+
+API 키 누락/401/403/할당량 소진/잘못된 요청·응답은 재시도 없이 FAILED, 일반 429/408/409/5xx/연결 실패는 기존 제한된 재시도로 처리한다. 원문, 키, Authorization 헤더, 응답 벡터는 로그에 기록하지 않는다. HTTP 503의 retryable도 오류 종류에 따라 다르다. 인증/할당량 실패 후 키나 계정 상태를 고치면 새 생성 작업을 등록한다.
+
+매장 벡터는 실제 매장/시술 설명으로 생성하며 슬롯 시각·가격만 바뀐 경우 다시 생성하지 않는다. SLOT 매칭 작업에서는 OpenAI를 호출하지 않는다. 인덱스에 벡터가 없는 매장도 필수 조건 검색과 매칭에서 제외하지 않는다. 자연어의 '경력 3년 이상' 같은 선호는 유사도에 느슨하게 반영하며 정형 필수 필터로 자동 승격하지 않는다.
 
 참고: [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs), [Embeddings](https://developers.openai.com/api/docs/guides/embeddings), [Elasticsearch PIT/search_after](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/paginate-search-results).
 
 ## 설치와 설정
 
-1. Oracle 대상 스키마에 [search-oracle.sql](sql/search-oracle.sql)을 1회 적용한다. 운영 데이터에 테스트 초기화 SQL을 실행하지 않는다. ddl-auto=validate를 유지하며 search는 JDBC를 쓰므로 SearchSchemaVerifier도 필수 테이블/열과 잠금 행을 검사한다.
+1. 신규 Oracle 대상 스키마에 [search-oracle.sql](sql/search-oracle.sql)을 1회 적용한다. 이미 search 테이블이 있는 스키마에는 [03-user-vector-generation.sql](../infra/oracle/migrations/03-user-vector-generation.sql)만 추가로 적용한다. 운영 데이터에 테스트 초기화 SQL을 실행하지 않는다. ddl-auto=validate를 유지하며 search는 JDBC를 쓰므로 SearchSchemaVerifier도 필수 테이블/열과 잠금 행을 검사한다.
 2. `docker compose -f compose.search.yaml up -d`로 로컬 Elasticsearch 8.19.6을 실행한다. 9200은 localhost에만 바인딩한다. 운영은 인증된 별도 Elasticsearch를 사용한다.
 3. 아래 속성을 환경별 Spring 설정에 제공하고 상대 도메인 계약 구현 Bean을 연결한다. 비밀은 저장소에 기록하지 않는다.
 
@@ -61,7 +71,7 @@ OpenAI Responses의 strict JSON Schema로 부분 조건을 추출한다. 기준 
 
 ## 복구와 운영
 
-대기 변경/동의 이력/후속 작업은 같은 Oracle 트랜잭션이다. 작업은 QUEUED → RUNNING → SUCCEEDED/FAILED다. DB 조건부 갱신으로 한 worker만 claim하고 15분 lease를 순회 중 갱신한다. 프로세스 중단 시 lease 종료 후 회수한다. 임시 실패는 2/4/8/16초 후 재시도하며 최대 5회다. 외부 전달의 중복은 N-06이 제거한다.
+대기 변경/동의 이력/후속 작업은 같은 Oracle 트랜잭션이다. 작업은 QUEUED → RUNNING → SUCCEEDED/FAILED다. DB 조건부 갱신으로 한 worker만 claim하고 15분 lease를 순회 중 갱신한다. 프로세스 중단 시 lease 종료 후 회수한다. 임시 실패는 2/4/8/16초 후 재시도하며 최대 5회다. OpenAI의 영구 오류는 즉시 FAILED로 전환하고, 동일 사용자 생성 대기는 외부 재시도 한도에서 제외한다. 외부 전달의 중복은 N-06이 제거한다.
 
 다음 SQL로 실패/재시도/지연을 확인한다. available_at은 epoch milliseconds이며 QUEUED의 실행 예정 시각, RUNNING의 lease 종료 시각이다. 로그는 작업 ID·종류·시도 횟수·실패 클래스만 남기고 AI 원문과 비밀을 기록하지 않는다.
 
@@ -93,3 +103,31 @@ SEARCH_ORACLE_USER=<test-user> SEARCH_ORACLE_PASSWORD=<secret> \
 ```
 
 실제 Oracle 23 Free 전용 임시 스키마에서 CLOB·잠금·20개 경쟁·멱등·이벤트 제약을, Elasticsearch 8.19.6에서 nested 필터·벡터·PIT·커서·마감 재검증을 검증한다. 상대 도메인 연결 후 사용자 인증부터 실제 알림 수신 및 예약 완료까지는 별도 통합 검증이 필요하다.
+
+## 사용자 벡터 생성 실행
+
+로컬 `.env`에 `OPENAI_API_KEY=<발급한 키>`를 저장한다. 기존 local 프로필이 `.env`를 읽으며 배포는 Compose의 app environment로 키를 전달한다. 비밀을 Git이나 Docker 이미지에 넣지 않는다. user의 선호 저장 유스케이스는 `UserPreferenceService.replace(userId, json)`를 호출한다. 동기 이벤트 소비자의 작업 저장에 실패하면 선호 변경도 롤백한다. user 저장 HTTP API는 아직 501이므로 이번 변경에서 별도의 공개 벡터 API를 추가하지 않았다.
+
+이미 저장된 선호의 최초 생성/수동 갱신은 내부 `PersonalizationService.requestRefresh(userId)` 또는 아래 명령으로 작업을 등록한다. 실제 DB에 존재하는 사용자 ID를 사용하며 일반 worker가 후속 처리한다.
+
+```bash
+./gradlew bootRun --args='--search.vector.rebuild-user=usr_001'
+```
+
+확인 SQL (벡터/선호 원문을 출력하지 않는다):
+
+```sql
+select user_id, model, dimensions, source_version, input_hash from search_vector;
+select status, attempts, last_error from search_work where kind='VECTOR';
+select user_id, lease_until from search_vector_generation;
+```
+
+기본 테스트는 실제 OpenAI를 호출하지 않는다. 아래 별도 작업만 `.env` 키로 합성 한국어 선호 JSON 한 건을 OpenAI에 전송한다. 임시 H2에 user 조회 → 이벤트/outbox → worker → 실제 API → 1,536차원 검증/저장을 실행하며 앱 Oracle 데이터는 변경하지 않는다. 키와 벡터를 출력하지 않는다.
+
+```bash
+./gradlew testOpenAi
+```
+
+`UserVectorFlowTests`는 자유로운 중첩 JSON, 동일 입력 재사용, 저장/outbox 롤백, 생성 중 변경, 동시 호출 방지, 중단 lease 회수, 직접 DB 변경 감지, 빈 선호 제거, 크기 제한, 영구/일시 오류를 검증한다. 동일 테스트를 실제 Oracle의 별도 스키마에서도 실행할 수 있다. 빈 전용 스키마에 초기 전체 DDL과 search DDL을 적용한 뒤 USER_VECTOR_ORACLE_URL/USER_VECTOR_ORACLE_USER/USER_VECTOR_ORACLE_PASSWORD 환경 변수를 설정하고 `./gradlew test --tests '*UserVectorFlowTests'`를 실행한다. 이 테스트는 해당 스키마의 사용자/벡터/작업 데이터를 정리하므로 앱 스키마를 사용하지 않는다.
+
+2026-10-16 검증: `.env`의 실제 키로 합성 한국어 선호 JSON을 임베딩하고, 별도 Oracle 스키마의 `search_vector` CLOB에 실제 응답을 저장·조회했다. 동일 Oracle 스키마에서 선호 저장/outbox 롤백·동시 호출 방지·lease 회수·오래된 응답 차단 테스트도 통과했으며 임시 스키마는 정리했다. 기존 앱 스키마에는 추가 DDL을 적용하지 않았다.

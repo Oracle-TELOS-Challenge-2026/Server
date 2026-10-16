@@ -12,6 +12,10 @@ public class SearchFailure extends RuntimeException {
     this.code = code;
   }
 
+  public boolean retryable() {
+    return status.value() == 503;
+  }
+
   public static SearchFailure bad(String code) {
     return new SearchFailure(HttpStatus.BAD_REQUEST, code);
   }

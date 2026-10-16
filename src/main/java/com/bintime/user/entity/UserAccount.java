@@ -14,4 +14,9 @@ public class UserAccount {
 
   @Column(name = "role_code")
   public String role;
+
+  @org.hibernate.annotations.ColumnDefault("'{}'")
+  @Lob
+  @Column(name = "preferences_json", nullable = false)
+  public String preferences;
 }

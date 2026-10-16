@@ -47,7 +47,7 @@ Elasticsearch는 검색용 파생 인덱스로 사용하고, 예약 확정 여�
 
 ## 사용자별 벡터 생성
 
-`search`가 사용자의 명시적 선호와 확인된 예약 조건을 텍스트로 구성해 OpenAI API에 전달하고, 반환된 벡터를 사용자 ID와 연결해 Elasticsearch에 인덱싱한다. 선호나 조건이 변경되면 벡터를 갱신한다. 시간·거리·가격 등 필수 조건은 벡터 유사도와 별도로 검증한다.
+`user`의 공개 서비스에서 자연어 선호가 담긴 `preferences_json` 전체를 조회하고, `search`가 JSON 문자열을 그대로 OpenAI Embeddings API에 전달한다. 고정된 선호 DTO나 ACTIVE 대기 조건은 입력에 추가하지 않는다. 사용자 벡터는 Oracle `search_vector`에 저장하고 추천 검색 시 Elasticsearch에 전달한다. 선호 저장과 갱신 작업은 같은 트랜잭션에 기록한다. 동일 입력은 벡터를 재사용하고, 동시 생성 및 오래된 응답을 막는다. 시간·거리·가격 등 필수 조건은 벡터 유사도와 별도로 검증한다.
 
 벡터 생성은 자체 모델을 배포하는 대신 OpenAI의 Embeddings API를 호출하는 방식이다. 자연어 조건 추출과 벡터 생성은 별도 API 작업으로 구분한다. 참고: [OpenAI 공식 벡터 생성 문서](https://developers.openai.com/api/docs/guides/embeddings).
 
@@ -71,7 +71,7 @@ Controller → Service → Repository → DB
 - `port`: 서비스가 필요로 하는 외부 기능의 인터페이스를 정의한다. 예를 들어 사용자 벡터 생성, 벡터 검색, 알림 전달을 표현한다.
 - `adapter`: Port를 구현하고 외부 기술의 SDK, 통신 방식, 응답 변환을 처리한다.
 
-서비스는 외부 연동 시 구체적인 Adapter 대신 Port 인터페이스에 의존하고, Spring에서 구현체를 주입한다. 예를 들어 `search`의 서비스가 `UserVectorPort`를 호출하면 OpenAI API를 호출하는 `OpenAiUserVectorAdapter`가 이를 구현한다.
+서비스는 외부 연동 시 구체적인 Adapter 대신 Port 인터페이스에 의존하고, Spring에서 구현체를 주입한다. 사용자 벡터는 `PersonalizationService` → `IntentAiPort.embed()` → `OpenAiIntentAdapter` 순서로 생성한다.
 
 Controller마다 입력 Port를 만들거나 모든 Service에 인터페이스와 구현 클래스를 나눌 필요는 없다. 도메인 모델과 영속 엔티티의 일괄 분리도 강제하지 않는다. 비즈니스 규칙은 Controller나 WebSocket 핸들러에 집중시키지 않는다.
 
