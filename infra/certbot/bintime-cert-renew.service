@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew BinTime IP certificate and reload Nginx
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/opc/bintime
+ExecStart=/bin/bash /home/opc/bintime/infra/certbot/renew.sh

@@ -4,6 +4,9 @@ HELP.md
 .env.*
 !.env.example
 !.env.prod.example
+/infra/certbot/conf/
+/infra/certbot/www/
+/infra/certbot/log/
 application-local.yml
 application-local.yaml
 .gradle
