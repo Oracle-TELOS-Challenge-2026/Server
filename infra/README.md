@@ -108,9 +108,9 @@ SELECT SYS_CONTEXT('USERENV', 'SESSION_USER') AS login_user,
 FROM dual;
 ```
 
-`01ddl.sql`, `02-store-api.sql`, `docs/sql/search-oracle.sql`은 IDE/JDBC에서 실행할 일반 Oracle SQL이다. `SET DEFINE OFF`, `WHENEVER SQLERROR EXIT SQL.SQLCODE`는 DDL 파일에서 제외했다. SQL*Plus로 실행할 때는 호출 스크립트에서 해당 옵션을 설정한다. `verify-store.py`는 이미 이를 설정한다.
+**신규 빈 스키마에는 [oracle/ddl.sql](oracle/ddl.sql)만 실행한다.** 기본 도메인·search v2·사용자 프로필·FCM 구독·알림 전달·store 카탈로그/이벤트 변경과 잠금 256행을 포함하고 마지막에 `COMMIT;`을 실행한다. 기존 `local-setup/01ddl.sql`, `docs/sql/search-oracle.sql`, 마이그레이션은 추가 실행하지 않는다. 생성된 앱 계정의 기본 테이블스페이스와 권한을 사용하므로 환경별 계정 준비는 먼저 수행한다. 로컬 계정 준비는 `local-setup/01-app-user.sh`, Autonomous DB 권한 준비는 `app-user-grants.sql`을 참고한다.
 
-빈 스키마의 전체 초기화는 `01ddl.sql`, 기존 초기 스키마의 store 변경은 `02-store-api.sql`을 사용하며 두 파일을 같은 스키마에 연속 적용하지 않는다. search 테이블 추가는 `docs/sql/search-oracle.sql`을 별도로 적용한다. IDE의 자동 커밋이 꺼져 있으면 search 잠금 행 INSERT 뒤에 `COMMIT;`을 실행한다.
+통합 DDL은 IDE/JDBC용 일반 Oracle SQL이며 SQL*Plus 지시문과 환경별 계정 생성은 포함하지 않는다. SQL*Plus 호출 스크립트에서는 `SET DEFINE OFF`와 `WHENEVER SQLERROR EXIT SQL.SQLCODE`를 설정한다. 기존 DB에는 적용 상태별 마이그레이션을 사용한다. 과거 분산 설치 경로는 QA 비교용으로 보존하며, 전체 반영표와 재검증 방법은 [통합 DDL 안내](../docs/unified-ddl.md)를 참고한다.
 
 ### 테이블 변경과 데이터 보존
 
