@@ -237,6 +237,26 @@ class KakaoLoginTests {
   }
 
   @Test
+  void reservationPreflightAllowsIdempotencyKeyWithCredentials() throws Exception {
+    var response =
+        browser.send(
+            HttpRequest.newBuilder(uri("/api/v1/reservations"))
+                .header("Origin", "http://localhost:5173")
+                .header("Access-Control-Request-Method", "POST")
+                .header(
+                    "Access-Control-Request-Headers", "content-type,x-csrf-token,idempotency-key")
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(response.headers().firstValue("Access-Control-Allow-Origin"))
+        .contains("http://localhost:5173");
+    assertThat(response.headers().firstValue("Access-Control-Allow-Credentials")).contains("true");
+    assertThat(response.headers().firstValue("Access-Control-Allow-Headers").orElseThrow())
+        .containsIgnoringCase("idempotency-key");
+  }
+
+  @Test
   void credentialedCorsAllowsOnlyTheConfiguredFrontend() throws Exception {
     var response =
         browser.send(
