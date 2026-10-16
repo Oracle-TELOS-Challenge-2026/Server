@@ -112,6 +112,7 @@ class StoreNotificationIntegrationTests {
           id,
           id,
           id.equals("owner") ? "OWNER" : "CUSTOMER");
+    db.update("update user_accounts set preferences_json=?", "{\"text\":\"젤 네일을 선호해요\"}");
     mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
     outbox = new StoreEventDelivery(storeRepository, catalog, matches, indexes, tx, clock);
     float[] vector = new float[1536];
@@ -216,6 +217,106 @@ class StoreNotificationIntegrationTests {
           .andExpect(jsonPath("$.success.data.items[0].target.publicationVersion").value(1))
           .andExpect(jsonPath("$.success.data.items[0].availability").value("AVAILABLE"));
     }
+  }
+
+  private float[] semanticVector(boolean relevant) {
+    float[] value = new float[1536];
+    value[relevant ? 0 : 1] = 1;
+    return value;
+  }
+
+  @Test
+  void changedStoreAndServiceDescriptionCannotUseTheOldCachedVector() {
+    publish(vacancy.version(), "store-semantic-recheck");
+    pump();
+    stores.updateStore(
+        OWNER,
+        shop.id(),
+        new UpdateStoreRequest("헤어만 제공하는 설명으로 변경", stores.getStore(shop.id()).version(), null));
+    when(ai.embed(anyString()))
+        .thenAnswer(a -> semanticVector(!a.<String>getArgument(0).contains("헤어만")));
+    delivery.run();
+    verify(fcm, never()).send(anyString(), any(), any());
+    pump();
+    now.updateAndGet(i -> i.plusSeconds(61));
+    delivery.run();
+    verify(fcm, never()).send(anyString(), any(), any());
+    assertThat(db.queryForList("select status from notification_deliveries", String.class))
+        .containsOnly("SKIPPED");
+  }
+
+  @Test
+  void sameCategoryTimeAndPriceStillRequirePreferenceSimilarityBeforeSending() {
+    // 두 고객의 NAIL 대기는 동일하다. 프로필 벡터만 직교시켜 유사도 필터를 검증한다.
+    db.update(
+        "update user_accounts set preferences_json=? where user_id='bob'",
+        "{\"text\":\"헤어만 원해요\"}");
+    when(ai.embed(anyString()))
+        .thenAnswer(a -> semanticVector(!a.<String>getArgument(0).contains("헤어만")));
+    publish(vacancy.version(), "semantic-publish");
+    pump();
+    delivery.run();
+    assertThat(db.queryForList("select user_id from notification_alerts", String.class))
+        .containsExactly("alice");
+    assertThat(
+            db.queryForObject(
+                "select count(*) from notification_deliveries d join notification_alerts a on"
+                    + " a.notification_id=d.notification_id where a.user_id='bob'",
+                Integer.class))
+        .isZero();
+    verify(fcm, times(1)).send(anyString(), any(), any());
+  }
+
+  @Test
+  void changedPreferencesAreCheckedAgainBeforeFcmSubmission() {
+    publish(vacancy.version(), "semantic-recheck");
+    pump();
+    assertThat(count("notification_alerts")).isEqualTo(2);
+    db.update(
+        "update user_accounts set preferences_json=? where user_id='bob'",
+        "{\"text\":\"헤어만 원해요\"}");
+    when(ai.embed(anyString()))
+        .thenAnswer(a -> semanticVector(!a.<String>getArgument(0).contains("헤어만")));
+    delivery.run();
+    // 변경된 선호의 벡터가 준비될 때까지 bob은 보내지 않고 재시도한다.
+    verify(fcm, times(1)).send(anyString(), any(), any());
+    pump();
+    now.updateAndGet(i -> i.plusSeconds(61));
+    delivery.run();
+    verify(fcm, times(1)).send(anyString(), any(), any());
+    assertThat(
+            db.queryForList(
+                "select d.status from notification_deliveries d join notification_alerts a on"
+                    + " a.notification_id=d.notification_id where a.user_id='bob'",
+                String.class))
+        .containsOnly("SKIPPED");
+  }
+
+  @Test
+  void missingVectorWaitsThroughOpenAiFailureAndRecoversWithoutDuplicateAlerts() {
+    db.update(
+        "update user_accounts set preferences_json=? where user_id='alice'",
+        "{\"text\":\"새로운 네일 취향\"}");
+    when(ai.embed(anyString())).thenThrow(new EmbeddingFailure("AI_UNAVAILABLE", true));
+    publish(vacancy.version(), "semantic-wait");
+    outbox.deliver();
+    for (int i = 0; i < 3; i++) {
+      search.poll();
+      now.updateAndGet(at -> at.plusSeconds(2));
+    }
+    assertThat(
+            db.queryForObject(
+                "select count(*) from notification_alerts where user_id='alice'", Integer.class))
+        .isZero();
+    doReturn(semanticVector(true)).when(ai).embed(anyString());
+    db.update("update search_work set available_at=0 where status='QUEUED'");
+    pump();
+    delivery.run();
+    assertThat(
+            db.queryForList(
+                "select user_id from notification_alerts order by user_id", String.class))
+        .containsExactly("alice", "bob");
+    verify(fcm, times(2)).send(anyString(), any(), any());
   }
 
   @Test
@@ -358,6 +459,8 @@ class StoreNotificationIntegrationTests {
       if (db.queryForObject(
               "select count(*) from search_work where status<>'SUCCEEDED'", Integer.class)
           == 0) break;
+      // 벡터 생성 대기 작업의 재시도 시각만 진행한다. 실제 스케줄러나 sleep은 사용하지 않는다.
+      now.updateAndGet(i -> i.plusSeconds(2));
     }
     assertThat(db.queryForList("select status from search_work", String.class))
         .containsOnly("SUCCEEDED");

@@ -62,9 +62,11 @@ class NotificationPipelineTests {
   @Autowired NotificationService notifications;
   @Autowired NotificationDeliveryWorker worker;
   @MockitoBean FcmClient fcm;
+  @MockitoBean com.bintime.search.service.NotificationSimilarityService similarity;
 
   @Test
   void realStoreAndWaitlistContractsDeliverOnceAndSuppressCanceledWaitlists() throws Exception {
+    when(similarity.matches(anyString(), any())).thenReturn(true);
     // Only this isolated H2 schema receives fixtures; external providers are replaced at their
     // boundary.
     String schema =

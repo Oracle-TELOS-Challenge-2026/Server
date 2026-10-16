@@ -100,6 +100,25 @@ class UserVectorFlowTests {
   }
 
   @Test
+  void failedVectorDoesNotCreateAnUnboundedStreamOfPaidMatchingRetries() {
+    preferences.replace("vector-user", FIRST);
+    doThrow(EmbeddingFailure.invalidResponse()).when(ai).embed(anyString());
+    worker.poll();
+    assertThat(db.queryForObject("select status from search_work", String.class))
+        .isEqualTo("FAILED");
+    assertThatThrownBy(() -> vectors.requestMatchingRefresh("vector-user"))
+        .hasMessage("USER_MATCH_VECTOR_FAILED");
+    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isEqualTo(1);
+    // 운영자의 명시적 재생성은 허용하며 같은 사용자에 대한 중복 작업 요청은 합친다.
+    vectors.requestRefresh("vector-user");
+    vectors.requestRefresh("vector-user");
+    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isEqualTo(2);
+    doReturn(validVector()).when(ai).embed(anyString());
+    worker.poll();
+    assertThat(vectors.vector("vector-user")).containsExactly(validVector());
+  }
+
+  @Test
   void changedPreferencesDiscardOldResponseAndScheduleLatest() {
     preferences.replace("vector-user", FIRST);
     doAnswer(

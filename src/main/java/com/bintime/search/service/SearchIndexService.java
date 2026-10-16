@@ -100,6 +100,53 @@ public class SearchIndexService {
     return data.isEmpty() ? null : db.decode(data.getFirst(), float[].class);
   }
 
+  /** 매장 소개와 전체 시술명으로 생성한 벡터를 현재 원장 해시로 검증한다. */
+  public float[] matchingVector(String storeId) {
+    var doc = current(storeId);
+    if (doc == null) return null;
+    float[] cached = vector(doc);
+    if (cached != null) return cached;
+    tx.executeWithoutResult(
+        t -> {
+          db.lockUser("store:" + storeId);
+          var pending =
+              db.jdbc()
+                  .queryForList(
+                      "select payload from search_work where kind='STORE_VECTOR' and status in"
+                          + " ('QUEUED','RUNNING')",
+                      String.class);
+          boolean queued =
+              pending.stream()
+                  .anyMatch(
+                      payload -> {
+                        var candidate = document(payload);
+                        return candidate != null
+                            && candidate.id().equals(storeId)
+                            && contentHash(candidate).equals(contentHash(doc));
+                      });
+          if (!queued) {
+            boolean failed =
+                db
+                    .jdbc()
+                    .queryForList(
+                        "select payload from search_work where kind='STORE_VECTOR' and"
+                            + " status='FAILED'",
+                        String.class)
+                    .stream()
+                    .anyMatch(
+                        payload -> {
+                          var candidate = document(payload);
+                          return candidate != null
+                              && candidate.id().equals(storeId)
+                              && contentHash(candidate).equals(contentHash(doc));
+                        });
+            if (failed) throw new EmbeddingFailure("STORE_MATCH_VECTOR_FAILED", false);
+            db.enqueue("STORE_VECTOR", db.encode(doc), clock.millis());
+          }
+        });
+    return null;
+  }
+
   public void sync(String payload) {
     var doc = document(payload);
     if (doc != null) index.upsert(alias, doc, vector(doc));

@@ -100,9 +100,11 @@ class NotificationDeliveryTests {
                   ? new FcmClient.Result(true, null, false, 0)
                   : new FcmClient.Result(false, "INACTIVE_SUBSCRIPTION", false, 0);
             });
+    var similarity = mock(com.bintime.search.service.NotificationSimilarityService.class);
+    when(similarity.matches(anyString(), any())).thenReturn(true);
     service =
         new NotificationService(
-            db, subscriptions, waitlists, catalog, new ConditionRules(), tx, clock);
+            db, subscriptions, waitlists, catalog, new ConditionRules(), tx, clock, similarity);
     worker = new NotificationDeliveryWorker(db, service, subscriptions, fcm, tx, clock, 0, false);
   }
 

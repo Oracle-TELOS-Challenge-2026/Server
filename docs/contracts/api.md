@@ -20,7 +20,7 @@ Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`, `/api/v1/notifications
 
 - S-01 기본 거리순 지도 조회는 날짜 미지정·`vacancyOnly=false`일 때 슬롯이 없는 등록 매장도 즉시 반환한다. DB의 공개 카탈로그에서 읽어 비동기 색인에 의존하지 않는다. `bestSlot`은 필수 키이지만 null을 허용하며 프론트는 이 경우에도 마커를 표시한다. 명시적인 슬롯 조건과 가격순·추천순 검색은 기존 동작을 유지한다. 상세 조건과 커서 의미는 [search.md](../search.md#기본-지도-매장-조회)를 따른다.
 
-Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며, 기존 AGENTS.md의 HELD/CONFIRMED와 다르다. 알림 정책은 search 구현에서 **필수 조건 일치 고객 전원**으로 확정했다. 벡터 top-k/유사도 임계값으로 고객을 제외하지 않는다. 시간 조건은 시술 시작부터 종료까지 전체 포함이다. 슬롯 선점/예약 상태는 store 책임으로 유지한다.
+Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며, 기존 AGENTS.md의 HELD/CONFIRMED와 다르다. 알림 정책은 **필수 조건과 설정된 코사인 유사도 기준(기본 0.5 이상)을 통과한 고객 전원**이다. top-k 인원 제한은 없으며 기준 미달은 알림 저장·전달에서 제외한다. 벡터 미준비는 생성을 요청하고 보류한다. 시간 조건은 시술 시작부터 종료까지 전체 포함이다. 슬롯 선점/예약 상태는 store 책임으로 유지한다.
 
 ## API 이름 매핑
 

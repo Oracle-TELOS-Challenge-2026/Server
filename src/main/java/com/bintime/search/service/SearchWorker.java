@@ -28,6 +28,7 @@ public class SearchWorker {
   private final PersonalizationService vectors;
 
   private final SearchIndexService indexes;
+  private final NotificationSimilarityService similarity;
 
   public SearchWorker(
       SearchRepository db,
@@ -38,7 +39,8 @@ public class SearchWorker {
       SearchUserAccess users,
       Clock clock,
       PersonalizationService vectors,
-      SearchIndexService indexes) {
+      SearchIndexService indexes,
+      NotificationSimilarityService similarity) {
     this.db = db;
     this.tx = tx;
     this.stores = stores;
@@ -48,6 +50,7 @@ public class SearchWorker {
     this.clock = clock;
     this.vectors = vectors;
     this.indexes = indexes;
+    this.similarity = similarity;
   }
 
   public void poll() {
@@ -99,7 +102,8 @@ public class SearchWorker {
       boolean retryable = !(e instanceof SearchFailure failure) || failure.retryable();
       boolean busy =
           e instanceof EmbeddingFailure failure
-              && failure.code.equals("USER_VECTOR_GENERATION_BUSY");
+              && Set.of("USER_VECTOR_GENERATION_BUSY", "MATCH_VECTORS_PENDING")
+                  .contains(failure.code);
       String status = !busy && (!retryable || attempt >= 5) ? "FAILED" : "QUEUED";
       db.jdbc()
           .update(
@@ -270,6 +274,7 @@ public class SearchWorker {
                   .toList();
             });
     if (matches.isEmpty()) return;
+    if (!similarity.matches(delivery.userId(), s)) return;
     // 외부 전달은 DB 잠금 밖에서 한다. 수신자가 버전/동의와 user+slot 중복을 최종 확인한다.
     notifications.dispatch(
         new DispatchNotificationRequest(

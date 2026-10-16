@@ -12,6 +12,7 @@ import com.bintime.notification.dto.NotificationStreamPayload;
 import com.bintime.notification.repository.NotificationRepository;
 import com.bintime.notification.subscription.NotificationSubscriptions;
 import com.bintime.search.service.ConditionRules;
+import com.bintime.search.service.NotificationSimilarityService;
 import com.bintime.search.service.SearchFailure;
 import com.bintime.search.service.WaitlistService;
 import com.bintime.store.contract.SearchStoreCatalog;
@@ -36,6 +37,7 @@ public class NotificationService implements SearchNotificationGateway {
   private final ConditionRules rules;
   private final TransactionTemplate tx;
   private final Clock clock;
+  private final NotificationSimilarityService similarity;
 
   public NotificationService(
       NotificationRepository db,
@@ -44,7 +46,8 @@ public class NotificationService implements SearchNotificationGateway {
       SearchStoreCatalog stores,
       ConditionRules rules,
       TransactionTemplate tx,
-      Clock clock) {
+      Clock clock,
+      NotificationSimilarityService similarity) {
     this.db = db;
     this.subscriptions = subscriptions;
     this.waitlists = waitlists;
@@ -52,6 +55,7 @@ public class NotificationService implements SearchNotificationGateway {
     this.rules = rules;
     this.tx = tx;
     this.clock = clock;
+    this.similarity = similarity;
   }
 
   @Override
@@ -146,7 +150,9 @@ public class NotificationService implements SearchNotificationGateway {
         if (failure.status.value() != 404) throw failure;
       }
     }
-    return matches.isEmpty() ? null : new Eligible(slot, List.copyOf(matches));
+    return matches.isEmpty() || !similarity.matches(request.userId(), slot)
+        ? null
+        : new Eligible(slot, List.copyOf(matches));
   }
 
   public NotificationListResponse list(
