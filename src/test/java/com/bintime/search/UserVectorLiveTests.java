@@ -78,13 +78,12 @@ class UserVectorLiveTests {
       assertThat(vectors.vector("live-vector-user")).hasSize(1536);
       assertThat(
               db.queryForObject(
-                  "select model from search_vector where user_id='live-vector-user'", String.class))
+                  "select model from search_user_vector where user_id='live-vector-user'",
+                  String.class))
           .isEqualTo("text-embedding-3-small");
     } finally {
       if (job != null) db.update("delete from search_work where id=?", job);
-      db.update("delete from search_vector_generation where user_id='live-vector-user'");
-      db.update("delete from search_vector where user_id='live-vector-user'");
-      db.update("delete from search_preference_revision where user_id='live-vector-user'");
+      db.update("delete from search_user_vector where user_id='live-vector-user'");
       db.update("delete from user_accounts where user_id='live-vector-user'");
     }
   }

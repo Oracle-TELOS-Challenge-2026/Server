@@ -34,6 +34,12 @@ class StoreApiTests {
   @Autowired JdbcTemplate db;
   @Autowired JsonMapper json;
   @Autowired StoreApplicationService stores;
+  @Autowired com.bintime.store.contract.SearchStoreCatalog catalog;
+  @Autowired com.bintime.search.service.WaitlistService waitlists;
+  @Autowired com.bintime.search.service.SearchIndexService searchIndex;
+  @Autowired com.bintime.search.service.MatchService matchService;
+  @Autowired com.bintime.store.repository.StoreRepository storeRepository;
+  @Autowired org.springframework.transaction.support.TransactionTemplate transactions;
 
   @MockitoBean(name = "storeClock")
   Clock clock;
@@ -63,8 +69,9 @@ class StoreApiTests {
   @BeforeEach
   void setup() {
     when(clock.instant()).thenReturn(NOW);
+    when(clock.millis()).thenReturn(NOW.toEpochMilli());
     when(clock.getZone()).thenReturn(ZoneOffset.UTC);
-    for (String table : List.of("search_work", "search_consent", "search_intent", "search_offer"))
+    for (String table : List.of("search_work", "search_intent", "search_offer"))
       db.update("delete from " + table);
     db.update("delete from store_events");
     // 슬롯과 원예약의 순환 FK를 테스트 전용 스키마 안에서만 해제한 뒤 정리한다.
@@ -204,6 +211,226 @@ class StoreApiTests {
     return BASE + "/owner/stores/" + shop;
   }
 
+  private com.bintime.search.dto.WaitlistConditions conditions(String shop, String service) {
+    return new com.bintime.search.dto.WaitlistConditions(
+        shop,
+        "NAIL",
+        service,
+        OffsetDateTime.parse("2026-10-16T11:00:00+09:00"),
+        OffsetDateTime.parse("2026-10-16T18:00:00+09:00"),
+        shop == null ? new com.bintime.search.dto.WaitlistConditions.Location(37.5, 127.0) : null,
+        shop == null ? 1000 : null,
+        null,
+        List.of());
+  }
+
+  private com.bintime.store.contract.SearchStoreCatalog.StoreDocument document(String shop) {
+    return catalog.export(null, 100).items().stream()
+        .filter(s -> s.id().equals(shop))
+        .findFirst()
+        .orElseThrow();
+  }
+
+  @Test
+  void realCatalogValidatesReferencesWithoutRequiringExistingSupply() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60), other = shop("owner");
+    catalog.validate(conditions(shop, svc));
+    assertThat(catalog.available(conditions(shop, svc), null, 20).items()).isEmpty();
+    var wait =
+        waitlists.create(
+            "alice",
+            "catalog-wait",
+            new com.bintime.search.dto.CreateWaitlistRequest(
+                "MANUAL", conditions(shop, svc), true));
+    assertThat(wait.status()).isEqualTo("ACTIVE");
+    var detail = waitlists.get("alice", wait.id());
+    assertThat(detail.store().id()).isEqualTo(shop);
+    assertThat(detail.service().id()).isEqualTo(svc);
+    assertThat(catalog.describe(shop, svc).service().name()).isEqualTo("젤 네일");
+    assertThat(catalog.describe(null, svc).store().id()).isEqualTo(shop);
+    assertThat(catalog.describe(null, null).store()).isNull();
+    assertThatThrownBy(() -> catalog.validate(conditions("missing", null)))
+        .hasMessage("STORE_NOT_FOUND");
+    assertThatThrownBy(() -> catalog.validate(conditions(shop, "missing")))
+        .hasMessage("SERVICE_NOT_FOUND");
+    assertThatThrownBy(() -> catalog.validate(conditions(other, svc)))
+        .hasMessage("SERVICE_STORE_MISMATCH");
+    db.update("update store_shops set category_code='HAIR' where store_id=?", shop);
+    assertThatThrownBy(() -> catalog.validate(conditions(shop, svc)))
+        .hasMessage("STORE_CATEGORY_MISMATCH");
+    db.update("update store_shops set category_code='NAIL' where store_id=?", shop);
+    ok(
+        "PATCH",
+        ownerPath(shop) + "/services/" + svc,
+        "owner",
+        null,
+        Map.of("active", false, "expectedVersion", 1),
+        200);
+    assertThatThrownBy(() -> catalog.validate(conditions(shop, svc)))
+        .hasMessage("SERVICE_INACTIVE");
+    assertThat(catalog.describe(shop, svc).service().id()).isEqualTo(svc);
+  }
+
+  @Test
+  void catalogRevalidatesBookingDraftPublicationWithdrawalAndExpiry() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    JsonNode slot = slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    String original = slot.path("id").asText();
+    assertThat(catalog.revalidate(List.of(original, original, "missing"))).hasSize(1);
+    long version = document(shop).version();
+    JsonNode reservation = reserve(slot, "alice");
+    assertThat(catalog.revalidate(List.of(original))).isEmpty();
+    assertThat(document(shop).version()).isGreaterThan(version);
+    JsonNode vacancy = cancel(reservation).path("vacancy");
+    String id = vacancy.path("id").asText();
+    assertThat(catalog.revalidate(List.of(original, id))).isEmpty();
+    JsonNode published = publish(shop, vacancy, svc, "2026-10-16T12:00:00+09:00", "catalog-pub");
+    var supply = catalog.revalidate(List.of(id)).getFirst();
+    assertThat(supply.source()).isEqualTo("VACANCY");
+    assertThat(supply.payablePrice()).isEqualTo(35000);
+    assertThat(supply.publicationVersion()).isEqualTo(1);
+    JsonNode withdrawn =
+        ok(
+            "POST",
+            ownerPath(shop) + "/vacancies/" + id + "/withdraw",
+            "owner",
+            "catalog-with",
+            Map.of("expectedVersion", published.at("/vacancy/version").asLong()),
+            200);
+    assertThat(catalog.revalidate(List.of(id))).isEmpty();
+    publish(shop, withdrawn.path("vacancy"), svc, "2026-10-16T12:00:00+09:00", "catalog-repub");
+    assertThat(catalog.revalidate(List.of(id)).getFirst().publicationVersion()).isEqualTo(2);
+    when(clock.instant()).thenReturn(Instant.parse("2026-10-16T03:00:00Z"));
+    assertThat(catalog.revalidate(List.of(id))).isEmpty();
+    assertThat(
+            db.queryForObject(
+                "select status_code from store_slots where slot_id=?", String.class, id))
+        .isEqualTo("AVAILABLE");
+    long beforeExpiry = document(shop).version();
+    stores.expireStore(shop);
+    assertThat(document(shop).version()).isGreaterThan(beforeExpiry);
+    assertThat(document(shop).slots()).isEmpty();
+  }
+
+  @Test
+  void catalogPagesUseTimeAndIdAndRejectChangedFilters() throws Exception {
+    String a = shop("owner"), b = shop("owner"), sa = service(a, 60), sb = service(b, 60);
+    var one = slot(a, sa, "2026-10-16T12:00:00+09:00");
+    var two = slot(b, sb, "2026-10-16T12:00:00+09:00");
+    var three = slot(a, sa, "2026-10-16T13:00:00+09:00");
+    var found = new ArrayList<String>();
+    String cursor = null;
+    do {
+      var page = catalog.available(conditions(null, null), cursor, 1);
+      found.addAll(
+          page.items().stream()
+              .map(com.bintime.store.contract.SearchStoreCatalog.Slot::id)
+              .toList());
+      cursor = page.nextCursor();
+    } while (cursor != null);
+    var tied = new ArrayList<>(List.of(one.path("id").asText(), two.path("id").asText()));
+    Collections.sort(tied);
+    assertThat(found).containsExactly(tied.get(0), tied.get(1), three.path("id").asText());
+    String first = catalog.available(conditions(null, null), null, 1).nextCursor();
+    assertThatThrownBy(() -> catalog.available(conditions(a, sa), first, 1))
+        .hasMessage("INVALID_CURSOR");
+    assertThatThrownBy(() -> catalog.available(conditions(a, sa), "broken", 1))
+        .hasMessage("INVALID_CURSOR");
+    assertThatThrownBy(() -> catalog.available(conditions(a, sa), null, 101))
+        .hasMessage("INVALID_LIMIT");
+    var c = conditions(a, sa);
+    var tooCheap =
+        new com.bintime.search.dto.WaitlistConditions(
+            a, "NAIL", sa, c.windowStart(), c.windowEnd(), null, null, 50000L, List.of());
+    assertThat(catalog.available(tooCheap, null, 20).items()).isEmpty();
+    var tooShort =
+        new com.bintime.search.dto.WaitlistConditions(
+            a,
+            "NAIL",
+            sa,
+            c.windowStart(),
+            OffsetDateTime.parse("2026-10-16T12:30:00+09:00"),
+            null,
+            null,
+            null,
+            List.of());
+    assertThat(catalog.available(tooShort, null, 20).items()).isEmpty();
+  }
+
+  @Test
+  void distanceFilteringScansBeyondTheFirstRawPageAndBatchesOracleIds() throws Exception {
+    String far = shop("owner"), near = shop("owner"), fs = service(far, 60), ns = service(near, 60);
+    db.update("update store_shops set latitude=0,longitude=0 where store_id=?", far);
+    String original = slot(far, fs, "2026-10-16T12:00:00+09:00").path("id").asText();
+    for (int i = 0; i < 105; i++) {
+      db.update(
+          "insert into"
+              + " store_slots(slot_id,store_id,service_id,start_at,end_at,available_from,available_until,original_price,payable_price,status_code,source_type,version_no,created_at)"
+              + " select"
+              + " ?,store_id,service_id,start_at,end_at,available_from,available_until,original_price,payable_price,status_code,source_type,version_no,created_at"
+              + " from store_slots where slot_id=?",
+          "raw-" + i,
+          original);
+    }
+    String valid = slot(near, ns, "2026-10-16T13:00:00+09:00").path("id").asText();
+    assertThat(catalog.available(conditions(null, null), null, 1).items())
+        .extracting(com.bintime.store.contract.SearchStoreCatalog.Slot::id)
+        .containsExactly(valid);
+    var ids = new ArrayList<String>();
+    for (int i = 0; i < 1100; i++) ids.add("missing-" + i);
+    ids.add(valid);
+    assertThat(catalog.revalidate(ids)).hasSize(1);
+  }
+
+  @Test
+  void exportIncludesAllServicesAndUsesIndependentTransactionalSearchVersion() throws Exception {
+    String a = shop("owner"), b = shop("owner");
+    long initial = document(a).version();
+    String svc = service(a, 60);
+    assertThat(document(a).version()).isGreaterThan(initial);
+    var slot = slot(a, svc, "2026-10-16T12:00:00+09:00");
+    var before = document(a);
+    ok(
+        "PATCH",
+        ownerPath(a) + "/services/" + svc,
+        "owner",
+        null,
+        Map.of("name", "새 시술", "basePrice", 60000, "expectedVersion", 1),
+        200);
+    var after = document(a);
+    assertThat(after.version()).isGreaterThan(before.version());
+    assertThat(after.description()).contains("새 시술");
+    assertThat(after.slots().getFirst().payablePrice()).isEqualTo(50001);
+    assertThat(ok("GET", BASE + "/stores/" + a, null, null, null, 200).path("version").asLong())
+        .isEqualTo(1);
+    ok(
+        "PATCH",
+        ownerPath(a) + "/services/" + svc,
+        "owner",
+        null,
+        Map.of("active", false, "expectedVersion", 2),
+        200);
+    assertThat(document(a).description()).contains("새 시술");
+    assertThat(document(a).slots()).isEmpty();
+    assertThat(catalog.revalidate(List.of(slot.path("id").asText()))).isEmpty();
+    var page = catalog.export(null, 1);
+    assertThat(page.items()).hasSize(1);
+    assertThat(catalog.export(page.nextCursor(), 1).items().getFirst().id())
+        .isNotEqualTo(page.items().getFirst().id());
+    long unchanged = document(a).version();
+    assertThat(
+            call(
+                    "PATCH",
+                    ownerPath(a) + "/services/" + svc,
+                    "owner",
+                    null,
+                    Map.of("name", "실패", "expectedVersion", 1))
+                .status)
+        .isEqualTo(409);
+    assertThat(document(a).version()).isEqualTo(unchanged);
+    assertThat(document(b).slots()).isEmpty();
+  }
+
   private JsonNode cancel(JsonNode reservation) throws Exception {
     return ok(
         "POST",
@@ -216,6 +443,125 @@ class StoreApiTests {
             "expectedVersion",
             reservation.path("version").asLong()),
         200);
+  }
+
+  private com.bintime.store.service.StoreEventDelivery delivery(
+      com.bintime.search.service.MatchService matches) {
+    return new com.bintime.store.service.StoreEventDelivery(
+        storeRepository,
+        (com.bintime.store.service.StoreSearchCatalogService) catalog,
+        matches,
+        searchIndex,
+        transactions,
+        clock);
+  }
+
+  @Test
+  void committedChangesReachSearchQueuesOnceAcrossConcurrentConsumers() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    var executor = Executors.newFixedThreadPool(2);
+    try {
+      var a = executor.submit(() -> delivery(matchService).deliver());
+      var b = executor.submit(() -> delivery(matchService).deliver());
+      a.get(20, TimeUnit.SECONDS);
+      b.get(20, TimeUnit.SECONDS);
+    } finally {
+      executor.shutdownNow();
+    }
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_events where status_code='PROCESSED'", Integer.class))
+        .isEqualTo(3);
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isEqualTo(1);
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='INDEX'", Integer.class))
+        .isEqualTo(3);
+    delivery(matchService).deliver();
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void failedDeliveryRollsBackSearchQueuesAndRetriesAfterBackoff() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    db.update("delete from store_events where event_type<>'CREATED'");
+    var failing = org.mockito.Mockito.mock(com.bintime.search.service.MatchService.class);
+    org.mockito.Mockito.doAnswer(
+            call -> {
+              matchService.submit(call.getArgument(0));
+              throw new IllegalStateException("after enqueue");
+            })
+        .when(failing)
+        .submit(org.mockito.ArgumentMatchers.any());
+    delivery(failing).deliver();
+    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isZero();
+    assertThat(db.queryForObject("select status_code from store_events", String.class))
+        .isEqualTo("FAILED");
+    delivery(matchService).deliver();
+    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isZero();
+    when(clock.instant()).thenReturn(NOW.plusSeconds(3));
+    delivery(matchService).deliver();
+    assertThat(db.queryForObject("select status_code from store_events", String.class))
+        .isEqualTo("PROCESSED");
+    assertThat(db.queryForObject("select attempts from store_events", Integer.class)).isEqualTo(2);
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void restartedConsumerWaitsForLeaseThenRecoversIt() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    db.update("delete from store_events where event_type<>'CREATED'");
+    db.update(
+        "update store_events set lease_token='dead-worker',lease_until=?",
+        OffsetDateTime.ofInstant(NOW.plusSeconds(120), ZoneOffset.UTC));
+    delivery(matchService).deliver();
+    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isZero();
+    when(clock.instant()).thenReturn(NOW.plusSeconds(120));
+    delivery(matchService).deliver();
+    assertThat(db.queryForObject("select status_code from store_events", String.class))
+        .isEqualTo("PROCESSED");
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void delayedPublicationDoesNotMatchWithdrawnOrEarlierPublication() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    JsonNode vacancy =
+        cancel(reserve(slot(shop, svc, "2026-10-16T12:00:00+09:00"), "alice")).path("vacancy");
+    JsonNode first = publish(shop, vacancy, svc, "2026-10-16T12:00:00+09:00", "delivery-pub-1");
+    JsonNode withdrawn =
+        ok(
+            "POST",
+            ownerPath(shop) + "/vacancies/" + vacancy.path("id").asText() + "/withdraw",
+            "owner",
+            "delivery-withdraw",
+            Map.of("expectedVersion", first.at("/vacancy/version").asLong()),
+            200);
+    delivery(matchService).deliver();
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isZero();
+    publish(shop, withdrawn.path("vacancy"), svc, "2026-10-16T12:00:00+09:00", "delivery-pub-2");
+    // 오래된 이벤트도 다시 도착시키되 publication v1은 새 매칭을 만들지 않아야 한다.
+    db.update("update store_events set status_code='QUEUED' where event_type='PUBLISHED'");
+    delivery(matchService).deliver();
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select publication_version from search_work where kind='SLOT'", Long.class))
+        .isEqualTo(2L);
   }
 
   private JsonNode publish(String shop, JsonNode vacancy, String service, String time, String key)
@@ -512,11 +858,13 @@ class StoreApiTests {
   void sameSlotCanOnlyBeBookedOnceUnderContention() throws Exception {
     String shop = shop("owner"), svc = service(shop, 60);
     JsonNode s = slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    long searchVersion = document(shop).version();
     var results =
         race(
             () -> call("POST", BASE + "/reservations", "alice", "a", booking(s)),
             () -> call("POST", BASE + "/reservations", "bob", "b", booking(s)));
     assertThat(results.stream().map(Result::status)).containsExactlyInAnyOrder(201, 409);
+    assertThat(document(shop).version()).isEqualTo(searchVersion + 1);
     assertThat(
             db.queryForObject(
                 "select count(*) from store_reservations where status_code='CONFIRMED'",
@@ -543,12 +891,14 @@ class StoreApiTests {
   void simultaneousSameKeyRequestsReturnOneSuccessfulReservation() throws Exception {
     String shop = shop("owner"), svc = service(shop, 60);
     JsonNode s = slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    long searchVersion = document(shop).version();
     var results =
         race(
             () -> call("POST", BASE + "/reservations", "alice", "same", booking(s)),
             () -> call("POST", BASE + "/reservations", "alice", "same", booking(s)));
     assertThat(results.stream().map(Result::status)).containsExactly(201, 201);
     assertThat(results.get(0).data()).isEqualTo(results.get(1).data());
+    assertThat(document(shop).version()).isEqualTo(searchVersion + 1);
     assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
         .isEqualTo(1);
   }
@@ -703,8 +1053,8 @@ class StoreApiTests {
             List.of());
     db.update(
         "insert into"
-            + " search_intent(id,user_id,source,conditions_json,status,resource_version,created_at,consent_at,window_end)"
-            + " values(?,?,'MANUAL',?,'ACTIVE',1,?,?,?)",
+            + " search_intent(id,user_id,source,conditions_json,status,resource_version,created_at,consent_at,window_end,consent_version)"
+            + " values(?,?,'MANUAL',?,'ACTIVE',1,?,?,?,1)",
         id,
         user,
         json.writeValueAsString(c),
@@ -721,6 +1071,7 @@ class StoreApiTests {
     seedIntent("new-wait", "alice", shop, svc);
     var body = new HashMap<>(booking(slot));
     body.put("waitlistId", "new-wait");
+    long searchVersion = document(shop).version();
     // 실제 DB 실패를 대기 완료 이후에 발생시켜 JDBC search와 JPA store의 원자성을 검증한다.
     db.execute(
         "alter table store_events add constraint bt_test_reject_booked"
@@ -735,6 +1086,7 @@ class StoreApiTests {
       assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isZero();
       assertThat(db.queryForObject("select count(*) from store_reservations", Integer.class))
           .isZero();
+      assertThat(document(shop).version()).isEqualTo(searchVersion);
       assertThat(
               db.queryForObject(
                   "select status_code from store_slots where slot_id=?",

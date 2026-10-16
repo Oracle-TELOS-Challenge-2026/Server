@@ -72,7 +72,7 @@ Idempotency-Key는 공백 없는 ASCII 1~200자다. 동일 사용자·작업·�
 
 ## 인증과 배포
 
-`CurrentActor`는 인증 어댑터가 검증한 Principal과 user 공개 서비스의 계정 정보를 사용한다. 현재 운영 보호 API는 기본적으로 닫혀 있다. 실제 로그인 세션에서 `Actor` Principal을 공급하고, 변경 요청에 서버 세션의 `bintime.csrf-token`과 X-CSRF-Token을 검증하도록 연결한 뒤 `bintime.auth.production-enabled=true`를 설정한다. 해당 값만 켠다고 로그인 기능이 생기지는 않는다.
+store는 카카오 로그인 `bt_session` 쿠키와 선택적으로 설정한 Bearer JWT를 사용한다. 자세한 API별 적용 여부, CSRF 및 JWT 설정은 [store 인증 계약](store-auth.md)을 참고한다. 과거 `bintime.auth.production-enabled` 플래그와 `bintime.csrf-token` 세션 속성은 사용하지 않는다.
 
 테스트 또는 명시적 로컬 개발에서만 `bintime.auth.local-enabled=true`와 X-Local-User-Id를 사용할 수 있다. local/test 프로필이 필요하며 prod가 함께 활성화되면 무시한다. 역할·이름은 헤더가 아닌 기존 user_accounts에서 읽고, 대체 식별로 계정을 자동 생성하지 않는다. 기본 local 프로필도 이 옵션은 꺼져 있다.
 
@@ -81,6 +81,8 @@ Idempotency-Key는 공백 없는 ASCII 1~200자다. 동일 사용자·작업·�
 Oracle DDL은 암묵적으로 커밋하므로 백업·쓰기 중단 후 SQL을 적용하고 애플리케이션을 배포한다. ddl-auto=validate를 유지한다. 새 search 테이블을 사용하는 배포는 [search SQL](sql/search-oracle.sql)도 적용해야 한다.
 
 ## 검증
+
+SearchStoreCatalog의 원장 조회와 검색 버전은 [카탈로그 계약](store-catalog.md)을 따른다. 기존 store API DB에는 [06-store-search-catalog.sql](../infra/oracle/migrations/06-store-search-catalog.sql)을 별도로 적용해야 한다. 최신 초기 SQL에는 포함되어 있다. 자동 적용은 하지 않는다.
 
 ```sh
 ./gradlew format

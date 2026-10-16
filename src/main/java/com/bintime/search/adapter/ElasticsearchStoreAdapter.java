@@ -24,11 +24,23 @@ public class ElasticsearchStoreAdapter implements StoreIndexPort {
       JsonMapper json,
       @Value("${search.elasticsearch.url:http://localhost:9200}") String base,
       @Value("${search.elasticsearch.alias:bintime-stores}") String alias,
-      @Value("${search.elasticsearch.authorization:}") String authorization) {
+      @Value("${search.elasticsearch.authorization:}") String authorization,
+      @Value("${search.elasticsearch.username:}") String username,
+      @Value("${search.elasticsearch.password:}") String password) {
     this.json = json;
     this.base = base;
     this.alias = alias;
-    this.authorization = authorization;
+    // 전체 헤더는 ApiKey 인증도 지원한다. 없으면 운영 Compose의 계정으로 Basic 인증한다.
+    this.authorization =
+        !authorization.isBlank()
+            ? authorization
+            : !username.isBlank() && !password.isBlank()
+                ? "Basic "
+                    + Base64.getEncoder()
+                        .encodeToString(
+                            (username + ":" + password)
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                : "";
     if (!alias.matches("[a-z0-9_-]+")) throw new IllegalArgumentException("Invalid index alias");
   }
 
@@ -217,6 +229,15 @@ public class ElasticsearchStoreAdapter implements StoreIndexPort {
                           : HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)))
                   .build(),
               HttpResponse.BodyHandlers.ofString());
+      // external_gte가 이전 문서를 거절한 것은 정상적인 중복/역순 처리다. 다른 409는 숨기지 않는다.
+      if (r.statusCode() == 409
+          && method.equals("PUT")
+          && path.contains("/_doc/")
+          && path.contains("version_type=external_gte")) {
+        var error = json.readTree(r.body());
+        if (error.at("/error/type").asText().equals("version_conflict_engine_exception"))
+          return error;
+      }
       if (r.statusCode() < 200 || r.statusCode() >= 300) throw SearchFailure.unavailable();
       return json.readTree(r.body());
     } catch (InterruptedException e) {

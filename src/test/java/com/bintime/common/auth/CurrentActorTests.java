@@ -26,6 +26,7 @@ class CurrentActorTests {
   @AfterEach
   void cleanup() {
     RequestContextHolder.resetRequestAttributes();
+    org.springframework.security.core.context.SecurityContextHolder.clearContext();
   }
 
   private void fails(String code) {
@@ -53,19 +54,15 @@ class CurrentActorTests {
   }
 
   @Test
-  void productionRequiresTrustedPrincipalIntegrationAndSessionCsrf() {
+  void sessionAuthenticationUsesCurrentDatabaseRole() {
     env.setActiveProfiles("prod");
     request.setUserPrincipal(new Actor("alice", "OWNER", "untrusted role"));
-    fails("AUTH_INTEGRATION_REQUIRED");
-    env.setProperty("bintime.auth.production-enabled", "true");
+    fails("UNAUTHENTICATED");
+    var principal = new com.bintime.user.security.BintimePrincipal("alice", "OWNER");
+    org.springframework.security.core.context.SecurityContextHolder.getContext()
+        .setAuthentication(
+            new org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken(
+                principal, principal.getAuthorities(), "kakao"));
     assertThat(new CurrentActor(env, users).get().role()).isEqualTo("CUSTOMER");
-    request.setMethod("POST");
-    fails("CSRF_INVALID");
-    request.getSession().setAttribute("bintime.csrf-token", "server-token");
-    request.addHeader("X-CSRF-Token", "wrong");
-    fails("CSRF_INVALID");
-    request.removeHeader("X-CSRF-Token");
-    request.addHeader("X-CSRF-Token", "server-token");
-    assertThat(new CurrentActor(env, users).get().id()).isEqualTo("alice");
   }
 }

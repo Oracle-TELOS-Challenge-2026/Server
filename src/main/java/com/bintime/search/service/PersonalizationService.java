@@ -54,12 +54,9 @@ public class PersonalizationService {
           int n =
               db.jdbc()
                   .update(
-                      "update search_preference_revision set revision=revision+1 where user_id=?",
-                      user);
+                      "update search_user_vector set revision=revision+1 where user_id=?", user);
           if (n == 0)
-            db.jdbc()
-                .update(
-                    "insert into search_preference_revision(user_id,revision) values(?,1)", user);
+            db.jdbc().update("insert into search_user_vector(user_id,revision) values(?,1)", user);
           db.enqueue("VECTOR", user, clock.millis());
         });
   }
@@ -78,9 +75,7 @@ public class PersonalizationService {
     var rows =
         db.jdbc()
             .queryForList(
-                "select revision from search_preference_revision where user_id=?",
-                Long.class,
-                user);
+                "select revision from search_user_vector where user_id=?", Long.class, user);
     return rows.isEmpty() ? 0 : rows.getFirst();
   }
 
@@ -105,15 +100,28 @@ public class PersonalizationService {
         tx.execute(
             t -> {
               db.lockUser(user);
+              if (db.jdbc()
+                      .queryForObject(
+                          "select count(*) from search_user_vector where user_id=?",
+                          Integer.class,
+                          user)
+                  == 0)
+                db.jdbc()
+                    .update("insert into search_user_vector(user_id,revision) values(?,0)", user);
               var snapshot = snapshot(user);
               if (empty(snapshot.input())) {
-                db.jdbc().update("delete from search_vector where user_id=?", user);
+                db.jdbc()
+                    .update(
+                        "update search_user_vector set"
+                            + " source_version=null,input_hash=null,model=null,dimensions=null,vector_json=null"
+                            + " where user_id=?",
+                        user);
                 return null;
               }
               if (stored(user, snapshot.hash()) != null) {
                 db.jdbc()
                     .update(
-                        "update search_vector set source_version=? where user_id=?",
+                        "update search_user_vector set source_version=? where user_id=?",
                         snapshot.version(),
                         user);
                 return null;
@@ -121,28 +129,19 @@ public class PersonalizationService {
               var leases =
                   db.jdbc()
                       .queryForList(
-                          "select lease_until from search_vector_generation where user_id=?",
+                          "select lease_until from search_user_vector where user_id=? and"
+                              + " lease_owner is not null",
                           Long.class,
                           user);
               if (!leases.isEmpty() && leases.getFirst() > clock.millis())
                 throw new EmbeddingFailure("USER_VECTOR_GENERATION_BUSY", true);
               String owner = UUID.randomUUID().toString();
-              if (leases.isEmpty())
-                db.jdbc()
-                    .update(
-                        "insert into search_vector_generation(user_id,lease_owner,lease_until)"
-                            + " values(?,?,?)",
-                        user,
-                        owner,
-                        clock.millis() + 30000);
-              else
-                db.jdbc()
-                    .update(
-                        "update search_vector_generation set lease_owner=?,lease_until=? where"
-                            + " user_id=?",
-                        owner,
-                        clock.millis() + 30000,
-                        user);
+              db.jdbc()
+                  .update(
+                      "update search_user_vector set lease_owner=?,lease_until=? where user_id=?",
+                      owner,
+                      clock.millis() + 30000,
+                      user);
               return new Generation(snapshot, owner);
             });
     if (generation == null) return;
@@ -156,39 +155,26 @@ public class PersonalizationService {
             var owners =
                 db.jdbc()
                     .queryForList(
-                        "select lease_owner from search_vector_generation where user_id=?",
+                        "select lease_owner from search_user_vector where user_id=?",
                         String.class,
                         user);
-            if (owners.isEmpty() || !owners.getFirst().equals(generation.owner())) return;
+            if (owners.isEmpty() || !Objects.equals(owners.getFirst(), generation.owner())) return;
             var latest = snapshot(user);
             if (latest.version() != captured.version() || !latest.hash().equals(captured.hash())) {
               db.enqueue("VECTOR", user, clock.millis());
               return;
             }
-            int n =
-                db.jdbc()
-                    .update(
-                        "update search_vector set"
-                            + " source_version=?,input_hash=?,model=?,dimensions=?,vector_json=?"
-                            + " where user_id=?",
-                        captured.version(),
-                        captured.hash(),
-                        model,
-                        EmbeddingVector.DIMENSIONS,
-                        db.encode(vector),
-                        user);
-            if (n == 0)
-              db.jdbc()
-                  .update(
-                      "insert into"
-                          + " search_vector(user_id,source_version,input_hash,model,dimensions,vector_json)"
-                          + " values(?,?,?,?,?,?)",
-                      user,
-                      captured.version(),
-                      captured.hash(),
-                      model,
-                      EmbeddingVector.DIMENSIONS,
-                      db.encode(vector));
+            db.jdbc()
+                .update(
+                    "update search_user_vector set"
+                        + " source_version=?,input_hash=?,model=?,dimensions=?,vector_json=? where"
+                        + " user_id=?",
+                    captured.version(),
+                    captured.hash(),
+                    model,
+                    EmbeddingVector.DIMENSIONS,
+                    db.encode(vector),
+                    user);
           });
     } finally {
       tx.executeWithoutResult(
@@ -196,7 +182,8 @@ public class PersonalizationService {
             db.lockUser(user);
             db.jdbc()
                 .update(
-                    "delete from search_vector_generation where user_id=? and lease_owner=?",
+                    "update search_user_vector set lease_owner=null,lease_until=null where"
+                        + " user_id=? and lease_owner=?",
                     user,
                     generation.owner());
           });
@@ -214,7 +201,8 @@ public class PersonalizationService {
             var rows =
                 db.jdbc()
                     .queryForList(
-                        "select source_version from search_vector where user_id=?",
+                        "select source_version from search_user_vector where user_id=? and"
+                            + " vector_json is not null",
                         Long.class,
                         user);
             if (rows.isEmpty() || rows.getFirst() != s.version()) return null;
@@ -229,8 +217,8 @@ public class PersonalizationService {
     var rows =
         db.jdbc()
             .queryForList(
-                "select vector_json from search_vector where user_id=? and input_hash=? and model=?"
-                    + " and dimensions=?",
+                "select vector_json from search_user_vector where user_id=? and input_hash=? and"
+                    + " model=? and dimensions=?",
                 String.class,
                 user,
                 hash,

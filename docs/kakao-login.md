@@ -1,6 +1,6 @@
 # 카카오 로그인 실행
 
-구현한 API는 U-01(로그인 시작), U-02(콜백), U-03(로그아웃), U-09(CSRF 조회)다. 경로와 응답 봉투는 기존 Swagger 계약을 유지한다. 사용자 프로필·위치·선호도(U-04~U-08)도 구현되어 있다. DB 마이그레이션과 사용법은 [사용자 API](user-profile.md)를 참고한다. 다른 도메인의 인증·권한 적용은 각 기능 구현 시 진행한다.
+구현한 API는 U-01(로그인 시작), U-02(콜백), U-03(로그아웃), U-09(CSRF 조회)다. 경로와 응답 봉투는 기존 Swagger 계약을 유지한다. 사용자 프로필·위치·선호도(U-04~U-08)도 구현되어 있다. DB 마이그레이션과 사용법은 [사용자 API](user-profile.md)를 참고한다. store는 [store 인증 계약](store-auth.md)에 따라 이 세션 쿠키·CSRF를 사용한다. search 등 나머지 도메인의 인증 연결은 별도다.
 
 ## 로컬 설정
 
@@ -64,7 +64,7 @@ await fetch(`${API}/api/v1/auth/logout`, {
 
 ## 다른 도메인에서 사용자 확인
 
-Spring Security의 인증 주체는 카카오 ID 대신 내부 사용자 ID와 DB 역할을 담는다. 인증이 필요한 API를 구현할 때 URL 인증 규칙·권한·CSRF 적용도 함께 추가한다. 현재는 `/api/v1/auth/**`, `/api/v1/users/**`만 적용했고, 나머지 계약 골격은 종전처럼 501이다.
+Spring Security의 인증 주체는 카카오 ID 대신 내부 사용자 ID와 DB 역할을 담는다. 인증이 필요한 API를 구현할 때 URL 인증 규칙·권한·CSRF 적용도 함께 추가한다. `/api/v1/auth/**`, `/api/v1/users/**` 및 store의 보호 API에 적용한다. store 공개 조회와 JWT 지원 범위는 [store 인증 계약](store-auth.md)을 따른다. search 등 나머지 도메인은 별도 연결한다.
 
 ```java
 public ResponseEntity<?> example(@AuthenticationPrincipal BintimePrincipal principal) {

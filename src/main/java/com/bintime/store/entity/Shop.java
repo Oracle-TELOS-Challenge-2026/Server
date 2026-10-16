@@ -53,6 +53,10 @@ public class Shop {
   @Column(name = "version_no", nullable = false)
   public Long version;
 
+  @org.hibernate.annotations.ColumnDefault("1")
+  @Column(name = "search_version", nullable = false)
+  public Long searchVersion = 1L;
+
   @Column(name = "created_at", nullable = false)
   public OffsetDateTime createdAt;
 }

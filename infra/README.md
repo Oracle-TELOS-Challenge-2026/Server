@@ -147,7 +147,7 @@ docker compose -f compose.yaml -f compose.fcm.yaml up --detach --no-build --wait
 - 서버는 `opc@140.238.19.165`, Oracle Linux 9 / ARM64, 실행 폴더는 `~/bintime`이다.
 
 배포용 파일은 `compose.yaml`이며 로컬 개발용 `compose.dev.yaml`과 섞어서 사용하지 않는다.
-서버 `.env`에는 `.env.prod.example`을 참고해 OCI JDBC URL 전체, `BINTIME_APP` 비밀번호, 별도 Redis 비밀번호를 설정한다.
+서버 `.env`에는 `.env.prod.example`을 참고해 OCI JDBC URL 전체, `BINTIME_APP` 비밀번호, 별도 Redis 비밀번호와 `ELASTIC_PASSWORD`를 설정한다. 운영 Compose는 인증된 Elasticsearch도 실행하며, 앱은 비공개 Docker 네트워크의 `http://elasticsearch:9200`으로 접속한다. 자세한 실행·인증 설정은 [Search 운영 안내](../docs/search.md#docker-실행과-운영-es-연결)를 참고한다.
 `$`, `#`, 공백이 들어간 값은 작은따옴표로 감싼다. 배포용 Compose는 `prod` 프로필을 명시하고 환경 변수가 없으면 실행을 중단한다.
 Spring의 `prod` 프로필은 로컬 `.env`를 직접 읽지 않는다. 서버에서는 `compose.yaml`이 `.env`를 읽어 app 컨테이너에 필요한 변수를 주입한다. 직접 JAR로 실행할 경우 같은 값을 프로세스 환경 변수로 제공한다.
 `.env`는 Git·Docker 이미지에 포함하지 않는다.

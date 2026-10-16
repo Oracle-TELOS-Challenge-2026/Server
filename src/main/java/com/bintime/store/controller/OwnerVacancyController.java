@@ -47,6 +47,7 @@ public class OwnerVacancyController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481a49fc5db03d18be940"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공",
@@ -101,7 +102,7 @@ public class OwnerVacancyController {
                           """)))
   @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
-  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 CSRF 토큰 없음·불일치")
   @ApiResponse(responseCode = "404", description = "리소스 없음")
   @GetMapping(
       value = "/api/v1/owner/stores/{storeId}/vacancies",
@@ -138,6 +139,7 @@ public class OwnerVacancyController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481ae89e8eb205f157f7e"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공",
@@ -203,7 +205,7 @@ public class OwnerVacancyController {
                           """)))
   @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
-  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 CSRF 토큰 없음·불일치")
   @ApiResponse(responseCode = "404", description = "리소스 없음")
   @ApiResponse(responseCode = "409", description = "상태·버전·시간·가격 충돌")
   @PostMapping(
@@ -234,6 +236,7 @@ public class OwnerVacancyController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481799276c9f05e1a32ec"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공",
@@ -302,7 +305,7 @@ public class OwnerVacancyController {
       content = @Content)
   @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
-  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 CSRF 토큰 없음·불일치")
   @ApiResponse(responseCode = "404", description = "리소스 없음")
   @PostMapping(
       value = "/api/v1/owner/stores/{storeId}/vacancies/{vacancyId}/withdraw",

@@ -63,9 +63,16 @@ INSERT INTO store_slots(slot_id,store_id,service_id,start_at,end_at,available_fr
 COMMIT;
 ''')
     load(migrated, (ROOT / 'infra/oracle/migrations/02-store-api.sql').read_text())
+    load(migrated, (ROOT / 'infra/oracle/migrations/06-store-search-catalog.sql').read_text())
+    load(migrated, (ROOT / 'infra/oracle/migrations/06-store-search-catalog.sql').read_text())
+    load(migrated, "INSERT INTO store_events(event_id,event_type,slot_id,slot_version,payload_json) VALUES('legacy-event','PUBLISHED','legacy-vacancy',1,'{}');\nCOMMIT;")
+    load(migrated, (ROOT / 'infra/oracle/migrations/07-store-event-delivery.sql').read_text())
+    load(migrated, (ROOT / 'infra/oracle/migrations/07-store-event-delivery.sql').read_text())
     load(migrated, '''
 DECLARE n NUMBER;
 BEGIN
+ SELECT COUNT(*) INTO n FROM store_events WHERE event_id='legacy-event' AND store_id='legacy-shop' AND attempts=0 AND status_code='QUEUED';
+ IF n<>1 THEN RAISE_APPLICATION_ERROR(-20003,'Legacy event not preserved'); END IF;
  SELECT COUNT(*) INTO n FROM store_reservations WHERE reservation_id='legacy-reservation' AND service_id='legacy-service' AND service_name='예약 시술명' AND duration_minutes=60 AND customer_name='기존 고객' AND payable_price=50000;
  IF n<>1 THEN RAISE_APPLICATION_ERROR(-20001,'Legacy reservation snapshot not preserved'); END IF;
  SELECT COUNT(*) INTO n FROM store_slots WHERE slot_id='legacy-vacancy' AND original_service_id='legacy-service' AND vacancy_original_price=50000 AND payable_price=35000 AND publication_version=1;
@@ -79,6 +86,8 @@ END;
     fresh, password = create_schema()
     load(fresh, (ROOT / 'infra/oracle/local-setup/01ddl.sql').read_text())
     print('Fresh schema created: ' + fresh, flush=True)
+    load(fresh, (ROOT / 'infra/oracle/migrations/06-store-search-catalog.sql').read_text())
+    load(fresh, (ROOT / 'infra/oracle/migrations/07-store-event-delivery.sql').read_text())
     load(fresh, (ROOT / "docs/sql/search-oracle.sql").read_text())
     tests(fresh, password)
     print('Fresh and migrated Oracle schemas: validation, API flow and contention tests passed.')

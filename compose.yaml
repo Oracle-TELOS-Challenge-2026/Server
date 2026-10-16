@@ -9,6 +9,11 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SEARCH_ELASTICSEARCH_URL: ${SEARCH_ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      SEARCH_ELASTICSEARCH_ALIAS: ${SEARCH_ELASTICSEARCH_ALIAS:-bintime-stores}
+      SEARCH_ELASTICSEARCH_USERNAME: ${SEARCH_ELASTICSEARCH_USERNAME:-elastic}
+      SEARCH_ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD in .env}
+      SEARCH_ELASTICSEARCH_AUTHORIZATION: ${SEARCH_ELASTICSEARCH_AUTHORIZATION:-}
       DB_URL: ${DB_URL:?Set DB_URL in .env}
       DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME in .env}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
@@ -21,7 +26,12 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-https://frontend-oracle.vercel.app}
       AUTH_ALLOWED_RETURN_PATHS: ${AUTH_ALLOWED_RETURN_PATHS:-/}
       SERVER_FORWARD_HEADERS_STRATEGY: framework
+    networks:
+      - default
+      - search
     depends_on:
+      elasticsearch:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -60,6 +70,34 @@ services:
         max-size: 10m
         max-file: '3'
 
+  # 앱과 같은 호스트의 비공개 Docker 네트워크에서만 접근한다.
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.6
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: 'true'
+      xpack.security.autoconfiguration.enabled: 'false'
+      xpack.security.http.ssl.enabled: 'false'
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD in .env}
+      ES_JAVA_OPTS: ${ES_JAVA_OPTS:--Xms512m -Xmx512m}
+    mem_limit: ${ES_MEMORY_LIMIT:-1g}
+    volumes:
+      - search-es-prod:/usr/share/elasticsearch/data
+    networks:
+      - search
+    healthcheck:
+      test: [CMD-SHELL, 'curl --fail --silent --max-time 5 --user "elastic:$$ELASTIC_PASSWORD" "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=3s" > /dev/null']
+      interval: 15s
+      timeout: 6s
+      retries: 10
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
   nginx:
     image: nginx:stable-alpine
     restart: unless-stopped
@@ -80,5 +118,10 @@ services:
         max-size: 10m
         max-file: '3'
 
+networks:
+  search:
+    internal: true
+
 volumes:
+  search-es-prod:
   redis-data:

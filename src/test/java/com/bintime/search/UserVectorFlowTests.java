@@ -55,13 +55,8 @@ class UserVectorFlowTests {
 
   @BeforeEach
   void setup() {
-    for (String table :
-        List.of(
-            "search_vector_generation",
-            "search_work",
-            "search_vector",
-            "search_preference_revision",
-            "user_accounts")) db.update("delete from " + table);
+    for (String table : List.of("search_user_vector", "search_work", "user_accounts"))
+      db.update("delete from " + table);
     db.update(
         "insert into user_accounts(user_id,display_name,role_code,preferences_json)"
             + " values('vector-user','테스트 고객','CUSTOMER','{}')");
@@ -76,7 +71,7 @@ class UserVectorFlowTests {
     worker.poll();
     verify(ai).embed(FIRST);
     assertThat(vectors.vector("vector-user")).containsExactly(validVector());
-    var row = db.queryForMap("select source_version,model,dimensions from search_vector");
+    var row = db.queryForMap("select source_version,model,dimensions from search_user_vector");
     assertThat(((Number) row.get("SOURCE_VERSION")).longValue()).isEqualTo(1);
     assertThat(row.get("MODEL")).isEqualTo("text-embedding-3-small");
     assertThat(((Number) row.get("DIMENSIONS")).intValue()).isEqualTo(1536);
@@ -84,7 +79,11 @@ class UserVectorFlowTests {
     vectors.requestRefresh("vector-user");
     worker.poll();
     verify(ai, times(1)).embed(anyString());
-    assertThat(db.queryForObject("select count(*) from search_vector", Integer.class)).isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select count(*) from search_user_vector where vector_json is not null",
+                Integer.class))
+        .isEqualTo(1);
   }
 
   @Test
@@ -96,7 +95,7 @@ class UserVectorFlowTests {
         });
     assertThat(userAccess.explicitPreferences("vector-user")).isEqualTo("{}");
     assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isZero();
-    assertThat(db.queryForObject("select count(*) from search_preference_revision", Integer.class))
+    assertThat(db.queryForObject("select count(*) from search_user_vector", Integer.class))
         .isZero();
   }
 
@@ -112,7 +111,11 @@ class UserVectorFlowTests {
         .when(ai)
         .embed(FIRST);
     worker.poll();
-    assertThat(db.queryForObject("select count(*) from search_vector", Integer.class)).isZero();
+    assertThat(
+            db.queryForObject(
+                "select count(*) from search_user_vector where vector_json is not null",
+                Integer.class))
+        .isZero();
     worker.poll();
     assertThat(vectors.vector("vector-user")).containsExactly(validVector());
     verify(ai, times(1)).embed(FIRST);
@@ -128,7 +131,11 @@ class UserVectorFlowTests {
     assertThat(vectors.vector("vector-user")).isNull();
     worker.poll();
     verifyNoInteractions(ai);
-    assertThat(db.queryForObject("select count(*) from search_vector", Integer.class)).isZero();
+    assertThat(
+            db.queryForObject(
+                "select count(*) from search_user_vector where vector_json is not null",
+                Integer.class))
+        .isZero();
   }
 
   @Test
@@ -203,7 +210,10 @@ class UserVectorFlowTests {
     }
     vectors.refresh("vector-user");
     verify(ai, times(1)).embed(FIRST);
-    assertThat(db.queryForObject("select count(*) from search_vector_generation", Integer.class))
+    assertThat(
+            db.queryForObject(
+                "select count(*) from search_user_vector where lease_owner is not null",
+                Integer.class))
         .isZero();
   }
 
@@ -211,11 +221,14 @@ class UserVectorFlowTests {
   void expiredGenerationLeaseCanBeRecovered() {
     preferences.replace("vector-user", FIRST);
     db.update(
-        "insert into search_vector_generation(user_id,lease_owner,lease_until)"
-            + " values('vector-user','crashed-worker',0)");
+        "update search_user_vector set lease_owner='crashed-worker',lease_until=0 where"
+            + " user_id='vector-user'");
     worker.poll();
     assertThat(vectors.vector("vector-user")).containsExactly(validVector());
-    assertThat(db.queryForObject("select count(*) from search_vector_generation", Integer.class))
+    assertThat(
+            db.queryForObject(
+                "select count(*) from search_user_vector where lease_owner is not null",
+                Integer.class))
         .isZero();
   }
 
@@ -225,15 +238,19 @@ class UserVectorFlowTests {
     doAnswer(
             a -> {
               db.update(
-                  "update search_vector_generation set lease_owner='new-owner' where"
+                  "update search_user_vector set lease_owner='new-owner' where"
                       + " user_id='vector-user'");
               return validVector();
             })
         .when(ai)
         .embed(anyString());
     vectors.refresh("vector-user");
-    assertThat(db.queryForObject("select count(*) from search_vector", Integer.class)).isZero();
-    assertThat(db.queryForObject("select lease_owner from search_vector_generation", String.class))
+    assertThat(
+            db.queryForObject(
+                "select count(*) from search_user_vector where vector_json is not null",
+                Integer.class))
+        .isZero();
+    assertThat(db.queryForObject("select lease_owner from search_user_vector", String.class))
         .isEqualTo("new-owner");
   }
 
@@ -241,8 +258,8 @@ class UserVectorFlowTests {
   void busyGenerationDoesNotExhaustExternalRetryBudget() {
     preferences.replace("vector-user", FIRST);
     db.update(
-        "insert into search_vector_generation(user_id,lease_owner,lease_until)"
-            + " values('vector-user','other-worker',9999999999999)");
+        "update search_user_vector set lease_owner='other-worker',lease_until=9999999999999 where"
+            + " user_id='vector-user'");
     for (int n = 0; n < 6; n++) {
       db.update("update search_work set available_at=0");
       worker.poll();

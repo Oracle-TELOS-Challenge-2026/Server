@@ -18,6 +18,7 @@ public class SearchConfiguration {
   }
 
   @Bean
+  @Profile("api-docs")
   @ConditionalOnMissingBean
   SearchUserAccess searchUserAccess(
       org.springframework.beans.factory.ObjectProvider<
@@ -44,7 +45,9 @@ public class SearchConfiguration {
     };
   }
 
+  // 일반 실행은 store의 실제 구현을 필수로 사용한다. DB 없는 Swagger에서만 대체한다.
   @Bean
+  @Profile("api-docs")
   @ConditionalOnMissingBean
   SearchStoreCatalog searchStoreCatalog() {
     return new SearchStoreCatalog() {

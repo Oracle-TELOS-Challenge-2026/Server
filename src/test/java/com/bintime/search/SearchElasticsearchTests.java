@@ -24,7 +24,7 @@ class SearchElasticsearchTests {
         alias = "bintime-search-it-" + UUID.randomUUID();
     String name = alias + "-v1";
     var json = JsonMapper.builder().build();
-    var adapter = new ElasticsearchStoreAdapter(json, base, alias, "");
+    var adapter = new ElasticsearchStoreAdapter(json, base, alias, "", "", "");
     var clock = Clock.fixed(Instant.parse("2026-10-16T00:00:00Z"), ZoneId.of("Asia/Seoul"));
     var start = OffsetDateTime.parse("2026-10-17T15:00:00+09:00");
     var a =

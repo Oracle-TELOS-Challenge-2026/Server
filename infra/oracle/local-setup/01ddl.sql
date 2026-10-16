@@ -37,6 +37,7 @@ CREATE TABLE store_shops (
  rating_average NUMBER(3,2) DEFAULT 0 NOT NULL,
  rating_count NUMBER(10,0) DEFAULT 0 NOT NULL,
  version_no NUMBER(10,0) DEFAULT 1 NOT NULL,
+ search_version NUMBER(19,0) DEFAULT 1 NOT NULL,
                              store_id      VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                              owner_user_id VARCHAR2(64 BYTE) NOT NULL,
                              name          VARCHAR2(100 CHAR) NOT NULL,
@@ -319,6 +320,7 @@ COMMENT ON COLUMN notification_subscriptions.auth_secret IS '브라우저 PushSu
 
 -- Store API persistence extensions (included for a fresh schema).
 ALTER TABLE store_shops ADD CONSTRAINT ck_shop_hours CHECK (opening_hours_json IS JSON (STRICT));
+ALTER TABLE store_shops ADD CONSTRAINT ck_shop_search_version CHECK (search_version>=1);
 ALTER TABLE store_shops ADD CONSTRAINT ck_shop_timezone CHECK (timezone='Asia/Seoul');
 ALTER TABLE store_shops ADD CONSTRAINT ck_shop_summary CHECK (rating_average BETWEEN 0 AND 5 AND rating_count>=0 AND version_no>=1);
 ALTER TABLE store_services ADD CONSTRAINT ck_service_active CHECK(active_yn IN ('Y','N') AND version_no>=1);
@@ -348,18 +350,25 @@ CREATE INDEX ix_store_idem_expiry ON store_idempotency(expires_at);
 CREATE TABLE store_events (
  event_id VARCHAR2(64 BYTE) NOT NULL,
  event_type VARCHAR2(20 BYTE) NOT NULL,
- slot_id VARCHAR2(64 BYTE) NOT NULL,
+ store_id VARCHAR2(64 BYTE) NOT NULL,
+ slot_id VARCHAR2(64 BYTE),
  publication_version NUMBER(10,0),
- slot_version NUMBER(10,0) NOT NULL,
+ slot_version NUMBER(10,0),
  payload_json CLOB NOT NULL,
  status_code VARCHAR2(10 BYTE) DEFAULT 'QUEUED' NOT NULL,
  created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+ attempts NUMBER(10,0) DEFAULT 0 NOT NULL,
+ available_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+ lease_token VARCHAR2(64 BYTE),
+ lease_until TIMESTAMP(6) WITH TIME ZONE,
+ last_error VARCHAR2(500 BYTE),
  CONSTRAINT pk_store_events PRIMARY KEY(event_id),
+ CONSTRAINT fk_store_event_shop FOREIGN KEY(store_id) REFERENCES store_shops(store_id),
  CONSTRAINT fk_store_event_slot FOREIGN KEY(slot_id) REFERENCES store_slots(slot_id),
  CONSTRAINT ck_store_event_status CHECK(status_code IN ('QUEUED','PROCESSED','FAILED')),
  CONSTRAINT ck_store_event_json CHECK(payload_json IS JSON (STRICT))
 );
-CREATE INDEX ix_store_event_queue ON store_events(status_code,created_at);
+CREATE INDEX ix_store_event_delivery ON store_events(status_code,available_at,lease_until);
 
 ALTER TABLE store_slots ADD CONSTRAINT ck_slot_discount CHECK (
  (discount_type IS NULL AND discount_value IS NULL)

@@ -55,12 +55,13 @@ public class WaitlistController {
           "Idempotency-Key 필수. 특정 매장 또는 지역·카테고리 조건. 동일 ACTIVE 조건은 409 DUPLICATE_WAITLIST. 1인 ACTIVE"
               + " 최대 20개.\n\n"
               + "- CUSTOMER — 본인 데이터\n"
-              + "- X-CSRF-Token 필수\n"
+              + "- 쿠키 인증의 변경 요청은 X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)\n\n"
               + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481b491eafe6165c139c9"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "201",
       description = "성공 응답",
@@ -175,6 +176,7 @@ public class WaitlistController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481cd9cf8d1076661e3cf"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공 응답",
@@ -303,6 +305,7 @@ public class WaitlistController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4817c935cd20b6950f87a"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공 응답",
@@ -403,11 +406,12 @@ public class WaitlistController {
       description =
           "conditions 전체 교체. ACTIVE만 수정. 이전 Offer 무효화 후 재매칭.\n\n"
               + "- CUSTOMER — 본인 데이터\n"
-              + "- X-CSRF-Token 필수\n\n"
+              + "- 쿠키 인증의 변경 요청은 X-CSRF-Token 필수\n\n"
               + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481959feaea05c12928b2"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공 응답",
@@ -497,12 +501,13 @@ public class WaitlistController {
       description =
           "Idempotency-Key 필수. 본인 ACTIVE 대기만 취소. 이미 취소된 상태는 200.\n\n"
               + "- CUSTOMER — 본인 데이터\n"
-              + "- X-CSRF-Token 필수\n"
+              + "- 쿠키 인증의 변경 요청은 X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)\n\n"
               + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48168ac03e08aa5df488c"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공 응답",

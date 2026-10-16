@@ -50,6 +50,7 @@ public class ReservationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481278f63f09125038da1"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "201",
       description = "성공",
@@ -113,7 +114,7 @@ public class ReservationController {
       content = @Content)
   @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
-  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 CSRF 토큰 없음·불일치")
   @ApiResponse(responseCode = "404", description = "리소스 없음")
   @PostMapping(
       value = "/api/v1/reservations",
@@ -139,6 +140,7 @@ public class ReservationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4817b813ad3029a4c241c"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공",
@@ -209,7 +211,7 @@ public class ReservationController {
                           """)))
   @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
-  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 CSRF 토큰 없음·불일치")
   @GetMapping(value = "/api/v1/reservations/me", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<com.bintime.common.dto.ApiResponse<ReservationListResponse>>
       getMyReservations(
@@ -241,6 +243,7 @@ public class ReservationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481ec9983fd64ba822751"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공",
@@ -297,7 +300,7 @@ public class ReservationController {
                           }
                           """)))
   @ApiResponse(responseCode = "401", description = "인증 필요")
-  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 CSRF 토큰 없음·불일치")
   @ApiResponse(responseCode = "404", description = "리소스 없음")
   @GetMapping(
       value = "/api/v1/reservations/{reservationId}",
@@ -322,6 +325,7 @@ public class ReservationController {
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd48174b700df232299fa77"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공",
@@ -397,7 +401,7 @@ public class ReservationController {
                           """)))
   @ApiResponse(responseCode = "400", description = "입력 형식 또는 조건 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
-  @ApiResponse(responseCode = "403", description = "권한 부족 또는 인증 연동 미완료")
+  @ApiResponse(responseCode = "403", description = "권한 부족 또는 CSRF 토큰 없음·불일치")
   @ApiResponse(responseCode = "404", description = "리소스 없음")
   @ApiResponse(responseCode = "409", description = "상태·버전·시간·가격 충돌")
   @PostMapping(

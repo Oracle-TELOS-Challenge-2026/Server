@@ -12,7 +12,6 @@ import java.time.*;
 import java.util.*;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -51,7 +50,6 @@ public class SearchWorker {
     this.indexes = indexes;
   }
 
-  @Scheduled(fixedDelayString = "${search.worker-delay-ms:5000}")
   public void poll() {
     var ready =
         db.jdbc()
@@ -113,14 +111,6 @@ public class SearchWorker {
               busy ? attempt - 1 : attempt,
               id,
               owner);
-      if (kind.equals("SLOT")) {
-        var event = db.decode(payload, CreateMatchJobRequest.class);
-        db.jdbc()
-            .update(
-                "update search_match_job set status=? where event_id=?",
-                status.equals("FAILED") ? "FAILED" : "QUEUED",
-                event.eventId());
-      }
       LoggerFactory.getLogger(getClass())
           .warn(
               "Search work {} kind {} failed (attempt {}): {}",
@@ -143,8 +133,6 @@ public class SearchWorker {
   }
 
   private void slot(CreateMatchJobRequest event, String work, String owner) {
-    db.jdbc()
-        .update("update search_match_job set status='RUNNING' where event_id=?", event.eventId());
     var slots = stores.revalidate(List.of(event.slotId()));
     if (!slots.isEmpty()
         && Objects.equals(slots.getFirst().publicationVersion(), event.publicationVersion())) {
@@ -163,7 +151,7 @@ public class SearchWorker {
                     db.user(user).stream()
                         .filter(
                             i ->
-                                i.status().equals("ACTIVE")
+                                db.consented(i)
                                     && rules.matches(i.conditions(), s, clock.instant()))
                         .toList();
                 save(matches, s);
@@ -172,8 +160,6 @@ public class SearchWorker {
         after = batch.getLast();
       }
     }
-    db.jdbc()
-        .update("update search_match_job set status='SUCCEEDED' where event_id=?", event.eventId());
   }
 
   private void intent(String payload, String work, String owner) {
@@ -182,7 +168,7 @@ public class SearchWorker {
     if (found.isEmpty()) return;
     Intent original = found.get();
     long version = Long.parseLong(parts[1]);
-    if (original.version() != version || !original.status().equals("ACTIVE")) return;
+    if (original.version() != version || !db.consented(original)) return;
     String cursor = null;
     do {
       renew(work, owner);
@@ -196,14 +182,14 @@ public class SearchWorker {
             db.lockUser(original.userId());
             db.expire(original.userId(), clock.millis());
             var current = db.find(original.id()).orElseThrow();
-            if (current.version() != version || !current.status().equals("ACTIVE")) return;
+            if (current.version() != version || !db.consented(current)) return;
             for (Slot s : valid)
               if (rules.matches(current.conditions(), s, clock.instant())) {
                 var matches =
                     db.user(current.userId()).stream()
                         .filter(
                             i ->
-                                i.status().equals("ACTIVE")
+                                db.consented(i)
                                     && rules.matches(i.conditions(), s, clock.instant()))
                         .toList();
                 save(matches, s);
@@ -229,6 +215,18 @@ public class SearchWorker {
             .update(
                 "insert into search_offer(intent_id,intent_version,slot_id,publication_version)"
                     + " values(?,?,?,?)",
+                i.id(),
+                i.version(),
+                s.id(),
+                s.publicationVersion());
+      else if (s.publicationVersion() != null)
+        // 같은 빈자리의 재발행도 현재 제안에 반영한다. 늦게 도착한 이전 발행은 되돌리지 않는다.
+        db.jdbc()
+            .update(
+                "update search_offer set publication_version=? where intent_id=? and"
+                    + " intent_version=? and slot_id=? and (publication_version is null or"
+                    + " publication_version<?)",
+                s.publicationVersion(),
                 i.id(),
                 i.version(),
                 s.id(),
@@ -267,10 +265,7 @@ public class SearchWorker {
                                   m ->
                                       m.waitlistId().equals(i.id())
                                           && m.waitlistVersion() == i.version()))
-                  .filter(
-                      i ->
-                          i.status().equals("ACTIVE")
-                              && rules.matches(i.conditions(), s, clock.instant()))
+                  .filter(i -> db.consented(i) && rules.matches(i.conditions(), s, clock.instant()))
                   .map(i -> new DispatchNotificationRequest.MatcheItem(i.id(), i.version()))
                   .toList();
             });
@@ -287,7 +282,6 @@ public class SearchWorker {
             s.startAt()));
   }
 
-  @Scheduled(fixedDelayString = "${search.expiry-delay-ms:60000}")
   public void expire() {
     String after = "";
     while (true) {

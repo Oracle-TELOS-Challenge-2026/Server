@@ -44,7 +44,7 @@ public class SearchIndexService {
   }
 
   public String rebuild() {
-    String name = "bintime-stores-" + clock.millis();
+    String name = alias + "-" + clock.millis() + "-" + UUID.randomUUID().toString().substring(0, 8);
     index.create(name);
     String cursor = null;
     do {
@@ -59,66 +59,40 @@ public class SearchIndexService {
     return name;
   }
 
-  /** store는 커밋된 최신 전체 문서를 전달하고 재전송할 수 있다. 삭제는 slots=[]인 tombstone 문서로 전달한다. */
+  /** 전체 검색 문서는 작업 payload로 전달하고, Oracle에는 벡터만 캐시한다. */
   public void changed(StoreDocument doc) {
     tx.executeWithoutResult(
         t -> {
           db.lockUser("store:" + doc.id());
-          var versions =
-              db.jdbc()
-                  .queryForList(
-                      "select source_version from search_store_projection where store_id=?",
-                      Long.class,
-                      doc.id());
-          if (!versions.isEmpty() && versions.getFirst() >= doc.version()) return;
-          String hash = contentHash(doc);
-          var old =
-              db.jdbc()
-                  .queryForList(
-                      "select input_hash from search_store_projection where store_id=?",
-                      String.class,
-                      doc.id());
-          if (versions.isEmpty())
-            db.jdbc()
-                .update(
-                    "insert into"
-                        + " search_store_projection(store_id,source_version,document_json,input_hash)"
-                        + " values(?,?,?,?)",
-                    doc.id(),
-                    doc.version(),
-                    db.encode(doc),
-                    hash);
-          else
-            db.jdbc()
-                .update(
-                    "update search_store_projection set"
-                        + " source_version=?,document_json=?,input_hash=? where store_id=?",
-                    doc.version(),
-                    db.encode(doc),
-                    hash,
-                    doc.id());
-          db.enqueue("INDEX", doc.id(), clock.millis());
-          if (old.isEmpty() || !old.getFirst().equals(hash))
-            db.enqueue("STORE_VECTOR", doc.id(), clock.millis());
+          db.enqueue("INDEX", db.encode(doc), clock.millis());
+          if (vector(doc) == null) db.enqueue("STORE_VECTOR", db.encode(doc), clock.millis());
         });
   }
 
-  private StoreDocument document(String id) {
-    return db.decode(
-        db.jdbc()
-            .queryForObject(
-                "select document_json from search_store_projection where store_id=?",
-                String.class,
-                id),
-        StoreDocument.class);
+  private StoreDocument current(String id) {
+    String cursor = null;
+    do {
+      var page = stores.export(cursor, 100);
+      if (page == null) throw SearchFailure.unavailable();
+      for (var doc : page.items()) if (doc.id().equals(id)) return doc;
+      cursor = page.nextCursor();
+    } while (cursor != null);
+    return null;
+  }
+
+  private StoreDocument document(String payload) {
+    // v1 큐에 남은 store ID도 원장의 공개 조회로 복구한다.
+    return payload.stripLeading().startsWith("{")
+        ? db.decode(payload, StoreDocument.class)
+        : current(payload);
   }
 
   private float[] vector(StoreDocument doc) {
     var data =
         db.jdbc()
             .queryForList(
-                "select vector_json from search_store_projection where store_id=? and vector_hash=?"
-                    + " and vector_model=? and vector_dimensions=1536 and vector_json is not null",
+                "select vector_json from search_store_vector where store_id=? and input_hash=? and"
+                    + " model=? and dimensions=1536",
                 String.class,
                 doc.id(),
                 contentHash(doc),
@@ -126,40 +100,58 @@ public class SearchIndexService {
     return data.isEmpty() ? null : db.decode(data.getFirst(), float[].class);
   }
 
-  public void sync(String id) {
-    var doc = document(id);
-    index.upsert(alias, doc, vector(doc));
+  public void sync(String payload) {
+    var doc = document(payload);
+    if (doc != null) index.upsert(alias, doc, vector(doc));
   }
 
   private String contentHash(StoreDocument doc) {
-    // 공급 슬롯이 바뀌어도 동일한 매장/시술 설명은 다시 임베딩하지 않는다.
+    // 슬롯 시각·가격만 바뀌면 설명 벡터를 재사용한다.
     return WaitlistService.hash(Objects.toString(doc.description(), ""));
   }
 
-  public void embed(String id) {
-    var doc =
-        tx.execute(
-            t -> {
-              db.lockUser("store:" + id);
-              return document(id);
-            });
+  public void embed(String payload) {
+    var doc = document(payload);
+    if (doc == null || vector(doc) != null) return;
     String hash = contentHash(doc);
-    float[] value = ai.embed(Objects.toString(doc.description(), ""));
+    float[] value =
+        com.bintime.search.model.EmbeddingVector.validate(
+            ai.embed(Objects.toString(doc.description(), "")));
+    var latest = current(doc.id());
+    if (latest == null || !contentHash(latest).equals(hash)) return;
     tx.executeWithoutResult(
         t -> {
-          db.lockUser("store:" + id);
-          int n =
+          db.lockUser("store:" + doc.id());
+          var versions =
               db.jdbc()
-                  .update(
-                      "update search_store_projection set"
-                          + " vector_json=?,vector_hash=?,vector_model=?,vector_dimensions=1536"
-                          + " where store_id=? and input_hash=?",
-                      db.encode(value),
-                      hash,
-                      model,
-                      id,
-                      hash);
-          if (n > 0) db.enqueue("INDEX", id, clock.millis());
+                  .queryForList(
+                      "select source_version from search_store_vector where store_id=?",
+                      Long.class,
+                      doc.id());
+          if (!versions.isEmpty() && versions.getFirst() > latest.version()) return;
+          if (versions.isEmpty())
+            db.jdbc()
+                .update(
+                    "insert into"
+                        + " search_store_vector(store_id,source_version,input_hash,model,dimensions,vector_json)"
+                        + " values(?,?,?,?,1536,?)",
+                    doc.id(),
+                    latest.version(),
+                    hash,
+                    model,
+                    db.encode(value));
+          else
+            db.jdbc()
+                .update(
+                    "update search_store_vector set"
+                        + " source_version=?,input_hash=?,model=?,dimensions=1536,vector_json=?"
+                        + " where store_id=?",
+                    latest.version(),
+                    hash,
+                    model,
+                    db.encode(value),
+                    doc.id());
+          db.enqueue("INDEX", db.encode(latest), clock.millis());
         });
   }
 }

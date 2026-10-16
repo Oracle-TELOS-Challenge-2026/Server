@@ -24,6 +24,34 @@ class ApiContractTests {
   @LocalServerPort private int port;
 
   @Test
+  void storeDocumentsPublicQueriesAndAlternativeAuthenticationMethods() throws Exception {
+    JsonNode doc = getDoc("all");
+    int protectedCount = 0;
+    int publicCount = 0;
+    for (var path : doc.path("paths").properties()) {
+      for (var method : path.getValue().properties()) {
+        JsonNode operation = method.getValue();
+        if (!operation.path("tags").toString().contains("store")) continue;
+        JsonNode security = operation.path("security");
+        if (path.getKey().startsWith("/api/v1/stores/") && method.getKey().equals("get")) {
+          assertThat(security.isMissingNode() || security.isEmpty()).isTrue();
+          publicCount++;
+        } else {
+          var schemes = new HashSet<String>();
+          for (JsonNode alternative : security) {
+            assertThat(alternative.size()).isEqualTo(1);
+            for (var scheme : alternative.properties()) schemes.add(scheme.getKey());
+          }
+          assertThat(schemes).containsExactlyInAnyOrder("sessionCookie", "bearerJwt");
+          protectedCount++;
+        }
+      }
+    }
+    assertThat(publicCount).isEqualTo(5);
+    assertThat(protectedCount).isEqualTo(15);
+  }
+
+  @Test
   void allNotionHttpOperationsHaveMatchingSwaggerContracts() throws Exception {
     JsonNode allDoc = getDoc("all");
     JsonNode publicDoc = getDoc("public");

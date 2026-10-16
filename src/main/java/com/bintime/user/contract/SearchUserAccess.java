@@ -2,7 +2,7 @@ package com.bintime.user.contract;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-/** user 구현이 세션, CUSTOMER 역할, 변경 요청의 CSRF를 검증한다. */
+/** HTTP 보안 필터가 인증·CSRF를 검증하고 user 구현이 현재 CUSTOMER 역할을 확인한다. */
 public interface SearchUserAccess {
   String customer(HttpServletRequest request, String csrfToken, boolean mutation);
 

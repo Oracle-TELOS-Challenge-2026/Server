@@ -77,8 +77,8 @@ public class SearchRepository {
   public void insert(Intent i) {
     jdbc.update(
         "insert into"
-            + " search_intent(id,user_id,source,conditions_json,status,resource_version,created_at,consent_at,window_end)"
-            + " values(?,?,?,?,?,?,?,?,?)",
+            + " search_intent(id,user_id,source,conditions_json,status,resource_version,created_at,consent_at,window_end,consent_version)"
+            + " values(?,?,?,?,?,?,?,?,?,?)",
         i.id(),
         i.userId(),
         i.source(),
@@ -87,31 +87,36 @@ public class SearchRepository {
         i.version(),
         i.createdAt(),
         i.consentAt(),
-        i.conditions().windowEnd().toInstant().toEpochMilli());
-    consent(i);
+        i.conditions().windowEnd().toInstant().toEpochMilli(),
+        i.version());
   }
 
   public void update(Intent i) {
     jdbc.update(
         "update search_intent set conditions_json=?,"
-            + " status=?,resource_version=?,consent_at=?,window_end=?,reservation_id=? where id=?",
+            + " status=?,resource_version=?,consent_at=?,window_end=?,reservation_id=?,consent_version=case"
+            + " when ?='ACTIVE' then ? else consent_version end where id=?",
         encode(i.conditions()),
         i.status(),
         i.version(),
         i.consentAt(),
         i.conditions().windowEnd().toInstant().toEpochMilli(),
         i.reservationId(),
+        i.status(),
+        i.version(),
         i.id());
   }
 
-  public void consent(Intent i) {
-    jdbc.update(
-        "insert into search_consent(intent_id,resource_version,consent_at,conditions_json)"
-            + " values(?,?,?,?)",
-        i.id(),
-        i.version(),
-        i.consentAt(),
-        encode(i.conditions()));
+  /** 현재 ACTIVE 조건 버전에 동의한 대기만 발송 대상으로 사용한다. */
+  public boolean consented(Intent i) {
+    return i.status().equals("ACTIVE")
+        && i.consentAt() > 0
+        && jdbc.queryForObject(
+                "select count(*) from search_intent where id=? and"
+                    + " consent_version=resource_version",
+                Integer.class,
+                i.id())
+            == 1;
   }
 
   public void expire(String user, long now) {
