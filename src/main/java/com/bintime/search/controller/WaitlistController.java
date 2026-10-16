@@ -54,7 +54,7 @@ public class WaitlistController {
       description =
           "Idempotency-Key 필수. 특정 매장 또는 지역·카테고리 조건. 동일 ACTIVE 조건은 409 DUPLICATE_WAITLIST. 1인 ACTIVE"
               + " 최대 20개.\n\n"
-              + "- CUSTOMER — 본인 데이터\n"
+              + "- CUSTOMER 또는 OWNER — 본인 데이터\n"
               + "- 쿠키 인증의 변경 요청은 X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)\n\n"
               + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
@@ -171,7 +171,7 @@ public class WaitlistController {
       summary = "S-04 · 내 대기 목록 조회",
       description =
           "status 기본 ACTIVE. 후보를 store 원장에서 재검증. 제안은 선점 아님.\n\n"
-              + "- CUSTOMER — 본인 데이터\n\n"
+              + "- CUSTOMER 또는 OWNER — 본인 데이터\n\n"
               + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481cd9cf8d1076661e3cf"))
@@ -300,7 +300,7 @@ public class WaitlistController {
       summary = "S-05 · 대기 상세·예약 후보 조회",
       description =
           "최신 예약 가능 Offer 최대 3개를 startAt 오름차순 반환. 상태와 availability를 구분.\n\n"
-              + "- CUSTOMER — 본인 데이터\n\n"
+              + "- CUSTOMER 또는 OWNER — 본인 데이터\n\n"
               + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd4817c935cd20b6950f87a"))
@@ -405,7 +405,7 @@ public class WaitlistController {
       summary = "S-06 · 대기 조건·희망 시간 변경",
       description =
           "conditions 전체 교체. ACTIVE만 수정. 이전 Offer 무효화 후 재매칭.\n\n"
-              + "- CUSTOMER — 본인 데이터\n"
+              + "- CUSTOMER 또는 OWNER — 본인 데이터\n"
               + "- 쿠키 인증의 변경 요청은 X-CSRF-Token 필수\n\n"
               + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
@@ -500,7 +500,7 @@ public class WaitlistController {
       summary = "S-07 · 대기 취소",
       description =
           "Idempotency-Key 필수. 본인 ACTIVE 대기만 취소. 이미 취소된 상태는 200.\n\n"
-              + "- CUSTOMER — 본인 데이터\n"
+              + "- CUSTOMER 또는 OWNER — 본인 데이터\n"
               + "- 쿠키 인증의 변경 요청은 X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)\n\n"
               + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",

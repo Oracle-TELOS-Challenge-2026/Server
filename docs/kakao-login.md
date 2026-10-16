@@ -73,7 +73,7 @@ public ResponseEntity<?> example(@AuthenticationPrincipal BintimePrincipal princ
 }
 ```
 
-신규 가입은 CUSTOMER로 생성한다. OWNER 권한은 기존 DB 역할을 읽으며 카카오 프로필이나 요청 파라미터로 승격하지 않는다. 동시 첫 로그인은 기존 `uq_user_kakao` UNIQUE 제약으로 한 계정에 합쳐진다.
+신규 가입은 CUSTOMER로 생성한다. OWNER 권한은 `POST /api/v1/owner/stores`에서 매장 등록에 성공할 때 같은 트랜잭션으로 부여한다. 등록 실패 시 역할도 변경하지 않는다. 카카오 프로필이나 요청 파라미터로 역할을 지정할 수 없다. OWNER도 고객의 검색·예약 대기·예약·다른 매장 채팅 기능을 계속 사용할 수 있다. 동시 첫 로그인은 기존 `uq_user_kakao` UNIQUE 제약으로 한 계정에 합쳐진다.
 
 ## 배포
 

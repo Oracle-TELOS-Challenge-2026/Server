@@ -19,6 +19,9 @@ class SearchUserAccessAdapterTests {
     var access = new SearchUserAccessAdapter(actors, mock(UserPreferenceService.class), null);
     var request = new MockHttpServletRequest();
     when(actors.get()).thenReturn(new Actor("customer", "OWNER", "owner"));
+    assertThat(access.customer(request, null, false)).isEqualTo("customer");
+    assertThat(access.customer(request, null, true)).isEqualTo("customer");
+    when(actors.get()).thenReturn(new Actor("customer", "UNKNOWN", "unknown"));
     assertThatThrownBy(() -> access.customer(request, null, false)).hasMessage("CUSTOMER_REQUIRED");
     when(actors.get()).thenReturn(new Actor("customer", "CUSTOMER", "name"));
     assertThat(access.customer(request, null, false)).isEqualTo("customer");

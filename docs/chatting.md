@@ -8,7 +8,7 @@
 
 | API | 동작 |
 | --- | --- |
-| `POST /api/v1/chatting/rooms` | `{ "storeId": "..." }`. CUSTOMER만 생성. 고객+매장당 한 방, 신규 201·기존 200 |
+| `POST /api/v1/chatting/rooms` | `{ "storeId": "..." }`. CUSTOMER·OWNER 모두 다른 사장님의 매장에 고객으로 생성 가능. 본인 매장은 생성 불가. 고객+매장당 한 방, 신규 201·기존 200 |
 | `GET /api/v1/chatting/rooms?limit=20&cursor=...` | 본인 방만 최근 활동순. `nextCursor`를 그대로 다음 요청에 사용 |
 | `GET /api/v1/chatting/rooms/{id}/messages?limit=30&beforeSequence=...` | 최근 이력을 화면용 오름차순으로 반환. 이전 페이지는 `nextBeforeSequence` 사용 |
 | `POST /api/v1/chatting/rooms/{id}/messages` | `{ "clientMessageId": "UUID", "content": "문의 내용" }`. 신규 201·기존 메시지 200 |

@@ -207,7 +207,7 @@ public class SearchController {
       summary = "S-02 · 자연어 예약 조건 분석",
       description =
           "결과 확인 후 별도 S-03 대기 등록. RESOLVED/NEEDS_CLARIFICATION/UNSUPPORTED. AI 장애여도 수동 입력 가능.\n\n"
-              + "- CUSTOMER — 본인 데이터\n"
+              + "- CUSTOMER 또는 OWNER — 본인 데이터\n"
               + "- 쿠키 인증의 변경 요청은 X-CSRF-Token 필수\n\n"
               + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =

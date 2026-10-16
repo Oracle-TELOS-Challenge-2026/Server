@@ -34,7 +34,7 @@ public class SearchUserAccessAdapter implements SearchUserAccess {
     // 세션/JWT 검증과 쿠키 변경 요청의 CSRF는 공통 HTTP 보안 필터에서 먼저 처리한다.
     // 역할은 토큰이나 오래된 로그인 세션 대신 현재 user 원장에서 다시 확인한다.
     var actor = actors.get();
-    if (!"CUSTOMER".equals(actor.role()))
+    if (!"CUSTOMER".equals(actor.role()) && !"OWNER".equals(actor.role()))
       throw new SearchFailure(HttpStatus.FORBIDDEN, "CUSTOMER_REQUIRED");
     return actor.id();
   }

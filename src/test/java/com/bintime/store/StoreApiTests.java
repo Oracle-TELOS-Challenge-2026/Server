@@ -142,6 +142,13 @@ class StoreApiTests {
   }
 
   private String shop(String owner) throws Exception {
+    return ok(
+            "POST", BASE + "/owner/stores", owner, UUID.randomUUID().toString(), shopRequest(), 201)
+        .path("id")
+        .asText();
+  }
+
+  private Map<String, Object> shopRequest() {
     var hours =
         List.of("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN").stream()
             .map(
@@ -149,25 +156,101 @@ class StoreApiTests {
                     Map.of(
                         "dayOfWeek", day, "opensAt", "09:00", "closesAt", "22:00", "closed", false))
             .toList();
-    return ok(
-            "POST",
-            BASE + "/owner/stores",
-            owner,
-            UUID.randomUUID().toString(),
-            Map.of(
-                "name",
-                "매장",
-                "category",
-                "NAIL",
-                "address",
-                "서울",
-                "location",
-                Map.of("latitude", 37.5, "longitude", 127.0),
-                "openingHours",
-                hours),
-            201)
-        .path("id")
-        .asText();
+    return Map.of(
+        "name",
+        "매장",
+        "category",
+        "NAIL",
+        "address",
+        "서울",
+        "location",
+        Map.of("latitude", 37.5, "longitude", 127.0),
+        "openingHours",
+        hours);
+  }
+
+  @Test
+  void customerBecomesOwnerOnStoreCreationAndCanStillBookAsCustomer() throws Exception {
+    String own = shop("alice");
+    assertThat(
+            db.queryForObject(
+                "select role_code from user_accounts where user_id='alice'", String.class))
+        .isEqualTo("OWNER");
+    ok("GET", ownerPath(own) + "/timetable?date=2026-10-17", "alice", null, null, 200);
+    String other = shop("owner");
+    String service = service(other, 60);
+    JsonNode slot = slot(other, service, "2026-10-17T10:00:00+09:00");
+    assertThat(reserve(slot, "alice").path("status").asText()).isEqualTo("CONFIRMED");
+    assertThat(
+            call("GET", ownerPath(other) + "/timetable?date=2026-10-17", "alice", null, null)
+                .status)
+        .isEqualTo(403);
+  }
+
+  @Test
+  void failedRegistrationAndTransactionRollbackDoNotGrantOwner() throws Exception {
+    var invalid = new HashMap<>(shopRequest());
+    invalid.put("category", "INVALID");
+    assertThat(call("POST", BASE + "/owner/stores", "alice", "retry-store", invalid).status)
+        .isEqualTo(400);
+    assertThat(
+            db.queryForObject(
+                "select role_code from user_accounts where user_id='alice'", String.class))
+        .isEqualTo("CUSTOMER");
+    var request = json.convertValue(shopRequest(), com.bintime.store.dto.CreateStoreRequest.class);
+    assertThatThrownBy(
+            () ->
+                transactions.executeWithoutResult(
+                    status -> {
+                      stores.createStore(
+                          new com.bintime.common.auth.Actor("alice", "CUSTOMER", "alice"),
+                          "rollback",
+                          request);
+                      throw new IllegalStateException("rollback after registration");
+                    }))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(
+            db.queryForObject(
+                "select role_code from user_accounts where user_id='alice'", String.class))
+        .isEqualTo("CUSTOMER");
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_shops where owner_user_id='alice'", Integer.class))
+        .isZero();
+    var first = ok("POST", BASE + "/owner/stores", "alice", "retry-store", shopRequest(), 201);
+    var replay = ok("POST", BASE + "/owner/stores", "alice", "retry-store", shopRequest(), 201);
+    assertThat(replay).isEqualTo(first);
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_shops where owner_user_id='alice'", Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void concurrentFirstRegistrationReplaysOneStore() throws Exception {
+    try (var pool = Executors.newFixedThreadPool(2)) {
+      var first =
+          pool.submit(
+              () ->
+                  call("POST", BASE + "/owner/stores", "alice", "concurrent-store", shopRequest()));
+      var second =
+          pool.submit(
+              () ->
+                  call("POST", BASE + "/owner/stores", "alice", "concurrent-store", shopRequest()));
+      Result a = first.get(10, TimeUnit.SECONDS);
+      Result b = second.get(10, TimeUnit.SECONDS);
+      assertThat(a.status).isEqualTo(201);
+      assertThat(b.status).isEqualTo(201);
+      assertThat(a.data()).isEqualTo(b.data());
+    }
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_shops where owner_user_id='alice'", Integer.class))
+        .isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select role_code from user_accounts where user_id='alice'", String.class))
+        .isEqualTo("OWNER");
   }
 
   private String service(String shop, int duration) throws Exception {
@@ -707,7 +790,7 @@ class StoreApiTests {
   @Test
   void permissionsInputNullPatchesAndVersionsAreEnforced() throws Exception {
     assertThat(call("POST", BASE + "/owner/stores", null, "x", Map.of()).status).isEqualTo(401);
-    assertThat(call("POST", BASE + "/owner/stores", "alice", "x", Map.of()).status).isEqualTo(403);
+    assertThat(call("POST", BASE + "/owner/stores", "alice", "x", Map.of()).status).isEqualTo(400);
     String shop = shop("owner"), svc = service(shop, 60);
     assertThat(
             call(

@@ -28,4 +28,15 @@ public class UserAccountAccess {
     if (db.lock(id) == null)
       throw new com.bintime.common.web.ApiBusinessException(401, "UNAUTHENTICATED");
   }
+
+  /** 매장 생성 트랜잭션에 참여하므로 등록 실패 시 권한 변경도 함께 롤백된다. */
+  @Transactional
+  public void grantOwner(String id) {
+    UserAccount account = db.lock(id);
+    if (account == null)
+      throw new com.bintime.common.web.ApiBusinessException(401, "UNAUTHENTICATED");
+    if (!"CUSTOMER".equals(account.role) && !"OWNER".equals(account.role))
+      throw new com.bintime.common.web.ApiBusinessException(403, "FORBIDDEN");
+    account.role = "OWNER";
+  }
 }

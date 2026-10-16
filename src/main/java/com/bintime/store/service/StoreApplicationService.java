@@ -312,7 +312,6 @@ public class StoreApplicationService {
   }
 
   public StoreDetailResponse createStore(Actor a, String key, CreateStoreRequest r) {
-    ownerRole(a);
     return once(
         a,
         "CREATE_STORE",
@@ -343,6 +342,7 @@ public class StoreApplicationService {
               "INVALID_DESCRIPTION");
           require(r.imageUrl() == null || r.imageUrl().length() <= 2048, 400, "INVALID_IMAGE_URL");
           validateHours(r.openingHours());
+          users.grantOwner(a.id());
           Shop s = new Shop();
           s.id = id("shop_");
           s.ownerId = a.id();

@@ -137,14 +137,12 @@ class SearchAuthenticationTests {
   }
 
   @Test
-  void anonymousOwnerDeletedAccountAndForgedLocalHeadersCannotAccessCustomerEndpoints()
-      throws Exception {
+  void ownersRetainCustomerAccessWhileAnonymousAndDeletedAccountsAreRejected() throws Exception {
     mvc.perform(get("/api/v1/search/waitlists/me")).andExpect(status().isUnauthorized());
     mvc.perform(get("/api/v1/search/waitlists/me").header("X-Local-User-Id", "alice"))
         .andExpect(status().isUnauthorized());
     mvc.perform(get("/api/v1/search/waitlists/me").session(session("owner")))
-        .andExpect(status().isForbidden())
-        .andExpect(jsonPath("$.error.code").value("CUSTOMER_REQUIRED"));
+        .andExpect(status().isOk());
     var owner = session("owner");
     mvc.perform(
             post("/api/v1/search/intents/analyze")
@@ -152,13 +150,12 @@ class SearchAuthenticationTests {
                 .header("X-CSRF-Token", csrf(owner))
                 .contentType("application/json")
                 .content("{}"))
-        .andExpect(status().isForbidden())
-        .andExpect(jsonPath("$.error.code").value("CUSTOMER_REQUIRED"));
+        .andExpect(status().isBadRequest());
     mvc.perform(get("/api/v1/search/waitlists/me").session(session("deleted")))
         .andExpect(status().isUnauthorized());
     db.update("update user_accounts set role_code='OWNER' where user_id='alice'");
     mvc.perform(get("/api/v1/search/waitlists/me").session(session("alice")))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isOk());
   }
 
   @Test

@@ -24,6 +24,45 @@ class ApiContractTests {
   @LocalServerPort private int port;
 
   @Test
+  void nullableObjectsUseSeparateReferenceAndNullAlternatives() throws Exception {
+    for (String group : new String[] {"all", "public"}) {
+      JsonNode schemas = getDoc(group).at("/components/schemas");
+      for (String[] field :
+          new String[][] {
+            {"UserProfileResponse", "location", "UserLocationResponse"},
+            {"ChatRoomResponse", "lastMessage", "ChatMessageResponse"},
+            {"WaitlistResponse", "store", "WaitlistResponseStoreSummary"}
+          }) {
+        JsonNode parent = schemas.path(field[0]);
+        JsonNode property = parent.path("properties").path(field[1]);
+        assertThat(stringValues(parent.path("required"))).contains(field[1]);
+        assertThat(property.has("$ref")).as("%s.%s", field[0], field[1]).isFalse();
+        assertThat(property.has("type")).isFalse();
+        assertThat(property.path("oneOf").size()).isEqualTo(2);
+        assertThat(property.at("/oneOf/0/$ref").asText())
+            .isEqualTo("#/components/schemas/" + field[2]);
+        assertThat(property.at("/oneOf/1/type").asText()).isEqualTo("null");
+      }
+      assertNoNullReference(schemas);
+      assertThat(schemas.at("/ChatRoomResponse/properties/store/$ref").asText())
+          .isEqualTo("#/components/schemas/ChatRoomResponseStore");
+    }
+  }
+
+  private void assertNoNullReference(JsonNode node) {
+    if (node.isObject()) {
+      if (node.has("$ref")) {
+        JsonNode type = node.path("type");
+        assertThat(type.asText()).isNotEqualTo("null");
+        if (type.isArray()) assertThat(stringValues(type)).doesNotContain("null");
+      }
+      for (var property : node.properties()) assertNoNullReference(property.getValue());
+    } else if (node.isArray()) {
+      for (JsonNode child : node) assertNoNullReference(child);
+    }
+  }
+
+  @Test
   void storeDocumentsPublicQueriesAndAlternativeAuthenticationMethods() throws Exception {
     JsonNode doc = getDoc("all");
     int protectedCount = 0;
@@ -103,7 +142,8 @@ class ApiContractTests {
                 .path("schema");
         JsonNode envelope = resolve(doc, schema);
         assertThat(envelope.path("properties").has("meta")).isTrue();
-        assertThat(envelope.at("/properties/success/type").toString()).contains("object");
+        assertThat(resolve(doc, envelope.at("/properties/success")).path("type").toString())
+            .contains("object");
         JsonNode example =
             operation
                 .path("responses")
@@ -505,6 +545,11 @@ class ApiContractTests {
   }
 
   private JsonNode resolve(JsonNode doc, JsonNode schema) {
+    if (schema.has("oneOf")) {
+      for (JsonNode alternative : schema.path("oneOf")) {
+        if (alternative.has("$ref")) return resolve(doc, alternative);
+      }
+    }
     while (schema.has("$ref")) {
       schema = doc.at(schema.path("$ref").asText().substring(1));
     }

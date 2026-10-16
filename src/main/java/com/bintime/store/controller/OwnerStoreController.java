@@ -334,13 +334,15 @@ public class OwnerStoreController {
   @Operation(
       operationId = "createStore",
       summary = "ST-18 · 매장 등록",
-      description = "OWNER 인증 및 Idempotency-Key 필수. 성공 응답은 24시간 재사용합니다.")
+      description =
+          "로그인 및 Idempotency-Key 필수. 매장 등록 성공 시 본인에게 OWNER 권한을 부여하며 고객 기능도 계속 사용할 수 있습니다. "
+              + "등록 실패 시 권한도 변경하지 않습니다. 성공 응답은 24시간 재사용합니다.")
   @SecurityRequirement(name = "sessionCookie")
   @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(responseCode = "201", description = "생성 완료", useReturnTypeSchema = true)
   @ApiResponse(responseCode = "400", description = "입력 오류")
   @ApiResponse(responseCode = "401", description = "인증 필요")
-  @ApiResponse(responseCode = "403", description = "매장 소유자 권한 필요")
+  @ApiResponse(responseCode = "403", description = "CSRF 검증 실패 또는 허용되지 않은 계정 역할")
   @ApiResponse(responseCode = "409", description = "멱등 키 또는 시간 충돌")
   @org.springframework.web.bind.annotation.PostMapping(
       value = "/api/v1/owner/stores",
