@@ -25,15 +25,15 @@ import org.springframework.context.annotation.Configuration;
             title = "BinTime API",
             version = "v0.1-contract",
             description =
-                "Notion 명세 기반 계약 골격. 성공 응답은 향후 구현할 계약이며 Controller는 501을 반환합니다. 인증·검증·비즈니스 로직은"
-                    + " 미구현입니다. C-WS는 HTTP operation이 아닌 ChatWebSocketFrame 스키마와"
+                "카카오 로그인·콜백·로그아웃·CSRF 조회는 구현되어 있습니다. 나머지는 Notion 명세 기반 계약 골격으로 501을 반환합니다."
+                    + " C-WS는 HTTP operation이 아닌 ChatWebSocketFrame 스키마와"
                     + " docs/contracts/realtime.md를 참고하세요."))
 @SecurityScheme(
     name = "sessionCookie",
     type = SecuritySchemeType.APIKEY,
     in = SecuritySchemeIn.COOKIE,
     paramName = "bt_session",
-    description = "명세상 세션 쿠키. 로그인 로직 미구현")
+    description = "카카오 로그인 후 발급하는 HttpOnly 세션 쿠키")
 public class OpenApiConfig {
 
   @Bean
