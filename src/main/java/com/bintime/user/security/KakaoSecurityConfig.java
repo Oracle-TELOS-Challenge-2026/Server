@@ -3,6 +3,7 @@ package com.bintime.user.security;
 import com.bintime.common.dto.ApiError;
 import com.bintime.common.dto.ApiErrorResponse;
 import com.bintime.common.dto.ResponseMeta;
+import com.bintime.notification.subscription.NotificationSubscriptions;
 import com.bintime.user.adapter.KakaoOAuth2UserService;
 import com.bintime.user.service.KakaoAccountService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,6 +14,7 @@ import java.time.Duration;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,9 +22,11 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.http.converter.FormHttpMessageConverter;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.endpoint.RestClientAuthorizationCodeTokenResponseClient;
 import org.springframework.security.oauth2.client.http.OAuth2ErrorResponseErrorHandler;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
@@ -50,6 +54,13 @@ import tools.jackson.databind.json.JsonMapper;
 @EnableConfigurationProperties(KakaoLoginProperties.class)
 public class KakaoSecurityConfig {
   private static final Logger log = LoggerFactory.getLogger(KakaoSecurityConfig.class);
+
+  @Bean
+  HttpSessionCsrfTokenRepository csrfTokenRepository() {
+    var repository = new HttpSessionCsrfTokenRepository();
+    repository.setHeaderName("X-CSRF-Token");
+    return repository;
+  }
 
   @Bean
   @Profile("api-docs")
@@ -96,17 +107,18 @@ public class KakaoSecurityConfig {
       KakaoAccountService accounts,
       DefaultOAuth2UserService kakaoUserInfoClient,
       RestClientAuthorizationCodeTokenResponseClient kakaoTokenClient,
-      JsonMapper mapper)
+      JsonMapper mapper,
+      HttpSessionCsrfTokenRepository csrfRepository,
+      ObjectProvider<NotificationSubscriptions> subscriptions)
       throws Exception {
     String frontend = properties.frontendOrigin();
-    var csrfRepository = new HttpSessionCsrfTokenRepository();
-    csrfRepository.setHeaderName("X-CSRF-Token");
     http.authorizeHttpRequests(
             auth ->
                 auth.requestMatchers(
                         "/api/v1/auth/oauth/kakao/start", "/api/v1/auth/oauth/kakao/callback")
                     .permitAll()
-                    .requestMatchers("/api/v1/auth/**", "/api/v1/users/**")
+                    .requestMatchers(
+                        "/api/v1/auth/**", "/api/v1/users/**", "/api/v1/notifications/**")
                     .authenticated()
                     // 다른 도메인의 501 계약 골격은 각 기능 구현 시 인증·권한을 적용한다.
                     .anyRequest()
@@ -125,7 +137,8 @@ public class KakaoSecurityConfig {
                     .ignoringRequestMatchers(
                         request ->
                             !request.getServletPath().startsWith("/api/v1/auth/")
-                                && !request.getServletPath().startsWith("/api/v1/users/")))
+                                && !request.getServletPath().startsWith("/api/v1/users/")
+                                && !request.getServletPath().startsWith("/api/v1/notifications/")))
         .requestCache(AbstractHttpConfigurer::disable)
         .exceptionHandling(
             errors ->
@@ -134,17 +147,34 @@ public class KakaoSecurityConfig {
                         (request, response, exception) ->
                             failure(mapper, request, response, 401, "UNAUTHORIZED"))
                     .accessDeniedHandler(
-                        (request, response, exception) ->
-                            failure(
-                                mapper,
-                                request,
-                                response,
-                                403,
-                                exception instanceof CsrfException ? "CSRF_INVALID" : "FORBIDDEN")))
+                        (request, response, exception) -> {
+                          var authentication =
+                              SecurityContextHolder.getContext().getAuthentication();
+                          boolean unauthenticatedNotification =
+                              request.getServletPath().startsWith("/api/v1/notifications/")
+                                  && (authentication == null
+                                      || !authentication.isAuthenticated()
+                                      || authentication instanceof AnonymousAuthenticationToken);
+                          failure(
+                              mapper,
+                              request,
+                              response,
+                              unauthenticatedNotification ? 401 : 403,
+                              unauthenticatedNotification
+                                  ? "UNAUTHORIZED"
+                                  : exception instanceof CsrfException
+                                      ? "CSRF_INVALID"
+                                      : "FORBIDDEN");
+                        }))
         .logout(
             logout ->
                 logout
                     .logoutUrl("/api/v1/auth/logout")
+                    .addLogoutHandler(
+                        (request, response, authentication) -> {
+                          var service = subscriptions.getIfAvailable();
+                          if (service != null) service.releaseSession(request.getSession(false));
+                        })
                     .deleteCookies("bt_session")
                     .logoutSuccessHandler(
                         (request, response, authentication) -> response.setStatus(204)));

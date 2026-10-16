@@ -89,7 +89,7 @@ public class AuthController {
       operationId = "logout",
       summary = "U-03 · 로그아웃",
       description =
-          "현재 세션과 쿠키를 폐기한다. 실시간 연결 종료 연동은 해당 도메인 구현 시 추가한다.\n\n"
+          "현재 세션의 알림 구독 연결을 해제하고 세션과 쿠키를 폐기한다. 같은 FID를 사용하는 다른 유효 세션은 유지한다.\n\n"
               + "- 로그인 세션 — 본인 데이터\n"
               + "- X-CSRF-Token 필수\n\n"
               + "X-CSRF-Token은 GET /api/v1/auth/csrf에서 조회한다.",
