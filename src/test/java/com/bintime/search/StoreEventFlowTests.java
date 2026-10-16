@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +44,7 @@ class StoreEventFlowTests {
   static final Instant NOW = Instant.parse("2026-10-16T01:00:00Z");
   static final String START = "2026-10-17T15:00:00+09:00";
   static final AtomicBoolean ES_UNAVAILABLE = new AtomicBoolean();
+  static final AtomicInteger ES_FAILURES = new AtomicInteger();
   static HttpServer proxy;
   static String es;
   @LocalServerPort int port;
@@ -85,6 +87,7 @@ class StoreEventFlowTests {
                 && exchange.getRequestMethod().equals("PUT")
                 && exchange.getRequestURI().getPath().contains("/_doc/")) {
               status = 503;
+              ES_FAILURES.incrementAndGet();
               body = "{\"error\":\"test-only ES outage\"}".getBytes(StandardCharsets.UTF_8);
             } else {
               byte[] input = exchange.getRequestBody().readAllBytes();
@@ -403,6 +406,7 @@ class StoreEventFlowTests {
         .isGreaterThan(0);
     invisible();
     ES_UNAVAILABLE.set(false);
+    assertThat(ES_FAILURES.get()).isGreaterThan(0);
     advance(NOW.plusSeconds(3));
     drain();
     visible(nextDraft.path("id").asText());
@@ -430,7 +434,7 @@ class StoreEventFlowTests {
         .isZero();
     System.out.println(
         "EVENT_FLOW verified: publication, matching, duplicate replay, booking, withdrawal,"
-            + " republish, HTTP 503 retry, expiry; alias="
+            + " republish, HTTP 503 retry, old ES version rejection, expiry; alias="
             + ALIAS);
   }
 

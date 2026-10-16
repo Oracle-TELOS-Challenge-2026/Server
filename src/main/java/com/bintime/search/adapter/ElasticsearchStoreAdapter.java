@@ -229,6 +229,15 @@ public class ElasticsearchStoreAdapter implements StoreIndexPort {
                           : HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)))
                   .build(),
               HttpResponse.BodyHandlers.ofString());
+      // external_gte가 이전 문서를 거절한 것은 정상적인 중복/역순 처리다. 다른 409는 숨기지 않는다.
+      if (r.statusCode() == 409
+          && method.equals("PUT")
+          && path.contains("/_doc/")
+          && path.contains("version_type=external_gte")) {
+        var error = json.readTree(r.body());
+        if (error.at("/error/type").asText().equals("version_conflict_engine_exception"))
+          return error;
+      }
       if (r.statusCode() < 200 || r.statusCode() >= 300) throw SearchFailure.unavailable();
       return json.readTree(r.body());
     } catch (InterruptedException e) {
