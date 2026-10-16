@@ -25,10 +25,10 @@ import org.springframework.context.annotation.Configuration;
             title = "BinTime API",
             version = "v0.1-contract",
             description =
-                "user U-01~09, store ST-01~20, search S-01~08은 구현된 API입니다. store는 세션 쿠키와 설정된 Bearer"
-                    + " JWT 인증을 지원합니다. search의 카카오 세션·CSRF 인증 연결은 별도 작업이 필요합니다. search 미연결 의존 기능은"
-                    + " 503, notification·chatting 골격은 501을 반환합니다. C-WS는 HTTP operation이 아닌"
-                    + " ChatWebSocketFrame 스키마와 docs/contracts/realtime.md를 참고하세요."))
+                "user U-01~09, store ST-01~20, search S-01~08은 구현된 API입니다. store·search는 세션 쿠키와 설정된"
+                    + " Bearer JWT 인증을 지원합니다. search 미연결 알림 의존 기능은 503, notification·chatting 골격은"
+                    + " 501을 반환합니다. C-WS는 HTTP operation이 아닌 ChatWebSocketFrame 스키마와"
+                    + " docs/contracts/realtime.md를 참고하세요."))
 @SecurityScheme(
     name = "sessionCookie",
     type = SecuritySchemeType.APIKEY,
@@ -40,7 +40,7 @@ import org.springframework.context.annotation.Configuration;
     type = SecuritySchemeType.HTTP,
     scheme = "bearer",
     bearerFormat = "JWT",
-    description = "설정된 발급자의 RS256 JWT. sub는 내부 사용자 ID입니다. store API에서만 지원합니다.")
+    description = "설정된 발급자의 RS256 JWT. sub는 내부 사용자 ID입니다. store·search API에서 지원합니다.")
 public class OpenApiConfig {
 
   @Bean

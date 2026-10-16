@@ -12,7 +12,6 @@ import java.time.*;
 import java.util.*;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -51,7 +50,6 @@ public class SearchWorker {
     this.indexes = indexes;
   }
 
-  @Scheduled(fixedDelayString = "${search.worker-delay-ms:5000}")
   public void poll() {
     var ready =
         db.jdbc()
@@ -272,7 +270,6 @@ public class SearchWorker {
             s.startAt()));
   }
 
-  @Scheduled(fixedDelayString = "${search.expiry-delay-ms:60000}")
   public void expire() {
     String after = "";
     while (true) {

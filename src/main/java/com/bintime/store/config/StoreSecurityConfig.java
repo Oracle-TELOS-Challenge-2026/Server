@@ -27,7 +27,7 @@ import org.springframework.security.web.csrf.*;
 import org.springframework.web.cors.CorsConfiguration;
 import tools.jackson.databind.json.JsonMapper;
 
-/** store만의 인증 경계. 기존 카카오 로그인과 같은 HttpSession 보안 컨텍스트를 사용한다. */
+/** store·search 인증 경계. 기존 카카오 로그인과 같은 HttpSession 보안 컨텍스트를 사용한다. */
 @Configuration(proxyBeanMethods = false)
 @Profile("!api-docs")
 public class StoreSecurityConfig {
@@ -46,7 +46,11 @@ public class StoreSecurityConfig {
             && env.getProperty("bintime.auth.local-enabled", Boolean.class, false);
     var csrf = new HttpSessionCsrfTokenRepository();
     csrf.setHeaderName("X-CSRF-Token");
-    http.securityMatcher("/api/v1/stores/**", "/api/v1/reservations/**", "/api/v1/owner/stores/**")
+    http.securityMatcher(
+            "/api/v1/stores/**",
+            "/api/v1/reservations/**",
+            "/api/v1/owner/stores/**",
+            "/api/v1/search/**")
         .authorizeHttpRequests(
             auth ->
                 auth.requestMatchers(
@@ -56,6 +60,8 @@ public class StoreSecurityConfig {
                         "/api/v1/stores/{storeId}/services",
                         "/api/v1/stores/{storeId}/slots",
                         "/api/v1/stores/{storeId}/slots/{slotId}")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/search/stores")
                     .permitAll()
                     .anyRequest()
                     .access(

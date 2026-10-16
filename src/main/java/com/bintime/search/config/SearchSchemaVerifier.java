@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 /** JDBC 테이블도 ddl-auto=validate와 같은 배포 전 검증 경계에 포함한다. */
 @Component
 @Profile("!api-docs")
+@org.springframework.core.annotation.Order(0)
 public class SearchSchemaVerifier implements ApplicationRunner {
   private final SearchRepository db;
 

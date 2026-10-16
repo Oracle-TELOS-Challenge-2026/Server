@@ -208,11 +208,12 @@ public class SearchController {
       description =
           "결과 확인 후 별도 S-03 대기 등록. RESOLVED/NEEDS_CLARIFICATION/UNSUPPORTED. AI 장애여도 수동 입력 가능.\n\n"
               + "- CUSTOMER — 본인 데이터\n"
-              + "- X-CSRF-Token 필수\n\n"
+              + "- 쿠키 인증의 변경 요청은 X-CSRF-Token 필수\n\n"
               + "외부 도메인 미연결 또는 외부 장애는 503 (retryable=true)입니다.",
       externalDocs =
           @ExternalDocumentation(url = "https://app.notion.com/p/3fbdaacb8cd481c99aade960e5397683"))
   @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
   @ApiResponse(
       responseCode = "200",
       description = "성공 응답",

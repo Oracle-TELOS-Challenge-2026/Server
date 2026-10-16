@@ -1,6 +1,6 @@
 # Search 구현 현황과 후속 작업
 
-기준일: 2026-10-16. DB v2 전환과 Docker/운영 Elasticsearch 연결 설정까지 반영한 기록이다. 저장소의 실제 코드, 테스트 결과와 로컬 실행 결과를 기준으로 작성했다. 우선순위는 다음 구현을 위한 제안이며, 상대 도메인의 미연결 계약을 완료로 계산하지 않는다.
+기준일: 2026-10-16. DB v2 전환, Docker/운영 ES 설정, 실제 store 카탈로그 연결과 초기 색인까지 반영한 기록이다. 저장소의 실제 코드, 테스트 결과와 로컬 실행 결과를 기준으로 작성했다. 우선순위는 다음 구현을 위한 제안이며, 상대 도메인의 미연결 계약을 완료로 계산하지 않는다.
 
 이 문서는 구현 범위와 진행 상황을 관리한다. 세부 정책·설정·실행 명령·복구 SQL은 [Search 구현 및 운영](search.md), store 측 진행 상황은 [Store 구현 현황](store-progress.md)을 참고한다.
 
@@ -14,9 +14,16 @@
 | 로컬 Elasticsearch | 기존 데이터 볼륨을 유지해 Compose 실행, 상태 확인·재시작 정책 추가 | `server-elasticsearch-1`, `http://localhost:9200`, healthy / green 확인 |
 | 운영 Elasticsearch | 운영 Compose에 ES·영속 볼륨·비공개 네트워크·비밀번호 인증·health 의존성 추가 | 임시 Compose 프로젝트에서 실행 검증. **실제 운영 서버 배포는 미수행** |
 | 운영 앱 접속 | prod 기본 주소 `http://elasticsearch:9200`, URL/alias/계정/비밀번호/Authorization 환경변수, Basic 인증과 명시적 헤더 우선 처리 | `application-prod.properties`, `.env.prod.example`, 접속 Adapter와 인증 테스트 반영 |
-| 회귀 검증 | `./gradlew format test build --console=plain` 성공 | 최신 기본 테스트 XML: **149건, 실패/오류 0, 외부 검증 3건 skip**. 운영 ES 인증은 별도 실제 컨테이너로 검증 |
+| 회귀 검증 | `./gradlew format test build --console=plain` 성공 | 운영 ES 설정 단계는 149건 중 실패/오류 0·외부 검증 3건 skip. 이후 카탈로그 연결에서도 전체 테스트·빌드를 통과했고 Oracle+ES는 별도 검증 |
 
 대기·자동 알림, Oracle 벡터 캐시, 현재 조건의 동의는 유지한다. ES 프로세스 실행과 접속 설정 완료는 실제 매장 데이터의 색인·검색·알림 연결 완료를 의미하지 않는다. 현재 데이터 공급과 도메인 연결이 다음 구현 단계다.
+
+### Store 연결 후속 반영
+
+- 실제 카탈로그 Bean 주입과 API-docs 전용 대체 Bean을 분리했다.
+- 로컬 DB에 06(검색 버전)과 현재 엔티티 기동에 필요한 07(이벤트 전달 메타데이터)을 추가 적용했다. 07의 신규 컬럼 백필 SQL을 실행 시점에 파싱하도록 수정하고 재실행을 확인했다.
+- 초기 색인 실행 옵션과 alias별 고유 인덱스 이름을 추가했다. 로컬 서버 기동·초기 alias 생성·S-01 HTTP 200을 확인했다. 앱 DB의 매장·슬롯은 0건이므로 로컬 응답은 빈 목록이다.
+- `StoreCatalogConnectionTests`를 추가했다. 격리 Oracle/실제 ES에서 등록 → 대기 → 색인/벡터 캐시 → HTTP 검색 → 예약 → 오래된 ES 슬롯 제외 → FULFILLED를 확인했다. OpenAI는 대역이며 실제 발송은 범위 밖이다.
 
 ## 1. 현재 상태
 
@@ -24,17 +31,17 @@
 
 | 영역 | 구현 상태 | 남은 연결 |
 | --- | --- | --- |
-| 예약 대기 관리 | 조건·동의·버전·멱등성·만료·영속 작업 구현 | 실제 사용자 인증, 알림 설정, 매장 검증 |
-| 조건 검색 | Elasticsearch nested 검색·정렬·커서·원장 재검증 구현 | 실제 store 조회와 전체/증분 데이터 공급 |
+| 예약 대기 관리 | 실제 store 검증/표시 조회 연결, 조건·동의·버전·멱등성·만료·영속 작업 구현 | 인증/알림 설정과 전체 사용자 흐름 QA |
+| 조건 검색 | 실제 store 카탈로그 연결·초기 색인·S-01/예약 후 재검증 통합 확인 | 증분 이벤트의 운영 연결·복구 QA |
 | 자연어 분석 | Responses 구조화 출력·서버 검증·추가 질문·장애 구분 구현 | 실제 사용자 요청 연결 및 자연어 품질 QA |
 | 사용자 벡터 | 자유로운 JSON 조회 → 작업 저장 → OpenAI → Oracle 캐시 구현 | 구현된 U-08 저장 경로와 변경 이벤트 연결 |
 | 매칭 | 모든 적격 고객 순회·제안 저장·고객별 통합·발송 전 재검증 구현 | store 이벤트 전달과 notification 접수 |
 | 작업 복구 | DB claim·lease·재시도·중단 작업 회수 구현 | 운영 지표·보관 정책·장애 대응 검증 |
 | 예약과 대기 완료 | store 예약 트랜잭션에서 search 협력 서비스 호출 구현 | 실제 검색·알림을 거친 예약 전체 QA |
 | Oracle 스키마 | 로컬 v2 전환 완료, search 7개·전체 20개 | 다른 환경별 DDL 적용·확인 |
-| Elasticsearch 인프라 | 로컬 실행·운영 Compose·prod 접속/인증 설정 구현 | 실제 운영 배포, store 데이터로 초기 인덱스 구축 |
+| Elasticsearch 인프라 | 로컬 실행·초기 alias 구축, 운영 Compose·prod 접속/인증 설정 구현 | 실제 운영 배포·실제 운영 데이터 초기 색인 |
 
-현재 `SearchConfiguration`의 기본 Bean은 미연결 기능을 성공으로 처리하지 않는다. `SearchUserAccess.customer`는 미인증 시 401, 인증 주체가 있어도 실제 계약 미연결 시 503을 반환한다. `notificationsEnabled`, `SearchStoreCatalog`의 5개 메서드, `SearchNotificationGateway.dispatch`는 503을 반환한다. 테스트의 대역으로 성공한 결과를 운영 연동 완료로 해석하면 안 된다.
+정상 프로필의 `SearchStoreCatalog`는 `StoreSearchCatalogService`다. 503 대체 Bean은 api-docs에만 남겼고 실제 Bean 1개가 주입되는 것을 검증했다. user의 인증 Adapter와 store 이벤트 consumer도 현재 별도 작업에서 추가되고 있으며 [search 인증](search-auth.md), [이벤트 전달](store-event-delivery.md)에 계약이 있다. 이번 연결 검증에서 `notificationsEnabled`와 `SearchNotificationGateway`의 실제 알림 연동은 완료로 계산하지 않는다. 테스트 대역의 OpenAI/알림 결과와 실제 전달을 구분한다.
 
 ## 2. API별 구현 범위
 
@@ -99,7 +106,7 @@ Oracle이 원본이고 Elasticsearch는 재구축 가능한 검색 인덱스다.
 
 | 검증 | 확인된 결과 | 범위·제한 |
 | --- | --- | --- |
-| `./gradlew format test build --console=plain` | v2 및 운영 ES 인증 설정 반영 후 성공 | 최신 XML 149건, 실패/오류 0, 외부 검증 3건 skip |
+| `./gradlew format test build --console=plain` | v2 및 운영 ES 인증 설정 반영 후 성공 | 운영 ES 설정 단계 149건, 실패/오류 0·외부 검증 3건 skip. 카탈로그 연결 후에도 전체 검증 재실행 성공 |
 | `SearchBehaviorTests` | 서비스·HTTP 동작 검증 | 동의/시간/가격/소유권/중복/20개 경쟁/멱등/만료/7명 전원/다중 대기 통합/취소 후 발송 차단 등, 도메인 연동은 테스트 대역 |
 | `OpenAiIntentAdapterTests` | 외부 프로토콜·오류 검증 | 구조화 출력·임베딩 응답·키 누락·시간 초과, 실제 자연어 품질 평가는 아님 |
 | `UserVectorFlowTests` | H2 및 격리 Oracle에서 검증 | JSON 원문·재사용·롤백·동시 생성·lease 회수·오래된 응답 차단·오류 분류 |
@@ -107,6 +114,7 @@ Oracle이 원본이고 Elasticsearch는 재구축 가능한 검색 인덱스다.
 | `SearchElasticsearchTests` | 실제 Elasticsearch 8.19.6에서 검증 | nested 조건·가격/벡터 정렬·PIT/커서·마감 슬롯 재검증, 기본 실행에서는 skip |
 | `testOpenAi` | v1 당시 실제 키로 합성 선호 JSON 임베딩 성공 | H2 및 별도 Oracle에서 실제 저장 확인. v2 전환/운영 ES 설정 단계에서는 유료 호출 재실행 안 함 |
 | v2 로컬 DB 전환 | 24개 → 20개, search 7개·잠금 256행, 기존 13개 테이블 행 수 보존 | 코드 전환 후 format/test/build 및 격리 Oracle 대기·벡터 테스트 통과 |
+| `StoreCatalogConnectionTests` | 기본 H2/검색 대역과 격리 Oracle/실제 ES에서 성공 | 실제 store Bean·대기·초기 색인·S-01·예약 후 제외, 테스트 인덱스/스키마 정리 |
 | `ElasticsearchAuthenticationTests` | HTTP 요청의 인증 헤더 검증 | Basic 계정, 명시적 ApiKey 헤더 우선, 익명 접속 확인 |
 | 운영 Compose 정적 확인 | ES 외부 포트 없음·internal 네트워크·앱 URL·healthy 의존성 확인 | 비밀값을 출력하지 않고 설정 검증 |
 | 운영 ES 실제 실행 | 임시 프로젝트에서 healthy, 비인증 401, 인증 후 health 성공 | 검증용 컨테이너/네트워크/볼륨 정리. 운영 서버 배포와 구분 |
@@ -115,11 +123,11 @@ Oracle이 원본이고 Elasticsearch는 재구축 가능한 검색 인덱스다.
 
 ## 6. 다음 구현 우선순위
 
-**다음 구현 단위는 `SearchStoreCatalog` 실제 구현 + 초기 인덱스 구축 + S-01 실데이터 검증을 권장한다.** 공개 검색부터 실제 동작을 확인할 수 있고, 같은 계약을 기존 슬롯 매칭과 매장 임베딩 재검증에서도 사용한다.
+**카탈로그 연결과 초기 색인은 완료했다. 다음 단계는 store 이벤트 consumer가 실제 발행·예약·철회 후 ES와 매칭 작업을 갱신하는지 검증하는 것이다.** 현재 추가된 consumer의 재시도·재시작과 user 인증 연결을 함께 점검한 후 실제 notification을 연결한다.
 
 | 순서 | 다음 작업 | 확인할 결과 |
 | --- | --- | --- |
-| 1 | store 공개 조회 5개 메서드 구현, 실제 매장/시술 설명 구성, `rebuild()` 실행 | 실제 슬롯이 있는 매장이 S-01에 나타나고 가격/거리 정렬·마감 제외가 동작 |
+| 1 · 완료 | 실제 store 조회 5개 연결, `rebuild()` 및 S-01 통합 검증 | 격리 Oracle+실제 ES에서 거리/가격/익명 추천·예약 마감 제외 확인 |
 | 2 | store 이벤트 consumer와 증분 색인·매칭 연결 | 발행·예약·철회·변경이 재시작 후에도 반영되고 오래된 이벤트가 최신 문서를 덮어쓰지 않음 |
 | 3 | 기존 user 세션/CSRF와 search 연결, U-08 변경 이벤트 연결 | 로그인 고객이 대기를 관리하고 선호 저장 시 벡터 작업이 자동 등록됨 |
 | 4 | N-06 접수와 실제 알림 전달 | 적격 고객 전원 처리, user+slot 중복 방지, 취소/변경 후 발송 차단 |
@@ -127,9 +135,9 @@ Oracle이 원본이고 Elasticsearch는 재구축 가능한 검색 인덱스다.
 
 운영 배포 준비는 위 코드 연결과 병행할 수 있다. 서버 `.env`에 `ELASTIC_PASSWORD`를 설정하고, v2 DDL을 적용한 뒤 새 이미지와 ES를 배포해야 한다. 실제 운영 환경의 인증 접속과 health, 인덱스 초기 구축은 배포 후 따로 확인한다. 설정·명령은 [Docker 실행과 운영 ES 연결](search.md#docker-실행과-운영-es-연결)을 따른다.
 
-### P0-1. 실제 store 조회 계약 연결 — 가장 먼저 진행
+### P0-1. 실제 store 조회 계약 연결 — 완료
 
-`SearchStoreCatalog`의 `validate`, `available`, `revalidate`, `describe`, `export`를 store 공개 서비스로 구현한다. 현재 매장 벡터 저장 전 최신 문서 확인과 v1 잔여 큐 복구는 export를 순회하므로, 우선 정확한 전체 순회를 연결하고 필요하면 store ID별 공개 조회를 추가한다. search에서 store Repository를 직접 호출하지 않는다. 전체/증분 문서의 버전은 매장·시술·슬롯 중 검색 결과에 영향을 주는 모든 변경에서 증가하도록 정한다.
+`StoreSearchCatalogService`의 `validate`, `available`, `revalidate`, `describe`, `export` 구현을 search에 연결했다. 초기 색인은 `search.index.rebuild=true`로 실행할 수 있다. 현재 매장 벡터 저장 전 최신 문서 확인과 v1 잔여 큐 복구는 export를 순회하므로, 우선 정확한 전체 순회를 연결하고 필요하면 store ID별 공개 조회를 추가한다. search에서 store Repository를 직접 호출하지 않는다. 전체/증분 문서의 버전은 매장·시술·슬롯 중 검색 결과에 영향을 주는 모든 변경에서 증가하도록 정한다.
 
 완료 기준: 실제 Oracle 매장·시술·슬롯으로 `SearchIndexService.rebuild()` 후 S-01 검색, 대기 조건의 store 검증, 기존 슬롯 탐색, 마감 슬롯 제외가 동작한다. 사용자 벡터가 없는 경우에도 거리/가격 검색을 확인하고, 매장 벡터가 생성되면 같은 설명은 캐시를 재사용하는지 확인한다. export/available의 마지막 커서까지 누락 없이 읽으며, 특정 매장·시술 불일치를 거절한다.
 

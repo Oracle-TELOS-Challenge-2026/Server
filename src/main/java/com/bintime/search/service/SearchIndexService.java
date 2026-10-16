@@ -44,7 +44,7 @@ public class SearchIndexService {
   }
 
   public String rebuild() {
-    String name = "bintime-stores-" + clock.millis();
+    String name = alias + "-" + clock.millis() + "-" + UUID.randomUUID().toString().substring(0, 8);
     index.create(name);
     String cursor = null;
     do {

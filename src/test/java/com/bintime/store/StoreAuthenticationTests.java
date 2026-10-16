@@ -229,6 +229,25 @@ class StoreAuthenticationTests {
   }
 
   @Test
+  void searchSharesBearerValidationAndChecksCurrentCustomerRole() throws Exception {
+    String path = "/api/v1/search/waitlists/me";
+    mvc.perform(get(path).header("Authorization", "Bearer " + token("alice")))
+        .andExpect(status().isOk());
+    mvc.perform(get(path).header("Authorization", "Bearer " + token("owner")))
+        .andExpect(status().isForbidden());
+    mvc.perform(get(path)).andExpect(status().isUnauthorized());
+    mvc.perform(get(path).session(session("alice")).header("Authorization", "Bearer broken"))
+        .andExpect(status().isUnauthorized());
+    mvc.perform(
+            post("/api/v1/search/waitlists")
+                .header("Authorization", "Bearer " + token("alice"))
+                .header("Idempotency-Key", "search-jwt")
+                .contentType("application/json")
+                .content("{}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void invalidTokensCannotFallBackToAValidCookie() throws Exception {
     mvc.perform(
             post("/api/v1/reservations")

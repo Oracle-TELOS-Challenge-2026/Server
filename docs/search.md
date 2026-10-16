@@ -10,11 +10,11 @@
 
 S-01~08은 MVC Service/JDBC Repository와 OpenAI·Elasticsearch Adapter로 처리한다. Oracle이 원본이며 Elasticsearch는 파생 인덱스다. 인증부터 실제 알림 수신까지는 아래 공개 계약의 실제 구현 연결이 필요하다. 기본 구현은 빈 결과나 성공을 위장하지 않고 401/403/503으로 거절한다. 테스트 대역은 `src/test`에만 있다.
 
-- user: `SearchUserAccess.explicitPreferences`는 구현된 `UserPreferenceService`를 통해 `user_accounts.preferences_json` 전체를 조회한다. `UserPreferenceService.replace`는 자유로운 JSON 저장과 동기 `UserPreferencesChanged` 이벤트를 같은 트랜잭션에서 처리하며, search 소비자는 revision과 VECTOR 작업을 같은 트랜잭션에 기록한다. `customer`의 인증/CUSTOMER/CSRF와 `notificationsEnabled`의 실제 구현 연결은 별도 의존 작업이다. U-04~08 프로필·위치·선호 저장 HTTP API는 구현되어 있다. U-08 저장을 이 변경 이벤트 경로에 연결하는 작업은 아직 남아 있다.
-- store: `SearchStoreCatalog.validate`는 실제 매장·카테고리·시술 관계를 검증한다. `describe`는 표시용 이름을 제공한다. `available`과 `export`는 cursor가 null일 때 첫 페이지이며 nextCursor=null까지 누락 없이 순회한다. `revalidate`는 현재 AVAILABLE이며 미래인 슬롯만 반환한다. 슬롯 start/end와 가격은 실제 원장 값이다. 문서 version은 매장·서비스·슬롯의 모든 검색 관련 변경마다 증가한다.
+- user: `SearchUserAccess.explicitPreferences`는 구현된 `UserPreferenceService`를 통해 `user_accounts.preferences_json` 전체를 조회한다. `UserPreferenceService.replace`는 자유로운 JSON 저장과 동기 `UserPreferencesChanged` 이벤트를 같은 트랜잭션에서 처리하며, search 소비자는 revision과 VECTOR 작업을 같은 트랜잭션에 기록한다. `customer`의 세션/JWT·현재 CUSTOMER 원장 역할·쿠키 CSRF는 연결되었다. `notificationsEnabled`의 실제 전역 설정 연결은 별도 의존 작업이다. U-04~08 프로필·위치·선호 저장 HTTP API는 구현되어 있다. U-08 저장을 이 변경 이벤트 경로에 연결하는 작업은 아직 남아 있다.
+- store: `StoreSearchCatalogService`가 `SearchStoreCatalog` 5개 메서드를 구현하며 정상 프로필에서 search에 주입된다. 503 대체 구현은 DB 없는 `api-docs`에서만 사용한다. 기존 store DB에는 migration 06이 필요하다. `SearchStoreCatalog.validate`는 실제 매장·카테고리·시술 관계를 검증한다. `describe`는 표시용 이름을 제공한다. `available`과 `export`는 cursor가 null일 때 첫 페이지이며 nextCursor=null까지 누락 없이 순회한다. `revalidate`는 현재 AVAILABLE이며 미래인 슬롯만 반환한다. 슬롯 start/end와 가격은 실제 원장 값이다. 문서 version은 매장·서비스·슬롯의 모든 검색 관련 변경마다 증가한다.
 - store 커밋 후 `MatchService.submit(eventId, slotId, publicationVersion)`와 `SearchIndexService.changed(전체문서)`를 생산자 outbox 등으로 재전달해야 한다. 슬롯 삭제/매장 비공개는 slots=[] tombstone을 전달한다. 예약 완료는 user/intent/version/reservationId를 담아 `WaitlistService.fulfilled`로 전달한다. 검색 도메인이 예약을 확정하지 않는다.
 
-store의 조회 계약은 `StoreSearchCatalogService`로 연결되어 있다. 필터·커서·검색 전용 버전 및 06 DB 변경은 [store 카탈로그 계약](store-catalog.md)을 참고한다. 이벤트 전달·search 사용자 인증·실제 알림 연결은 별도로 남아 있다.
+store의 조회 계약은 `StoreSearchCatalogService`로 연결되어 있다. 필터·커서·검색 전용 버전 및 06 DB 변경은 [store 카탈로그 계약](store-catalog.md)을 참고한다. store 커밋 이벤트도 [전달 소비자](store-event-delivery.md)가 search 큐로 넘긴다(기존 DB는 07 적용). [search 사용자 인증](search-auth.md)은 세션·JWT와 현재 CUSTOMER 원장 역할에 연결되었다. 알림 전역 설정과 실제 알림·마감 전달은 별도다.
 - notification: `SearchNotificationGateway.dispatch`는 N-06 DTO를 접수한다. 동일 user+slot을 중복 발송하지 않고, 최종 동의·발송 제한·대기 ID/버전과 슬롯 유효성을 재확인한다. 취소와 외부 발송 사이의 경쟁은 수신자의 최종 검증 계약으로 닫는다. 검색 DB 잠금을 외부 호출 동안 유지하지 않는다.
 
 기존 JPA Waitlist(`search_waitlists`)와 새 `search_intent`는 별도 저장 모델이다. `WaitlistReservationService`는 두 모델을 지원하며 store 예약과 같은 트랜잭션에서 조건 검증과 완료 처리를 수행한다. search는 다른 도메인의 Repository를 호출하지 않는다.
@@ -172,3 +172,25 @@ Compose는 `ELASTIC_PASSWORD`를 앱의 `SEARCH_ELASTICSEARCH_PASSWORD`로 전�
 운영은 ES 영속 볼륨·재시작 정책·인증된 상태 확인을 사용하며 ES healthy 이후 앱을 시작한다. 초기 `elastic` 계정은 설정 단순화를 위한 기본값이며, 운영 계정 정책에 따라 필요한 인덱스/alias/PIT 권한의 전용 계정이나 API 키로 전환할 수 있다. ES 프로세스가 정상이어도 인덱스 생성·store 데이터 연결은 별도다. 초기 데이터 공급은 `SearchIndexService.rebuild()`와 store 공개 계약 연결이 필요하다.
 
 설정 참고: [Elastic Docker 설정](https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-configure), [보안 최소 설정](https://www.elastic.co/guide/en/elasticsearch/reference/current/security-minimal-setup.html).
+
+## Store 카탈로그 연결 및 초기 색인
+
+`StoreSearchCatalogService`의 실제 Bean을 사용한다. store의 Repository를 search에서 직접 조회하지 않는다. 로컬 `BINTIME_APP`에는 2026-10-16 migration 06을 적용해 `STORE_SHOPS.SEARCH_VERSION`을 추가했다. 기동 시 현재 store 이벤트 엔티티가 요구하는 migration 07도 추가 적용했으며, 두 작업에서 기존 20개 테이블의 행 수를 보존했다. 운영 DB에는 자동 적용하지 않는다.
+
+초기 인덱스/alias가 없거나 전체 재구축이 필요할 때 운영자가 명시적으로 실행한다. DB 스키마 검증 후 현재 store export 전체를 읽고 새 인덱스를 만든 다음 alias를 전환한다. 별도 공개 관리 API는 추가하지 않았다.
+
+```bash
+./gradlew bootRun --args='--search.index.rebuild=true --search.scheduling-enabled=false --bintime.store.expiration-enabled=false --bintime.store.event-delivery-enabled=false'
+```
+
+위 명령은 서버를 계속 실행한다. 초기 색인 점검 중 자동 작업을 멈춘 예시이며, 점검 후 플래그를 제거한 정상 설정으로 재시작해야 벡터·매칭·이벤트 worker가 처리된다. 초기 문서는 캐시 벡터 없이도 검색 가능하다. 새 매장 임베딩은 STORE_VECTOR 후속 작업이 처리한다. 매번 기동할 때 자동 재구축하지 않도록 기본값은 비활성이다.
+
+`StoreCatalogConnectionTests`는 실제 store 서비스를 통해 등록한 매장·시술·슬롯으로 대기 등록/상세·초기 색인·거리/가격/익명 추천 검색·예약 완료·마감 슬롯 재검증을 확인한다. 기본은 H2와 검색 엔진 대역이며 아래 설정에서는 실제 ES를 사용한다. OpenAI는 이 테스트에서 대역을 사용한다.
+
+```bash
+SEARCH_ELASTICSEARCH_URL=http://localhost:9200 ./gradlew test --tests '*StoreCatalogConnectionTests'
+```
+
+실제 Oracle도 연결하려면 빈 전용 테스트 스키마에 최신 전체 초기 DDL과 search DDL을 적용하고 `CATALOG_ORACLE_URL/USER/PASSWORD`를 제공한다. USER는 안전장치로 `BT_CATALOG_` + 대문자 16진수 12자리여야 한다. 테스트는 업무 행을 생성하므로 앱 스키마를 사용하지 않는다. 테스트용 ES alias/index는 UUID로 분리하고 종료 시 정리한다.
+
+검증 기록: 격리 Oracle + 실제 ES에서 위 흐름을 통과했고, 로컬 앱 DB에서도 서버를 기동해 초기 `bintime-stores` alias 생성과 S-01 HTTP 200을 확인했다. 로컬에는 매장/슬롯이 0건이라 응답은 빈 목록이며 테스트용 업무 데이터를 앱 DB에 추가하지 않았다. 점검 서버는 종료했고 ES 컨테이너와 초기 인덱스는 유지했다.

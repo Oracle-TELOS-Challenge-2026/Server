@@ -234,11 +234,13 @@ public class StoreApplicationService {
     StoreEvent e = new StoreEvent();
     e.id = id("evt_");
     e.type = type;
+    e.storeId = s.storeId;
     e.slotId = s.id;
     e.publicationVersion = s.publicationVersion;
     e.slotVersion = s.version;
     e.status = "QUEUED";
     e.createdAt = now();
+    e.availableAt = e.createdAt;
     e.payload =
         json.writeValueAsString(
             Map.of(
@@ -252,6 +254,18 @@ public class StoreApplicationService {
                 slotDto(s),
                 "occurredAt",
                 e.createdAt));
+    db.save(e);
+  }
+
+  private void changed(Shop shop) {
+    StoreEvent e = new StoreEvent();
+    e.id = id("evt_");
+    e.type = "STORE_CHANGED";
+    e.storeId = shop.id;
+    e.status = "QUEUED";
+    e.createdAt = now();
+    e.availableAt = e.createdAt;
+    e.payload = json.writeValueAsString(Map.of("eventId", e.id, "storeId", shop.id));
     db.save(e);
   }
 
@@ -346,6 +360,7 @@ public class StoreApplicationService {
           s.version = 1L;
           s.createdAt = now();
           db.save(s);
+          changed(s);
           return shopDto(s);
         });
   }
@@ -382,6 +397,7 @@ public class StoreApplicationService {
           s.version = 1L;
           db.save(s);
           shop.searchVersion++;
+          changed(shop);
           return serviceDto(shop, s);
         });
   }
@@ -420,7 +436,7 @@ public class StoreApplicationService {
           s.version = 1L;
           s.createdAt = now();
           db.save(s);
-          shop.searchVersion++;
+          event(s, "CREATED");
           return ownerSlotDto(s);
         });
   }
@@ -440,6 +456,7 @@ public class StoreApplicationService {
     }
     s.version++;
     s.searchVersion++;
+    changed(s);
     return shopDto(s);
   }
 
@@ -461,6 +478,7 @@ public class StoreApplicationService {
     if (r.active() != null) s.active = r.active() ? "Y" : "N";
     s.version++;
     shop.searchVersion++;
+    changed(shop);
     return serviceDto(shop, s);
   }
 

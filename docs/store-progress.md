@@ -13,8 +13,8 @@
 | Store HTTP API | 기존 ST-01~17과 등록 API 3개, 총 20개 구현 |
 | 원장 저장과 예약 정합성 | Oracle 저장, 고객·매장 잠금, 중복 예약 방어 구현 |
 | 대기를 연결한 예약 | search 공개 협력 서비스의 조건 검증·완료 및 같은 트랜잭션 롤백 구현 |
-| 후속 작업 저장 | 발행·철회·예약·취소·완료·노쇼·만료 이벤트 저장 구현 |
-| 검색·매칭·실제 알림까지 이어지는 흐름 | store 조회 계약 구현 완료. 이벤트 전달·사용자 인증·알림 연결은 남음 |
+| 후속 작업 저장·전달 | 매장·시술·공급·예약 변경 저장과 search 영속 큐 전달·재시도·lease 회수 구현 |
+| 검색·매칭·실제 알림까지 이어지는 흐름 | 조회·이벤트 전달·search 사용자 인증 구현. 알림 전역 설정·실제 전달·마감 연결은 남음 |
 | 운영 인증 | 카카오 세션·CSRF 연결 및 선택적 Bearer JWT 검증 구현. 실제 배포 로그인 QA는 별도 |
 | 직접 QA | 격리된 Oracle QA 서버 준비와 36개 순차 요청 모음 제공 |
 | 운영 배포 | 로컬 검증 완료. 실제 배포 DB 반영·인증 개방·운영 연동은 별도 작업 |
@@ -103,11 +103,11 @@
 | STORE-NEXT-01 | 구현 완료 · 배포 QA 대기 | 세션 쿠키·CSRF 연결 및 선택적 Bearer JWT 검증 구현. [인증 계약](store-auth.md) 참고 | 자동화 테스트 후 실제 카카오 로그인·배포 환경 QA 필요 |
 | STORE-NEXT-02 | 구현·H2/격리 Oracle 검증 완료 | StoreSearchCatalogService가 validate·available·revalidate·export·describe 제공 | 실제 원장 조회, 거리 필터 후 다중 페이지 순회, 예약·철회·만료·비활성 공급 제외 검증 |
 | STORE-NEXT-03 | 구현·H2/격리 Oracle 검증 완료 | 별도 search_version을 매장 잠금 아래 업무 변경과 함께 증가. export는 커밋된 동일 스냅샷 조회 | 기존 PATCH 버전 유지. 시술·슬롯·예약 상태 변경 반영, 롤백·멱등 재생 검증. 앱 DB에는 06 SQL 별도 적용 필요 |
-| STORE-NEXT-04 | P0 · 저장만 구현 | store_events 소비·전달 처리. 발행은 search의 매칭 접수와 연결하고 철회·예약·만료의 마감 반영 경로 구현 | 커밋된 작업이 재시도 가능하게 전달됨. 중복·역순·오래된 발행을 무시하고 의뢰/처리 완료 상태를 구분 |
+| STORE-NEXT-04 | 구현 · H2/격리 Oracle 검증 완료 | store_events를 search 큐에 전달. 생성·발행 매칭, 변경 문서 색인 접수. lease·재시도·동시 소비·롤백 구현 | PROCESSED는 search 접수 완료. 실제 알림 마감은 NEXT-05에 남음. 기존 DB에는 07 SQL 필요([전달 계약](store-event-delivery.md)) |
 | STORE-NEXT-05 | P0 · 상대 도메인 협업 필요 | search/notification과 제안 마감·예약 결과 전달 및 화면 갱신 연결 | 예약·철회·만료된 공급이 알림/제안과 고객·매장 화면에서 마감됨. 늦게 클릭해도 원장의 재검증으로 중복 예약 차단 |
 | STORE-NEXT-06 | P0 · 통합 검증 대기 | 실제 인증 및 검색·알림을 붙인 사용자 흐름 QA, 배포 DB 반영·기동 점검 | 대기 활성화 → 슬롯 발행 → 실제 제안/알림 → 예약 → 다른 고객의 마감 확인까지 검증. 배포 DB validate 통과 |
 
-SearchStoreCatalog는 [StoreSearchCatalogService](../src/main/java/com/bintime/store/service/StoreSearchCatalogService.java)가 구현한다. 정상 실행에서는 이 Bean을 사용하고, DB 없는 api-docs에서는 기존 미연결 대체 Bean을 유지한다. search 사용자 인증·알림과 store_events 소비자는 여전히 별도 작업이다. 카탈로그 구현만으로 실제 고객의 대기 등록부터 알림 수신까지 완료된 것은 아니다.
+SearchStoreCatalog는 [StoreSearchCatalogService](../src/main/java/com/bintime/store/service/StoreSearchCatalogService.java)가 구현한다. 정상 실행에서는 이 Bean을 사용하고, DB 없는 api-docs에서는 기존 미연결 대체 Bean을 유지한다. search 사용자 인증과 store_events 소비자도 연결되었다. [search 인증](search-auth.md)과 [전달 계약](store-event-delivery.md)을 참고한다. 실제 알림 저장·발송·전역 설정과 마감 전달은 아직 별도 작업이다.
 
 검색 문서는 매장 정보뿐 아니라 시술·슬롯을 포함한다. 기존 매장 version은 PATCH 충돌 제어용으로 유지하고, 검색에는 별도 search_version을 사용한다. 갱신 범위·조회 규칙·마이그레이션은 [카탈로그 계약](store-catalog.md)에 기록했다.
 
@@ -117,7 +117,7 @@ SearchStoreCatalog는 [StoreSearchCatalogService](../src/main/java/com/bintime/s
 
 | ID | 우선순위·현재 상태 | 후속 작업 | 완료 기준 |
 | --- | --- | --- | --- |
-| STORE-OPS-01 | P1 · 전달 처리와 함께 설계 | 이벤트 재시도·처리 임대·실패 조회·재처리 수단 | 작업 도중 앱 종료 후에도 복구되고 다중 소비자가 같은 효과를 중복 적용하지 않음 |
+| STORE-OPS-01 | 구현 · 운영 관측 보완 필요 | 2분 lease·실패 자동 재시도·행 잠금·중복 방어 구현. 수동 복구 API는 없음 | 무기한 재시도와 적체/실패 확인은 전달 계약 참고. 앱 종료·동시 소비·중간 실패 테스트로 복구 검증 |
 | STORE-OPS-02 | P1 · 보존 정책 미결정 | 멱등 성공 기록·처리 완료 이벤트·QA 스키마 보존 및 정리 방안 | 24시간 재생 보장을 지키면서 만료 데이터 정리 가능. 보존 기간·정리 범위 문서화 |
 | STORE-OPS-03 | P1 · 기본 만료 작업 구현 | 매장별 실패 격리, 처리량·실행 시간 확인, 다중 인스턴스 동작 검증 | 한 매장 오류로 나머지 만료 처리가 계속 밀리지 않고 반복 실행에도 상태·이벤트 정합성 유지 |
 | STORE-OPS-04 | P1 · 운영 관측 보완 | 예약 충돌·DB 잠금 대기·만료 지연·QUEUED 적체·전달 실패 관측 | 슬롯/이벤트 ID·버전으로 원인 추적 가능. 필요한 지표와 대응 절차 정의 |
@@ -149,7 +149,7 @@ SearchStoreCatalog는 [StoreSearchCatalogService](../src/main/java/com/bintime/s
 
 1. **현재 원장 검증을 기준선으로 유지한다.** QA 컬렉션과 StoreApiTests를 재현하고 대상 브랜치의 실제 변경 상태를 기록한다.
 2. **인증과 store 조회 구현을 기준선으로 유지한다.** NEXT-01의 배포 QA와 NEXT-02·03의 대상 DB 마이그레이션 적용 상태를 확인한다.
-3. **영속 이벤트를 소비하도록 구현한다.** NEXT-04와 OPS-01을 함께 진행해 전달 실패·재시도·중복을 검증한다.
+3. **영속 이벤트 전달을 운영 환경에서 확인한다.** NEXT-04와 OPS-01의 SQL 적용·스케줄 설정·큐 적체를 확인한다.
 4. **마감 반영과 실제 사용자 흐름을 검증한다.** NEXT-05·06으로 검색·알림·예약·화면 사이의 상태 일치를 확인한다.
 5. **배포 전 운영 항목을 마무리한다.** 만료·적체 관측, 보존/정리 정책, 실제 시간 QA 및 필요한 부하 검증을 수행한다.
 

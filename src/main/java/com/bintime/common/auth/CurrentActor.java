@@ -41,7 +41,7 @@ public class CurrentActor {
       userId = jwt.getToken().getSubject();
     require(userId != null && !userId.isBlank(), 401, "UNAUTHENTICATED");
     // 역할과 이름은 로그인 시점의 클레임이 아닌 현재 user 원장에서 읽는다.
-    // 쿠키 변경 요청의 CSRF 검증은 store SecurityFilterChain이 담당한다.
+    // 쿠키 변경 요청의 CSRF 검증은 store·search 공통 SecurityFilterChain이 담당한다.
     return users.get(userId);
   }
 }

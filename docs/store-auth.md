@@ -1,6 +1,6 @@
 # Store 인증 계약
 
-store는 기존 카카오 로그인 세션 쿠키(`bt_session`)를 그대로 사용한다. 선택적으로 Bearer JWT도 검증한다. user 로그인 API를 JWT 발급 방식으로 변경하지 않는다. search·notification·chatting 인증은 이 변경 범위 밖이다.
+store는 기존 카카오 로그인 세션 쿠키(`bt_session`)를 그대로 사용한다. 선택적으로 Bearer JWT도 검증한다. user 로그인 API를 JWT 발급 방식으로 변경하지 않는다. search도 같은 필터와 JWT 설정을 공유하며 상세 범위는 [search 인증](search-auth.md)을 따른다. notification·chatting 인증은 별도다.
 
 ## API별 적용
 

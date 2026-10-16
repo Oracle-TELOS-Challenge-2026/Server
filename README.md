@@ -137,7 +137,7 @@ DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 �
 
 카카오 로그인 시작·콜백·로그아웃·CSRF 조회는 구현되어 있다. `/api/v1/auth/**`, `/api/v1/users/**`에는 세션 인증과 상태 변경 시 CSRF 검증을 적용한다. Swagger는 로그인 없이 접근한다. 설정과 프론트 연동은 [카카오 로그인 실행](docs/kakao-login.md)을 참고한다. `api-docs` 프로필은 DB·로그인 없이 문서를 검토하는 용도이며 API 실행 기능은 비활성화한다.
 
-store는 카카오 세션 쿠키·CSRF와 연결되었으며 선택적으로 Bearer JWT도 지원한다. 공개 조회와 보호 API의 구분 및 설정은 [store 인증 계약](docs/store-auth.md)을 참고한다. search의 보호 API는 별도 인증 계약이 연결되지 않은 상태에서는 접근을 거절한다.
+store·search는 카카오 세션 쿠키·CSRF와 연결되었으며 선택적으로 Bearer JWT도 지원한다. 공개 조회와 보호 API의 구분은 [store 인증 계약](docs/store-auth.md), [search 인증 계약](docs/search-auth.md)을 참고한다. search 대기 API는 현재 DB 역할이 CUSTOMER인 본인 데이터만 허용한다. 알림 전역 설정과 실제 전달은 별도 연결이 필요하다.
 
 notification·chatting의 골격 Controller에 도달한 유효한 요청은 공통 실패 JSON과 함께 `501 Not Implemented`를 반환한다. 필수 입력 바인딩은 그 전에 요청을 거절할 수 있다. 실제 SSE/WS 전송은 후속 구현이다.
 

@@ -36,6 +36,10 @@ class StoreApiTests {
   @Autowired StoreApplicationService stores;
   @Autowired com.bintime.store.contract.SearchStoreCatalog catalog;
   @Autowired com.bintime.search.service.WaitlistService waitlists;
+  @Autowired com.bintime.search.service.SearchIndexService searchIndex;
+  @Autowired com.bintime.search.service.MatchService matchService;
+  @Autowired com.bintime.store.repository.StoreRepository storeRepository;
+  @Autowired org.springframework.transaction.support.TransactionTemplate transactions;
 
   @MockitoBean(name = "storeClock")
   Clock clock;
@@ -439,6 +443,125 @@ class StoreApiTests {
             "expectedVersion",
             reservation.path("version").asLong()),
         200);
+  }
+
+  private com.bintime.store.service.StoreEventDelivery delivery(
+      com.bintime.search.service.MatchService matches) {
+    return new com.bintime.store.service.StoreEventDelivery(
+        storeRepository,
+        (com.bintime.store.service.StoreSearchCatalogService) catalog,
+        matches,
+        searchIndex,
+        transactions,
+        clock);
+  }
+
+  @Test
+  void committedChangesReachSearchQueuesOnceAcrossConcurrentConsumers() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    var executor = Executors.newFixedThreadPool(2);
+    try {
+      var a = executor.submit(() -> delivery(matchService).deliver());
+      var b = executor.submit(() -> delivery(matchService).deliver());
+      a.get(20, TimeUnit.SECONDS);
+      b.get(20, TimeUnit.SECONDS);
+    } finally {
+      executor.shutdownNow();
+    }
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_events where status_code='PROCESSED'", Integer.class))
+        .isEqualTo(3);
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isEqualTo(1);
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='INDEX'", Integer.class))
+        .isEqualTo(3);
+    delivery(matchService).deliver();
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void failedDeliveryRollsBackSearchQueuesAndRetriesAfterBackoff() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    db.update("delete from store_events where event_type<>'CREATED'");
+    var failing = org.mockito.Mockito.mock(com.bintime.search.service.MatchService.class);
+    org.mockito.Mockito.doAnswer(
+            call -> {
+              matchService.submit(call.getArgument(0));
+              throw new IllegalStateException("after enqueue");
+            })
+        .when(failing)
+        .submit(org.mockito.ArgumentMatchers.any());
+    delivery(failing).deliver();
+    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isZero();
+    assertThat(db.queryForObject("select status_code from store_events", String.class))
+        .isEqualTo("FAILED");
+    delivery(matchService).deliver();
+    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isZero();
+    when(clock.instant()).thenReturn(NOW.plusSeconds(3));
+    delivery(matchService).deliver();
+    assertThat(db.queryForObject("select status_code from store_events", String.class))
+        .isEqualTo("PROCESSED");
+    assertThat(db.queryForObject("select attempts from store_events", Integer.class)).isEqualTo(2);
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void restartedConsumerWaitsForLeaseThenRecoversIt() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    slot(shop, svc, "2026-10-16T12:00:00+09:00");
+    db.update("delete from store_events where event_type<>'CREATED'");
+    db.update(
+        "update store_events set lease_token='dead-worker',lease_until=?",
+        OffsetDateTime.ofInstant(NOW.plusSeconds(120), ZoneOffset.UTC));
+    delivery(matchService).deliver();
+    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isZero();
+    when(clock.instant()).thenReturn(NOW.plusSeconds(120));
+    delivery(matchService).deliver();
+    assertThat(db.queryForObject("select status_code from store_events", String.class))
+        .isEqualTo("PROCESSED");
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void delayedPublicationDoesNotMatchWithdrawnOrEarlierPublication() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    JsonNode vacancy =
+        cancel(reserve(slot(shop, svc, "2026-10-16T12:00:00+09:00"), "alice")).path("vacancy");
+    JsonNode first = publish(shop, vacancy, svc, "2026-10-16T12:00:00+09:00", "delivery-pub-1");
+    JsonNode withdrawn =
+        ok(
+            "POST",
+            ownerPath(shop) + "/vacancies/" + vacancy.path("id").asText() + "/withdraw",
+            "owner",
+            "delivery-withdraw",
+            Map.of("expectedVersion", first.at("/vacancy/version").asLong()),
+            200);
+    delivery(matchService).deliver();
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isZero();
+    publish(shop, withdrawn.path("vacancy"), svc, "2026-10-16T12:00:00+09:00", "delivery-pub-2");
+    // 오래된 이벤트도 다시 도착시키되 publication v1은 새 매칭을 만들지 않아야 한다.
+    db.update("update store_events set status_code='QUEUED' where event_type='PUBLISHED'");
+    delivery(matchService).deliver();
+    assertThat(
+            db.queryForObject("select count(*) from search_work where kind='SLOT'", Integer.class))
+        .isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select publication_version from search_work where kind='SLOT'", Long.class))
+        .isEqualTo(2L);
   }
 
   private JsonNode publish(String shop, JsonNode vacancy, String service, String time, String key)

@@ -350,18 +350,25 @@ CREATE INDEX ix_store_idem_expiry ON store_idempotency(expires_at);
 CREATE TABLE store_events (
  event_id VARCHAR2(64 BYTE) NOT NULL,
  event_type VARCHAR2(20 BYTE) NOT NULL,
- slot_id VARCHAR2(64 BYTE) NOT NULL,
+ store_id VARCHAR2(64 BYTE) NOT NULL,
+ slot_id VARCHAR2(64 BYTE),
  publication_version NUMBER(10,0),
- slot_version NUMBER(10,0) NOT NULL,
+ slot_version NUMBER(10,0),
  payload_json CLOB NOT NULL,
  status_code VARCHAR2(10 BYTE) DEFAULT 'QUEUED' NOT NULL,
  created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+ attempts NUMBER(10,0) DEFAULT 0 NOT NULL,
+ available_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+ lease_token VARCHAR2(64 BYTE),
+ lease_until TIMESTAMP(6) WITH TIME ZONE,
+ last_error VARCHAR2(500 BYTE),
  CONSTRAINT pk_store_events PRIMARY KEY(event_id),
+ CONSTRAINT fk_store_event_shop FOREIGN KEY(store_id) REFERENCES store_shops(store_id),
  CONSTRAINT fk_store_event_slot FOREIGN KEY(slot_id) REFERENCES store_slots(slot_id),
  CONSTRAINT ck_store_event_status CHECK(status_code IN ('QUEUED','PROCESSED','FAILED')),
  CONSTRAINT ck_store_event_json CHECK(payload_json IS JSON (STRICT))
 );
-CREATE INDEX ix_store_event_queue ON store_events(status_code,created_at);
+CREATE INDEX ix_store_event_delivery ON store_events(status_code,available_at,lease_until);
 
 ALTER TABLE store_slots ADD CONSTRAINT ck_slot_discount CHECK (
  (discount_type IS NULL AND discount_value IS NULL)

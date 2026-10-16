@@ -141,26 +141,38 @@ public class StoreSearchCatalogService implements SearchStoreCatalog {
     var now = OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
     // 문서와 버전을 같은 스냅샷에서 읽는다. 미커밋 업무 변경은 검색으로 내보내지 않는다.
     for (Shop shop : shops.subList(0, Math.min(limit, shops.size()))) {
-      var services = db.query(StoreService.class, "where e.storeId=?1 order by e.id", shop.id);
-      String description = description(shop, services);
-      var slots = catalog.storeSupply(shop.id, now).stream().map(this::dto).toList();
-      items.add(
-          new StoreDocument(
-              shop.id,
-              shop.name,
-              shop.category,
-              shop.imageUrl,
-              shop.ratingAverage,
-              shop.ratingCount,
-              shop.latitude,
-              shop.longitude,
-              description,
-              shop.searchVersion,
-              slots));
+      items.add(document(shop, now));
     }
     String last = items.isEmpty() ? null : items.getLast().id();
     return new StorePage(
         List.copyOf(items), more ? StoreCursor.encode("catalog-export", last, last) : null);
+  }
+
+  /** 단일 매장의 outbox 전달도 export와 같은 일관된 스냅샷을 사용한다. */
+  @Transactional(
+      readOnly = true,
+      isolation = Isolation.SERIALIZABLE,
+      propagation = Propagation.REQUIRES_NEW)
+  public StoreDocument document(String storeId) {
+    return document(shop(storeId), OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
+  }
+
+  private StoreDocument document(Shop shop, OffsetDateTime now) {
+    var services = db.query(StoreService.class, "where e.storeId=?1 order by e.id", shop.id);
+    String description = description(shop, services);
+    var slots = catalog.storeSupply(shop.id, now).stream().map(this::dto).toList();
+    return new StoreDocument(
+        shop.id,
+        shop.name,
+        shop.category,
+        shop.imageUrl,
+        shop.ratingAverage,
+        shop.ratingCount,
+        shop.latitude,
+        shop.longitude,
+        description,
+        shop.searchVersion,
+        slots);
   }
 
   private Shop shop(String id) {
