@@ -111,9 +111,9 @@ class ApiContractTests {
     JsonNode allDoc = getDoc("all");
     JsonNode publicDoc = getDoc("public");
     JsonNode internalDoc = getDoc("internal");
-    assertThat(operationCount(publicDoc)).isEqualTo(48);
+    assertThat(operationCount(publicDoc)).isEqualTo(50);
     assertThat(operationCount(internalDoc)).isEqualTo(2);
-    assertThat(operationCount(allDoc)).isEqualTo(50);
+    assertThat(operationCount(allDoc)).isEqualTo(52);
     var operationIds = new HashSet<String>();
 
     for (JsonNode contract : contracts()) {
@@ -247,6 +247,10 @@ class ApiContractTests {
                 expected.addAll(Set.of("400", "401", "403"));
             }
           }
+          if (path.getKey().equals("/api/v1/users/me/notification-preferences")) {
+            expected.addAll(Set.of("200", "401"));
+            if (method.getKey().equals("put")) expected.addAll(Set.of("400", "403", "409"));
+          }
           if (path.getKey().equals("/api/v1/notifications/stream")) expected.add("410");
           if (java.util.Set.of(
                   "dispatchNotification",
@@ -323,6 +327,7 @@ class ApiContractTests {
           {"put", "/api/v1/users/me/location"},
           {"delete", "/api/v1/users/me/location"},
           {"put", "/api/v1/users/me/preferences"},
+          {"put", "/api/v1/users/me/notification-preferences"},
           {"post", "/api/v1/notifications/push-subscriptions"},
           {"delete", "/api/v1/notifications/push-subscriptions/{subscriptionId}"},
           {"patch", "/api/v1/notifications/{notificationId}/read"},

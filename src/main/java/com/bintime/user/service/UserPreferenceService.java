@@ -4,6 +4,7 @@ import com.bintime.common.web.ApiBusinessException;
 import com.bintime.user.contract.UserPreferencesChanged;
 import com.bintime.user.entity.UserAccount;
 import com.bintime.user.repository.UserAccountRepository;
+import java.util.List;
 import java.util.Objects;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.*;
@@ -30,6 +31,17 @@ public class UserPreferenceService {
   @Transactional(readOnly = true)
   public String explicitPreferences(String userId) {
     return require(db.find(userId)).preferences;
+  }
+
+  @Transactional(readOnly = true)
+  public List<String> personalizedCandidates(String after, int limit) {
+    if (limit < 1 || limit > 100) throw new ApiBusinessException(400, "INVALID_LIMIT");
+    return db.personalizedCandidates(after, limit);
+  }
+
+  @Transactional(readOnly = true)
+  public boolean personalizedNotificationsEnabled(String userId) {
+    return db.personalizedNotificationsEnabled(userId);
   }
 
   /** 자유로운 JSON 저장도 프로필 API와 같은 변경 이벤트로 벡터를 갱신한다. */

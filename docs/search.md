@@ -221,3 +221,13 @@ SEARCH_ELASTICSEARCH_URL=http://localhost:9200 ./gradlew test --tests '*StoreCat
 검증 기록: 격리 Oracle + 실제 ES에서 위 흐름을 통과했고, 로컬 앱 DB에서도 서버를 기동해 초기 `bintime-stores` alias 생성과 S-01 HTTP 200을 확인했다. 로컬에는 매장/슬롯이 0건이라 응답은 빈 목록이며 테스트용 업무 데이터를 앱 DB에 추가하지 않았다. 점검 서버는 종료했고 ES 컨테이너와 초기 인덱스는 유지했다.
 
 알림 연결의 실제 Bean·로컬 DDL·Oracle 통합 검증·남은 실기기 QA는 [Search → Notification 연결](search-notification-integration.md)을 따른다. 정상 프로필에서 알림 대체 Bean을 사용하지 않으며 `NotificationSchemaVerifier`가 누락된 알림 JDBC 열을 기동 시 검증한다. 로컬 알림 확장 후 전체 테이블은 25개이며 search 7개 구성은 유지된다.
+
+## 예약 대기 없는 맞춤 빈자리 알림
+
+사용자 공개 계약 `SearchUserAccess.personalizedCandidates`로 앱 전체 맞춤 알림 동의가 있는 CUSTOMER/OWNER를 ID 기준 100명씩 조회한다. 활성 FID 구독, 현재 유효한 VACANCY와 발행 버전, 선호 벡터 코사인 유사도 기준(기본 0.5 이상)을 확인한다. **시연에서는 저장된 사용자 위치와 거리를 조회하거나 필터링하지 않는다.** 매장별 알림 신청이나 ACTIVE 대기는 필요하지 않다. 일반 REGULAR 슬롯 생성은 이 경로의 알림 대상이 아니다.
+
+기존 WAITLIST 경로는 대기 동의·시간·가격·거리·지정 매장 등 필수 조건과 벡터 기준을 유지한다. 앱 전체 동의는 이와 독립적이며 기본 false다. 설정 API·동의 DB 마이그레이션·실행 순서는 [사용자 설정 안내](user-profile.md#맞춤-빈자리-알림-동의-u-10u-11)를 따른다.
+
+SLOT 소비 시 두 경로를 탐색한다. 동의 활성화 이벤트 `NotificationPreferencesChanged`와 동의 사용자의 `UserPreferencesChanged`는 `PERSONALIZE` 작업을 같은 트랜잭션에 기록하고 기존 발행 빈자리도 탐색한다. NOTIFY와 내부 알림 요청에는 `audience=PERSONALIZED`, `matches=[]`를 사용한다. 기존 작업/요청의 audience 생략은 WAITLIST로 해석한다. notification은 접수·FCM 직전에도 동의·슬롯·구독·벡터를 재검증하며 사용자+슬롯 중복 방지는 두 경로에 공통으로 적용한다. 두 경로가 동시에 일치하면 먼저 저장된 알림의 자격 근거를 전달 시 재검증한다.
+
+벡터가 없거나 오래되면 기존 VECTOR/STORE_VECTOR 생성 작업을 요청하고 NOTIFY를 보류한다. OpenAI 오류를 무시하고 보내지 않는다. 전체 동의와 활성 기기가 있어도 선호가 비어 있거나 점수가 기준 미만이면 발송하지 않는다. 선호·슬롯의 카테고리 문자열을 동일성 비교하는 방식으로 대체하지 않는다. 이 경로에는 대기 시간대·최대 가격·지정 매장 필터가 없으며 프로필 선호 JSON은 벡터 입력으로 사용한다.
