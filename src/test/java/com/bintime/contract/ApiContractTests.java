@@ -111,9 +111,9 @@ class ApiContractTests {
     JsonNode allDoc = getDoc("all");
     JsonNode publicDoc = getDoc("public");
     JsonNode internalDoc = getDoc("internal");
-    assertThat(operationCount(publicDoc)).isEqualTo(48);
+    assertThat(operationCount(publicDoc)).isEqualTo(49);
     assertThat(operationCount(internalDoc)).isEqualTo(2);
-    assertThat(operationCount(allDoc)).isEqualTo(50);
+    assertThat(operationCount(allDoc)).isEqualTo(51);
     var operationIds = new HashSet<String>();
 
     for (JsonNode contract : contracts()) {
@@ -235,6 +235,7 @@ class ApiContractTests {
                 case "C-05" -> expected.add("400");
                 case "C-06" -> expected.addAll(Set.of("409", "429"));
                 case "C-07" -> expected.add("409");
+                case "C-08" -> expected.addAll(Set.of("409", "503"));
                 case "N-01" -> expected.addAll(Set.of("400", "401"));
                 case "N-02" -> expected.addAll(Set.of("400", "401", "403", "404"));
                 case "N-03" -> expected.addAll(Set.of("400", "401"));
@@ -330,7 +331,8 @@ class ApiContractTests {
           {"post", "/api/v1/chatting/rooms/{roomId}/messages"},
           {"put", "/api/v1/chatting/rooms/{roomId}/read"},
           {"post", "/api/v1/chatting/rooms/{roomId}/booking-proposals"},
-          {"post", "/api/v1/chatting/rooms/{roomId}/booking-proposals/{proposalId}/confirm"}
+          {"post", "/api/v1/chatting/rooms/{roomId}/booking-proposals/{proposalId}/confirm"},
+          {"post", "/api/v1/chatting/rooms/{roomId}/messages/{messageId}/booking-suggestion"}
         }) {
       JsonNode operation = doc.path("paths").path(endpoint[1]).path(endpoint[0]);
       JsonNode csrf = parameter(operation, "X-CSRF-Token");
@@ -357,7 +359,7 @@ class ApiContractTests {
         count++;
       }
     }
-    assertThat(count).isEqualTo(7);
+    assertThat(count).isEqualTo(8);
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/chatting/rooms"))
             .GET()
@@ -595,7 +597,11 @@ class ApiContractTests {
     var combined = mapper.createArrayNode();
     // Local feature requests extend the contract without rewriting the original Notion snapshot.
     for (String resource :
-        new String[] {"/contracts/notion-api.json", "/contracts/chat-booking-proposals.json"}) {
+        new String[] {
+          "/contracts/notion-api.json",
+          "/contracts/chat-booking-proposals.json",
+          "/contracts/chat-booking-suggestion.json"
+        }) {
       try (var stream = getClass().getResourceAsStream(resource)) {
         assertThat(stream).as(resource).isNotNull();
         for (JsonNode contract : mapper.readTree(stream)) {

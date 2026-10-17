@@ -120,13 +120,13 @@ IntelliJ에서도 Working directory를 저장소 루트로 지정하면 동일�
 
 ## API 계약 및 Swagger
 
-[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)의 REST·SSE 45개에 store 등록 API 3개와 팀 요청의 채팅 예약 제안 API 2개를 추가해 총 50개와 별도 채팅 WebSocket 프레임을 정의했다. user U-01~09, store ST-01~20, search S-01~08의 처리 로직을 구현했다. 사용자 API는 [프로필·위치·선호도 안내](docs/user-profile.md), store는 [store 구현 계약](docs/store.md), search의 실행·의존 계약·복구 방법은 [search 안내](docs/search.md), 미연결 항목·다음 작업은 [search 진행 현황](docs/search-progress.md)을 참고한다.
+[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)의 REST·SSE 45개에 store 등록 API 3개와 팀 요청의 채팅 예약 제안 API 2개 및 예약 의사 분석 API 1개를 추가해 총 51개와 별도 채팅 WebSocket 프레임을 정의했다. user U-01~09, store ST-01~20, search S-01~08의 처리 로직을 구현했다. 사용자 API는 [프로필·위치·선호도 안내](docs/user-profile.md), store는 [store 구현 계약](docs/store.md), search의 실행·의존 계약·복구 방법은 [search 안내](docs/search.md), 미연결 항목·다음 작업은 [search 진행 현황](docs/search-progress.md)을 참고한다.
 
 - [API별 Controller·DTO 이름 매핑](docs/contracts/api.md)
 - [SSE·WebSocket 계약](docs/contracts/realtime.md)
 - Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-- 기본 선택 `all`: `/v3/api-docs/all` (전체 50개 operation)
-- 외부 API OpenAPI: `/v3/api-docs/public` (48개 operation)
+- 기본 선택 `all`: `/v3/api-docs/all` (전체 51개 operation)
+- 외부 API OpenAPI: `/v3/api-docs/public` (49개 operation)
 - 내부 계약 OpenAPI: `/v3/api-docs/internal` (2개 operation)
 
 DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 명령을 실행한다. Gradle toolchain은 Java 21을 사용한다.

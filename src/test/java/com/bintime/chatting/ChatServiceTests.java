@@ -113,6 +113,24 @@ class ChatServiceTests {
   }
 
   @Test
+  void bookingAnalysisOnlyReadsTheLatestCustomerTextInAParticipatingRoom() {
+    String room =
+        chats.create("customer", "source-room", new CreateChatRoomRequest("shop")).data().id();
+    var first =
+        chats.send("customer", room, new SendChatMessageRequest("request", "내일 17시 커트하고 싶어요"));
+    assertThat(chats.bookingSource("customer", room, first.id())).isEqualTo(first);
+    assertThat(chats.bookingSource("owner", room, first.id())).isEqualTo(first);
+    failure(404, "ROOM_NOT_FOUND", () -> chats.bookingSource("outsider", room, first.id()));
+    var ownerReply = chats.send("owner", room, new SendChatMessageRequest("reply", "확인할게요"));
+    failure(
+        404, "SOURCE_MESSAGE_NOT_FOUND", () -> chats.bookingSource("owner", room, ownerReply.id()));
+    chats.send("customer", room, new SendChatMessageRequest("new", "ㅎㅇ"));
+    failure(409, "PROPOSAL_SOURCE_OUTDATED", () -> chats.bookingSource("owner", room, first.id()));
+    assertThat(count("chatting_messages")).isEqualTo(3);
+    assertThat(count("chatting_booking_proposals")).isZero();
+  }
+
+  @Test
   void ownStoreChatIsRejectedAndReadRowsDoNotGrantMembership() {
     failure(
         403, "FORBIDDEN", () -> chats.create("owner", "key", new CreateChatRoomRequest("shop")));
