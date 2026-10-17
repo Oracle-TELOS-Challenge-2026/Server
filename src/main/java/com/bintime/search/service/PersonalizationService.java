@@ -3,6 +3,7 @@ package com.bintime.search.service;
 import com.bintime.search.model.EmbeddingVector;
 import com.bintime.search.port.IntentAiPort;
 import com.bintime.search.repository.SearchRepository;
+import com.bintime.user.contract.NotificationPreferencesChanged;
 import com.bintime.user.contract.SearchUserAccess;
 import com.bintime.user.contract.UserPreferencesChanged;
 import java.nio.charset.StandardCharsets;
@@ -58,6 +59,18 @@ public class PersonalizationService {
           if (n == 0)
             db.jdbc().update("insert into search_user_vector(user_id,revision) values(?,1)", user);
           db.enqueue("VECTOR", user, clock.millis());
+          if (users.personalizedNotificationsEnabled(user))
+            db.enqueue("PERSONALIZE", user, clock.millis());
+        });
+  }
+
+  @EventListener
+  public void notificationPreferencesChanged(NotificationPreferencesChanged event) {
+    if (!event.enabled()) return;
+    tx.executeWithoutResult(
+        t -> {
+          db.lockUser(event.userId());
+          db.enqueue("PERSONALIZE", event.userId(), clock.millis());
         });
   }
 

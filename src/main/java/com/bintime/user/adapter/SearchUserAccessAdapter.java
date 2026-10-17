@@ -48,4 +48,14 @@ public class SearchUserAccessAdapter implements SearchUserAccess {
   public String explicitPreferences(String userId) {
     return preferences.explicitPreferences(userId);
   }
+
+  @Override
+  public java.util.List<String> personalizedCandidates(String after, int limit) {
+    return preferences.personalizedCandidates(after, limit);
+  }
+
+  @Override
+  public boolean personalizedNotificationsEnabled(String userId) {
+    return preferences.personalizedNotificationsEnabled(userId);
+  }
 }

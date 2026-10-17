@@ -1,7 +1,10 @@
 package com.bintime.user.service;
 
+import com.bintime.user.contract.NotificationPreferencesChanged;
 import com.bintime.user.contract.UserPreferencesChanged;
+import com.bintime.user.dto.NotificationPreferencesResponse;
 import com.bintime.user.dto.SaveLocationRequest;
+import com.bintime.user.dto.SaveNotificationPreferencesRequest;
 import com.bintime.user.dto.SavePreferencesRequest;
 import com.bintime.user.dto.UpdateProfileRequest;
 import com.bintime.user.dto.UserLocationResponse;
@@ -104,5 +107,21 @@ public class UserProfileService {
   private static UserProfileException unauthorized() {
     return new UserProfileException(
         HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "로그인한 사용자 정보를 찾을 수 없습니다.");
+  }
+
+  @Transactional(readOnly = true)
+  public NotificationPreferencesResponse notificationPreferences(String userId) {
+    return profiles.notificationPreferences(userId).orElseThrow(UserProfileService::unauthorized);
+  }
+
+  @Transactional
+  public NotificationPreferencesResponse saveNotificationPreferences(
+      String userId, SaveNotificationPreferencesRequest request) {
+    if (profiles.saveNotificationPreferences(
+            userId, request.personalizedVacancyEnabled(), request.expectedVersion())
+        == 0) throw conflict(userId, "VERSION_CONFLICT", "사용자 정보가 변경되었습니다. 다시 조회해 주세요.");
+    events.publishEvent(
+        new NotificationPreferencesChanged(userId, request.personalizedVacancyEnabled()));
+    return notificationPreferences(userId);
   }
 }

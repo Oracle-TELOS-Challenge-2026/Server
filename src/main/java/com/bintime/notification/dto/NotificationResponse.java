@@ -65,7 +65,9 @@ public record NotificationResponse(
               format = "int64",
               example = "2")
           Long publicationVersion,
-      @Schema(description = "waitlistIds", requiredMode = Schema.RequiredMode.REQUIRED)
+      @Schema(
+              description = "일치 대기 ID 목록. 앱 전체 맞춤 알림은 빈 배열",
+              requiredMode = Schema.RequiredMode.REQUIRED)
           List<String> waitlistIds) {}
 
   @Schema(name = "NotificationResponseAction")
