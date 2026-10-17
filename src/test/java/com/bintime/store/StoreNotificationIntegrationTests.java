@@ -113,6 +113,8 @@ class StoreNotificationIntegrationTests {
           id,
           id.equals("owner") ? "OWNER" : "CUSTOMER");
     db.update("update user_accounts set preferences_json=?", "{\"text\":\"젤 네일을 선호해요\"}");
+    // 가격 제한 대기의 회귀 후보는 프로필 선호를 비워, 별도 무대기 추천 대상과 구분한다.
+    db.update("update user_accounts set preferences_json='{}' where user_id='too-cheap'");
     mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
     outbox = new StoreEventDelivery(storeRepository, catalog, matches, indexes, tx, clock);
     float[] vector = new float[1536];
@@ -443,16 +445,15 @@ class StoreNotificationIntegrationTests {
   }
 
   @Test
-  void personalizedVacancyNeedsNoWaitlistOrProfileLocationAndStillFiltersSimilarityAndConsent()
-      throws Exception {
+  void personalizedVacancyIncludesDefaultNAccountsAndStillFiltersSimilarity() throws Exception {
     personalizedCustomer("similar", "젤 네일", true);
     // 서울 매장과 멀리 떨어진 저장 위치도 시연의 맞춤 알림 자격에 영향을 주지 않는다.
     db.execute("alter table user_accounts add latitude decimal(9,6)");
     db.execute("alter table user_accounts add longitude decimal(10,6)");
     db.update(
         "update user_accounts set latitude=-33.8688,longitude=151.2093 where user_id='similar'");
-    personalizedCustomer("unrelated", "헤어만", true);
-    personalizedCustomer("opted-out", "젤 네일", false);
+    personalizedCustomer("unrelated", "헤어만", false);
+    personalizedCustomer("default-n", "젤 네일", false);
     when(ai.embed(anyString()))
         .thenAnswer(a -> semanticVector(!a.<String>getArgument(0).contains("헤어만")));
     var published = publish(vacancy.version(), "personalized");
@@ -465,19 +466,26 @@ class StoreNotificationIntegrationTests {
     assertThat(
             db.queryForList(
                 "select user_id from notification_alerts order by user_id", String.class))
-        .containsExactly("alice", "bob", "similar");
+        .containsExactly("alice", "bob", "default-n", "similar");
     var notice = notifications.list(principal("similar"), false, null, 20).items().getFirst();
+    var defaultN = notifications.list(principal("default-n"), false, null, 20).items().getFirst();
+    assertThat(defaultN.target().waitlistIds()).isEmpty();
+    assertThat(
+            db.queryForObject(
+                "select recommendation_opt_in from user_accounts where user_id='default-n'",
+                String.class))
+        .isEqualTo("N");
     assertThat(notice.target().waitlistIds()).isEmpty();
     assertThat(notice.target().slotId()).isEqualTo(published.slot().id());
     assertThat(
             db.queryForObject(
                 "select count(*) from search_intent where user_id='similar'", Integer.class))
         .isZero();
-    verify(fcm, times(3)).send(anyString(), any(), any());
+    verify(fcm, times(4)).send(anyString(), any(), any());
   }
 
   @Test
-  void optingOutAfterMatchingSuppressesPersonalizedFcm() throws Exception {
+  void changingLegacyFlagToNDoesNotSuppressPersonalizedFcm() throws Exception {
     personalizedCustomer("similar", "네일", true);
     publish(vacancy.version(), "personalized-optout");
     pump();
@@ -490,12 +498,12 @@ class StoreNotificationIntegrationTests {
                 "select d.status from notification_deliveries d join notification_alerts a on"
                     + " a.notification_id=d.notification_id where a.user_id='similar'",
                 String.class))
-        .containsExactly("SKIPPED");
-    verify(fcm, times(2)).send(anyString(), any(), any());
+        .containsExactly("ACCEPTED");
+    verify(fcm, times(3)).send(anyString(), any(), any());
   }
 
   @Test
-  void enablingConsentScansAlreadyPublishedVacanciesAndBothAudiencesDeduplicate() throws Exception {
+  void legacyRefreshAndWaitlistAudienceDoNotDuplicateDefaultNNotifications() throws Exception {
     personalizedCustomer("late", "네일", false);
     db.update(
         "update user_accounts set"
@@ -524,7 +532,7 @@ class StoreNotificationIntegrationTests {
 
   @Test
   void preferenceChangeReconsidersExistingVacancyForPersonalizedCustomer() throws Exception {
-    personalizedCustomer("changed", "헤어만", true);
+    personalizedCustomer("changed", "헤어만", false);
     when(ai.embed(anyString()))
         .thenAnswer(a -> semanticVector(!a.<String>getArgument(0).contains("헤어만")));
     publish(vacancy.version(), "personalized-preference");
@@ -545,7 +553,7 @@ class StoreNotificationIntegrationTests {
 
   @Test
   void regularSlotAndMissingActiveDeviceDoNotGeneratePersonalizedAlerts() throws Exception {
-    personalizedCustomer("personal", "네일", true);
+    personalizedCustomer("personal", "네일", false);
     stores.createSlot(
         OWNER,
         shop.id(),
@@ -610,7 +618,7 @@ class StoreNotificationIntegrationTests {
     pump();
     delivery.run();
     assertThat(db.queryForList("select user_id from notification_alerts", String.class))
-        .containsExactly("no-show-customer");
+        .containsExactlyInAnyOrder("alice", "bob", "no-show-customer");
     assertThat(
             notifications
                 .list(principal("no-show-customer"), false, null, 20)
@@ -619,7 +627,61 @@ class StoreNotificationIntegrationTests {
                 .target()
                 .slotId())
         .isEqualTo(published.slot().id());
-    verify(fcm, times(1)).send(anyString(), any(), any());
+    verify(fcm, times(3)).send(anyString(), any(), any());
+  }
+
+  @Test
+  void registeringDeviceDiscoversExistingVacanciesForDefaultNAccount() throws Exception {
+    db.update(
+        "insert into user_accounts(user_id,display_name,role_code,preferences_json)"
+            + " values('late-device','후보','CUSTOMER',?)",
+        "{\"text\":\"네일\"}");
+    publish(vacancy.version(), "published-before-device");
+    pump();
+    assertThat(
+            db.queryForObject(
+                "select count(*) from notification_alerts where user_id='late-device'",
+                Integer.class))
+        .isZero();
+    subscribe("late-device");
+    pump();
+    delivery.run();
+    assertThat(
+            db.queryForObject(
+                "select count(*) from notification_alerts where user_id='late-device'",
+                Integer.class))
+        .isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select recommendation_opt_in from user_accounts where user_id='late-device'",
+                String.class))
+        .isEqualTo("N");
+    verify(fcm, times(3)).send(anyString(), any(), any());
+  }
+
+  @Test
+  void emptySignupPreferencesDoNotBecomeGenericRecommendationVectors() throws Exception {
+    String empty = "{\"categories\":[],\"keywords\":[],\"maxPrice\":null}";
+    db.update(
+        "insert into user_accounts(user_id,display_name,role_code,preferences_json)"
+            + " values('empty-signup','신규 고객','CUSTOMER',?)",
+        empty);
+    subscribe("empty-signup");
+    publish(vacancy.version(), "empty-signup-publish");
+    pump();
+    delivery.run();
+    assertThat(
+            db.queryForObject(
+                "select count(*) from notification_alerts where user_id='empty-signup'",
+                Integer.class))
+        .isZero();
+    assertThat(
+            db.queryForObject(
+                "select count(*) from notification_push_history where user_id='empty-signup'",
+                Integer.class))
+        .isZero();
+    verify(ai, never()).embed(empty);
+    verify(fcm, times(2)).send(anyString(), any(), any());
   }
 
   private PublishVacancyResponse publish(long version, String key) {

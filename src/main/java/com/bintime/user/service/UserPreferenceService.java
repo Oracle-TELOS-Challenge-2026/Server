@@ -40,8 +40,8 @@ public class UserPreferenceService {
   }
 
   @Transactional(readOnly = true)
-  public boolean personalizedNotificationsEnabled(String userId) {
-    return db.personalizedNotificationsEnabled(userId);
+  public boolean personalizedCandidateExists(String userId) {
+    return db.personalizedCandidateExists(userId);
   }
 
   /** 자유로운 JSON 저장도 프로필 API와 같은 변경 이벤트로 벡터를 갱신한다. */

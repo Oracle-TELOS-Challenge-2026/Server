@@ -75,6 +75,9 @@ class UserProfileTests {
   @org.springframework.test.context.bean.override.mockito.MockitoBean
   com.bintime.search.port.IntentAiPort ai;
 
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
+  com.bintime.notification.subscription.NotificationSubscriptions subscriptions;
+
   private MockMvc mvc;
   private MockHttpSession session;
   private String csrfToken;
@@ -797,7 +800,7 @@ class UserProfileTests {
   }
 
   @Test
-  void rolledBackConsentCannotLeaveAnEnabledAudienceOrScanJob() {
+  void rolledBackLegacySettingCannotLeaveItsValueOrScanJob() {
     transactions.executeWithoutResult(
         status -> {
           profiles.saveNotificationPreferences(
@@ -831,7 +834,7 @@ class UserProfileTests {
   }
 
   @Test
-  void personalizedCandidatesIncludeOwnersAndTraverseAllPagesWithoutOptedOutAccounts() {
+  void personalizedCandidatesIncludeNAccountsAndOwnersAcrossAllPages() {
     var access = context.getBean(com.bintime.user.contract.SearchUserAccess.class);
     jdbc.update(
         "update user_accounts set"
@@ -847,11 +850,12 @@ class UserProfileTests {
     var first = access.personalizedCandidates("", 100);
     var second = access.personalizedCandidates(first.getLast(), 100);
     assertThat(first).hasSize(100);
-    assertThat(second).hasSize(2).contains("user-1").doesNotContain("user-2");
+    assertThat(second).hasSize(3).contains("user-1", "user-2");
     assertThat(first).doesNotContainAnyElementsOf(second);
     assertThat(access.personalizedCandidates(second.getLast(), 100)).isEmpty();
-    assertThat(access.personalizedNotificationsEnabled("user-1")).isTrue();
-    assertThat(access.personalizedNotificationsEnabled("user-2")).isFalse();
+    assertThat(access.personalizedCandidateExists("user-1")).isTrue();
+    assertThat(access.personalizedCandidateExists("user-2")).isTrue();
+    assertThat(access.personalizedCandidateExists("missing-user")).isFalse();
   }
 
   private JsonNode data(ResultActions result) throws Exception {
