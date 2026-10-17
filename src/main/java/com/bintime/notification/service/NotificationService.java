@@ -104,16 +104,18 @@ public class NotificationService implements SearchNotificationGateway {
                   "noti_" + UUID.randomUUID(),
                   "VACANCY_MATCHED",
                   "빈자리 알림",
-                  "PERSONALIZED".equals(request.audience())
-                      ? "선호와 유사한 빈자리가 생겼어요."
-                      : "신청한 조건에 맞는 빈자리가 생겼어요.",
+                  ("PERSONALIZED".equals(request.audience())
+                          ? "선호와 유사한 빈자리가 생겼어요."
+                          : "신청한 조건에 맞는 빈자리가 생겼어요.")
+                      + (valid.slot().instantBooking() ? " 즉시확정 예약이에요." : " 사장님 승인 후 확정돼요."),
                   new NotificationResponse.Target(
                       valid.slot().storeId(),
                       request.slotId(),
                       request.publicationVersion(),
                       valid.matches().stream()
                           .map(DispatchNotificationRequest.MatcheItem::waitlistId)
-                          .toList()),
+                          .toList(),
+                      valid.slot().instantBooking()),
                   new NotificationResponse.Action("OPEN_SLOT", "/customer/waitlist"),
                   "AVAILABLE",
                   null,

@@ -164,7 +164,7 @@ Spring의 `prod` 프로필은 로컬 `.env`를 직접 읽지 않는다. 서버�
 `.env`는 Git·Docker 이미지에 포함하지 않는다.
 
 필요할 때 저장소 루트에서 `bash deploy.sh`를 실행한다. Docker Desktop과 Java 21이 필요하다.
-스크립트는 서버 인증서 존재 확인, 빌드·테스트, ARM64 이미지와 인프라 설정 전송, 자동 갱신 타이머 활성화, 서버 설정에 따른 FCM 선택, Compose 설정 검증, 컨테이너 실행, Nginx 검증·리로드, 내부·외부 HTTPS 상태 확인을 수행한다.
+스크립트는 Docker와 병합 충돌 확인, 서버 인증서 존재 확인, 빌드·테스트, ARM64 이미지와 인프라 설정 전송, 자동 갱신 타이머 활성화, 서버 설정에 따른 FCM 선택, Compose 설정 검증, 컨테이너 실행, Nginx 검증·리로드, 내부·외부 HTTPS 상태 확인을 수행한다. 호출한 위치와 관계없이 스크립트가 있는 저장소에서 빌드한다. 이미지에 현재 커밋의 `org.opencontainers.image.revision`을 기록하며 미커밋 변경이 있으면 `-dirty`를 붙인다. 전송한 이미지 ID·revision과 실행 중인 앱 컨테이너가 다르면 성공 처리하지 않는다. 실제 배포 없이 스크립트 흐름을 확인하려면 `python3 infra/test-deploy.py`를 실행한다.
 DB 마이그레이션과 Elasticsearch 최초 색인은 자동 실행하지 않는다. 앱 쓰기를 중지하고 백업한 뒤 해당 환경에 필요한 SQL을 먼저 적용한다. search v1 환경은 [v2 전환 절차](../docs/search-schema-v2.md), store는 migration `06`·`07`, FCM은 `002`·`003`, 채팅은 [채팅 DB 안내](../docs/chatting-db.md)를 확인한다. 최초 ES 인덱스/alias 생성은 [초기 색인 안내](../docs/search.md#store-카탈로그-연결-및-초기-색인)에 따라 별도 수행한다.
 최초 인증서 발급을 마친 서버를 대상으로 한다. 인증서가 없으면 설정을 덮어쓰기 전에 중단한다.
 SSH 키 기본 경로는 `~/Downloads/team3/team-3-1.key`이며 다른 PC에서는 `BINTIME_SSH_KEY=/키/경로 bash deploy.sh`로 지정한다.
@@ -221,3 +221,7 @@ ssh -i ~/Downloads/team3/team-3-1.key -N -L 18443:127.0.0.1:443 opc@140.238.19.1
 기존 DB는 ADMIN 콘솔에서 [008-personalized-notifications.sql](oracle/migrations/008-personalized-notifications.sql) 전체를 하나의 PL/SQL 문장으로 **새 앱 배포 전에** 실행한다. 대상 스키마는 백엔드 계정 `BINTIME_APP`으로 명시되어 있다. user_accounts에 기본 비동의 값과 동의 시각을 추가하고 notification_alerts.waitlist_id의 NOT NULL을 해제한다. 기존 데이터는 유지하며 재실행 가능하다. DataGrip에 그대로 붙여 넣을 수 있도록 SET/WHENEVER와 마지막 `/`는 포함하지 않는다. 별도 COMMIT 없이 Oracle DDL이 자동 커밋된다. 새 통합 ddl.sql에는 포함되어 있다. 현재 시연의 발송 판정은 기존 recommendation_opt_in=N/Y를 사용하지 않는다. DB 값 변경 없이 FID 등록으로 기존 빈자리 탐색을 접수한다([현재 안내](../docs/user-profile.md#맞춤-빈자리-알림-동의-u-10u-11)).
 
 `SEARCH_INDEX_REBUILD=false`, `SEARCH_SCHEDULING_ENABLED=true`, `BINTIME_STORE_EVENT_DELIVERY_ENABLED=true`의 정상 실행 구성을 사용하고 OpenAI/FCM 설정 및 현재 로그인 세션 FID를 준비한다. 이 시연 경로에는 프로필 위치 등록이 필요 없다. 빈자리 발행 후 비동기 매칭·푸시 제출로 진행하며 전체 ES 재색인은 필요 없다.
+
+## 빈자리 즉시확정·사장님 선택
+
+이 기능이 포함된 새 앱은 배포 전에 [010-vacancy-booking-approval.sql](oracle/migrations/010-vacancy-booking-approval.sql)을 ADMIN에서 BINTIME_APP에 적용해야 한다. 앱 쓰기를 중지하고 백업 후 실행한다. 기존 데이터는 보존하고 기본 정책은 즉시확정이다. 운영 반영 여부와 프런트 선행 작업은 [예약 방식 안내](../docs/vacancy-booking-approval.md)를 확인한다. `deploy.sh`는 이 SQL을 자동 적용하지 않는다.

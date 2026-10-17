@@ -73,4 +73,6 @@ public record VacancyResponse(
             example = "2026-10-16T14:10:00+09:00")
         OffsetDateTime occurredAt,
     @Schema(description = "리소스 버전", requiredMode = Schema.RequiredMode.REQUIRED, example = "1")
-        Long version) {}
+        Long version,
+    @Schema(description = "발행할 빈자리의 즉시확정 여부", requiredMode = Schema.RequiredMode.REQUIRED)
+        Boolean instantBooking) {}

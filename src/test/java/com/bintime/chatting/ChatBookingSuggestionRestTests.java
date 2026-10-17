@@ -5,10 +5,13 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import com.bintime.chatting.dto.ChatBookingContextMessage;
 import com.bintime.chatting.dto.ChatBookingSuggestionResponse;
 import com.bintime.chatting.service.ChatBookingSuggestionService;
 import com.bintime.common.web.ApiBusinessException;
 import com.bintime.user.security.BintimePrincipal;
+import java.time.OffsetDateTime;
+import java.util.List;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -59,7 +62,18 @@ class ChatBookingSuggestionRestTests {
     when(service.analyze("owner", "room", "message"))
         .thenReturn(
             new ChatBookingSuggestionResponse(
-                "message", "내일 17시에 머리자르고 싶어요", true, "2026-10-18", "17:00", "커트"));
+                "message",
+                "내일 17시에 머리자르고 싶어요",
+                true,
+                "2026-10-18",
+                "17:00",
+                "커트",
+                List.of(
+                    new ChatBookingContextMessage(
+                        "message",
+                        1,
+                        "내일 17시에 머리자르고 싶어요",
+                        OffsetDateTime.parse("2026-10-17T14:00:00+09:00")))));
     mvc.perform(
             post(PATH)
                 .servletPath(PATH)
@@ -72,6 +86,7 @@ class ChatBookingSuggestionRestTests {
         .andExpect(jsonPath("$.success.data.sourceMessageId").value("message"))
         .andExpect(jsonPath("$.success.data.sourceContent").value("내일 17시에 머리자르고 싶어요"))
         .andExpect(jsonPath("$.success.data.bookingRequested").value(true))
+        .andExpect(jsonPath("$.success.data.contextMessages[0].id").value("message"))
         .andExpect(jsonPath("$.success.data.time").value("17:00"));
     verify(service).analyze("owner", "room", "message");
   }

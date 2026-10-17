@@ -72,7 +72,11 @@ public record ReservationSlotResponse(
         Long publicationVersion,
     @Schema(description = "price", requiredMode = Schema.RequiredMode.REQUIRED) Price price,
     @Schema(description = "리소스 버전", requiredMode = Schema.RequiredMode.REQUIRED, example = "3")
-        Long version) {
+        Long version,
+    @Schema(
+            description = "고객 신청 즉시 확정 여부. false이면 사장님 선택을 기다리며 시간을 선점하지 않는다",
+            requiredMode = Schema.RequiredMode.REQUIRED)
+        Boolean instantBooking) {
   @Schema(name = "ReservationSlotResponsePrice")
   public record Price(
       @Schema(

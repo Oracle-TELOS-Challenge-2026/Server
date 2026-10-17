@@ -684,6 +684,69 @@ class StoreNotificationIntegrationTests {
     verify(fcm, times(2)).send(anyString(), any(), any());
   }
 
+  @Test
+  void approvalPolicyReachesAlertsAndPendingRequestsDoNotConsumeAvailability() throws Exception {
+    var published =
+        stores.publish(
+            OWNER,
+            shop.id(),
+            vacancy.id(),
+            "publish-review",
+            new PublishVacancyRequest(
+                service.id(),
+                START,
+                new PublishVacancyRequest.Discount("PERCENT", 20L),
+                vacancy.version(),
+                false));
+    pump();
+    for (String user : List.of("alice", "bob")) {
+      var alert = notifications.list(principal(user), false, null, 20).items().getFirst();
+      assertThat(alert.target().instantBooking()).isFalse();
+      assertThat(alert.body()).contains("사장님 승인");
+      assertThat(alert.availability()).isEqualTo("AVAILABLE");
+    }
+    var alice =
+        stores.reserve(
+            actor("alice"),
+            "application-alice",
+            new CreateReservationRequest(
+                published.slot().id(),
+                published.slot().price().payable(),
+                published.slot().version(),
+                intents.get("alice").id()));
+    var bob =
+        stores.reserve(
+            actor("bob"),
+            "application-bob",
+            new CreateReservationRequest(
+                published.slot().id(),
+                published.slot().price().payable(),
+                published.slot().version(),
+                intents.get("bob").id()));
+    assertThat(alice.status()).isEqualTo("PENDING");
+    assertThat(bob.status()).isEqualTo("PENDING");
+    delivery.run();
+    verify(fcm, times(2)).send(anyString(), argThat(n -> !n.target().instantBooking()), any());
+    var selected =
+        stores.updateStatus(
+            OWNER,
+            shop.id(),
+            bob.id(),
+            "select-bob",
+            new UpdateReservationStatusRequest("CONFIRMED", bob.version()));
+    assertThat(selected.reservation().status()).isEqualTo("CONFIRMED");
+    assertThat(waitlists.get("alice", intents.get("alice").id()).status()).isEqualTo("ACTIVE");
+    assertThat(waitlists.get("bob", intents.get("bob").id()).status()).isEqualTo("FULFILLED");
+    assertThat(stores.getReservation(actor("alice"), alice.id()).status()).isEqualTo("REJECTED");
+    assertThat(
+            notifications
+                .list(principal("alice"), false, null, 20)
+                .items()
+                .getFirst()
+                .availability())
+        .isEqualTo("UNAVAILABLE");
+  }
+
   private PublishVacancyResponse publish(long version, String key) {
     return stores.publish(
         OWNER,

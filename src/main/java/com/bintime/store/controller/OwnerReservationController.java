@@ -1,5 +1,6 @@
 package com.bintime.store.controller;
 
+import com.bintime.store.dto.OwnerReservationListResponse;
 import com.bintime.store.dto.OwnerReservationResponse;
 import com.bintime.store.dto.UpdateReservationStatusRequest;
 import com.bintime.store.dto.UpdateReservationStatusResponse;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -123,10 +125,11 @@ public class OwnerReservationController {
 
   @Operation(
       operationId = "updateReservationStatus",
-      summary = "ST-13 · 시술 완료·노쇼 처리",
+      summary = "ST-13 · 예약 신청 승인·거절 및 시술 완료·노쇼 처리",
       description =
-          "Idempotency-Key 필수. COMPLETED/NO_SHOW만 허용. 완료는 종료 이후, 노쇼는 시작+10분 이후. 노쇼의 종료 전 남은 구간이면"
-              + " vacancy 생성.\n\n"
+          "Idempotency-Key 필수. PENDING 신청은 CONFIRMED/REJECTED로 승인·거절한다. 승인 전 선점은 없고 한 건 승인 시 같은 슬롯의"
+              + " 나머지 신청을 거절한다. 승인 시 권한·시간·서비스·가격·일정·대기 조건을 재검증한다. COMPLETED/NO_SHOW는 확정 예약만 허용."
+              + " 완료는 종료 이후, 노쇼는 시작+10분 이후. 노쇼의 종료 전 남은 구간이면 vacancy 생성.\n\n"
               + "- OWNER — 해당 매장 소유자\n"
               + "- X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)\n\n"
@@ -218,5 +221,40 @@ public class OwnerReservationController {
         .body(
             com.bintime.common.dto.ApiResponse.success(
                 svc.updateStatus(actor.get(), storeId, reservationId, idempotencyKey, request)));
+  }
+
+  @Operation(
+      operationId = "getOwnerReservationRequests",
+      summary = "ST-21 · 빈자리 승인 대기 신청 목록",
+      description = "해당 매장 소유자만 조회. 신청 시각·ID 오름차순으로 선점 없는 PENDING 신청을 반환한다. 시술 시작 시 만료한다.")
+  @SecurityRequirement(name = "sessionCookie")
+  @SecurityRequirement(name = "bearerJwt")
+  @ApiResponse(
+      responseCode = "200",
+      description = "성공",
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          "{\"resultType\":\"SUCCESS\",\"success\":{\"data\":{\"items\":[],\"page\":{\"nextCursor\":null,\"hasNext\":false}}},\"error\":null,\"meta\":{\"timestamp\":\"2026-10-17T12:00:00\",\"path\":\"/api/v1/owner/stores/shop_1/reservation-requests\"}}")))
+  @ApiResponse(responseCode = "400", description = "잘못된 커서·limit")
+  @ApiResponse(responseCode = "401", description = "인증 필요")
+  @ApiResponse(responseCode = "403", description = "해당 매장 소유자만 조회 가능")
+  @ApiResponse(responseCode = "404", description = "STORE_NOT_FOUND")
+  @GetMapping(
+      value = "/api/v1/owner/stores/{storeId}/reservation-requests",
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<com.bintime.common.dto.ApiResponse<OwnerReservationListResponse>>
+      getReservationRequests(
+          @PathVariable String storeId,
+          @RequestParam(required = false) String cursor,
+          @RequestParam(defaultValue = "20") Integer limit) {
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(
+            svc.reservationRequests(actor.get(), storeId, cursor, limit)));
   }
 }

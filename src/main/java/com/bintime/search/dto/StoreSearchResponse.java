@@ -118,7 +118,9 @@ public record StoreSearchResponse(
               allowableValues = {"REGULAR", "VACANCY"})
           String source,
       @Schema(description = "리소스 버전", requiredMode = Schema.RequiredMode.REQUIRED, example = "3")
-          Long version) {}
+          Long version,
+      @Schema(description = "고객 신청 즉시확정 여부", requiredMode = Schema.RequiredMode.REQUIRED)
+          Boolean instantBooking) {}
 
   @Schema(name = "StoreSearchResponseItemStoreRating")
   public record ItemStoreRating(

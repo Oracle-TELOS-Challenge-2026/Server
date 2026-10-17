@@ -1,9 +1,10 @@
 package com.bintime.chatting.port;
 
-import java.time.OffsetDateTime;
+import com.bintime.chatting.dto.ChatBookingContextMessage;
+import java.util.List;
 
 public interface ChatBookingAiPort {
-  Extraction analyze(String text, OffsetDateTime sentAt);
+  Extraction analyze(List<ChatBookingContextMessage> messages);
 
   record Extraction(
       boolean bookingRequested, String date, String time, String serviceDescription) {}
