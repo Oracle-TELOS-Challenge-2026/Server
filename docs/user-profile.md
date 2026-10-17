@@ -75,3 +75,22 @@ U-04~U-08을 구현한다. 모든 요청은 카카오 로그인으로 발급된 
 6. 위치 삭제 후 GET의 location이 null인지 확인한다.
 
 자동화 테스트는 세션·CSRF·사용자 격리·입력 검증·버전 경합·위치 경합을 H2에서 검증한다. Oracle 마이그레이션과 JDBC 타입 호환은 로컬 Oracle에서 별도로 확인한다.
+
+## 맞춤 빈자리 알림 동의 (U-10/U-11)
+
+특정 매장이나 예약 대기를 등록하지 않아도, 앱 전체 맞춤 알림에 동의한 사용자는 선호 벡터가 유사한 발행 빈자리 알림을 받을 수 있다. **현재 시연에서는 사용자 프로필 위치·거리·반경을 전혀 검사하지 않는다.** 사용자 선호 벡터와 매장·시술 설명 벡터의 코사인 유사도가 기본 0.5 이상이어야 한다. 기존 예약 대기의 시간·가격·거리 조건 검증은 유지한다.
+
+기존 DB에는 배포 전 [008-personalized-notifications.sql](../infra/oracle/migrations/008-personalized-notifications.sql)을 앱 스키마로 실행한다. 기존 사용자의 기본값은 동의하지 않음(false)이다. 구독 등록만으로 전체 맞춤 알림 동의를 대신하지 않는다.
+
+1. 로그인 후 선호도를 저장한다. `OPENAI_API_KEY`와 search worker가 필요하다.
+2. 현재 로그인 세션에서 FID를 `POST /api/v1/notifications/push-subscriptions`로 등록한다.
+3. `GET /api/v1/users/me/notification-preferences`로 `personalizedVacancyEnabled`, `version`을 조회한다.
+4. 같은 경로에 PUT으로 동의를 저장한다. 세션 쿠키와 `X-CSRF-Token`이 필요하다.
+
+```json
+{"personalizedVacancyEnabled":true,"expectedVersion":2}
+```
+
+`expectedVersion`에는 GET의 현재 버전을 보낸다(예시의 2를 고정해서 사용하지 않는다). 응답 `success.data`는 `{"personalizedVacancyEnabled":true,"version":3}`이다. 버전은 이름·선호도 변경과 공유하며 불일치는 409다. 필수 boolean/양의 정수 누락·형식 오류는 400, 미인증·없는 계정은 401, CSRF 오류는 403이다. OWNER도 동일하게 이용할 수 있다.
+
+활성화와 선호 변경은 기존에 발행된 유효한 VACANCY도 비동기로 탐색한다. 200 응답은 설정 저장·작업 접수를 뜻하며 푸시 제출 완료를 의미하지 않는다. 탐색 시 활성 기기 구독이 있어야 하므로 FID를 먼저 등록한다. 동의 해제는 같은 PUT에 false를 보내며 이후 맞춤 알림 접수와 FCM 제출을 차단한다. 이미 외부에 제출된 푸시는 회수하지 않는다. 별도로 동의한 예약 대기 알림은 계속 작동한다.

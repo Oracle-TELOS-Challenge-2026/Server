@@ -86,6 +86,7 @@ public class SearchWorker {
         case "SLOT" -> slot(db.decode(payload, CreateMatchJobRequest.class), id, owner);
         case "INTENT" -> intent(payload, id, owner);
         case "NOTIFY" -> notifyUser(db.decode(payload, Delivery.class));
+        case "PERSONALIZE" -> personalizedUser(payload, id, owner);
         case "VECTOR" -> vectors.refresh(payload);
         case "INDEX" -> indexes.sync(payload);
         case "STORE_VECTOR" -> indexes.embed(payload);
@@ -163,7 +164,43 @@ public class SearchWorker {
         }
         after = batch.getLast();
       }
+      if ("VACANCY".equals(s.source())) {
+        after = "";
+        while (true) {
+          renew(work, owner);
+          var candidates = users.personalizedCandidates(after, 100);
+          if (candidates.isEmpty()) break;
+          for (String user : candidates) enqueuePersonalized(user, s);
+          after = candidates.getLast();
+        }
+      }
     }
+  }
+
+  private void enqueuePersonalized(String user, Slot slot) {
+    if (!users.personalizedNotificationsEnabled(user) || !users.notificationsEnabled(user)) return;
+    db.enqueue(
+        "NOTIFY",
+        db.encode(
+            new Delivery(user, slot.id(), slot.publicationVersion(), List.of(), "PERSONALIZED")),
+        clock.millis());
+  }
+
+  private void personalizedUser(String user, String work, String owner) {
+    if (!users.personalizedNotificationsEnabled(user) || !users.notificationsEnabled(user)) return;
+    String cursor = null;
+    do {
+      renew(work, owner);
+      var page = stores.export(cursor, 100);
+      for (var store : page.items()) {
+        for (Slot slot : store.slots()) {
+          if ("VACANCY".equals(slot.source())
+              && slot.startAt().toInstant().isAfter(clock.instant()))
+            enqueuePersonalized(user, slot);
+        }
+      }
+      cursor = page.nextCursor();
+    } while (cursor != null);
   }
 
   private void intent(String payload, String work, String owner) {
@@ -256,6 +293,24 @@ public class SearchWorker {
     if (valid.isEmpty()) return;
     Slot s = valid.getFirst();
     if (!Objects.equals(s.publicationVersion(), delivery.publicationVersion())) return;
+    if ("PERSONALIZED".equals(delivery.audience())) {
+      if (!"VACANCY".equals(s.source())
+          || !users.personalizedNotificationsEnabled(delivery.userId())) return;
+      if (!similarity.matches(delivery.userId(), s)) return;
+      notifications.dispatch(
+          new DispatchNotificationRequest(
+              "match_" + WaitlistService.hash(delivery.userId() + ":" + s.id()),
+              delivery.userId(),
+              "VACANCY_MATCHED",
+              s.id(),
+              s.publicationVersion(),
+              List.of(),
+              s.startAt(),
+              "PERSONALIZED"));
+      return;
+    }
+    if (!"WAITLIST".equals(delivery.audience()))
+      throw SearchFailure.bad("INVALID_NOTIFICATION_AUDIENCE");
     var matches =
         tx.execute(
             t -> {
@@ -306,5 +361,18 @@ public class SearchWorker {
       String userId,
       String slotId,
       Long publicationVersion,
-      List<DispatchNotificationRequest.MatcheItem> matches) {}
+      List<DispatchNotificationRequest.MatcheItem> matches,
+      String audience) {
+    public Delivery {
+      audience = audience == null ? "WAITLIST" : audience;
+    }
+
+    public Delivery(
+        String userId,
+        String slotId,
+        Long publicationVersion,
+        List<DispatchNotificationRequest.MatcheItem> matches) {
+      this(userId, slotId, publicationVersion, matches, "WAITLIST");
+    }
+  }
 }

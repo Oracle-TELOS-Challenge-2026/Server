@@ -1,5 +1,6 @@
 package com.bintime.user.repository;
 
+import com.bintime.user.dto.NotificationPreferencesResponse;
 import com.bintime.user.dto.SaveLocationRequest;
 import com.bintime.user.dto.UserLocationResponse;
 import com.bintime.user.dto.UserProfileResponse;
@@ -73,6 +74,33 @@ public class UserProfileRepository {
             .query(Integer.class)
             .single()
         > 0;
+  }
+
+  public Optional<NotificationPreferencesResponse> notificationPreferences(String userId) {
+    return jdbc.sql(
+            "SELECT recommendation_opt_in,recommendation_consent_at,version_no FROM user_accounts"
+                + " WHERE user_id=:id")
+        .param("id", userId)
+        .query(
+            (rs, row) ->
+                new NotificationPreferencesResponse(
+                    "Y".equals(rs.getString(1)) && rs.getObject(2) != null, rs.getLong(3)))
+        .optional();
+  }
+
+  public int saveNotificationPreferences(String userId, boolean enabled, long expectedVersion) {
+    return jdbc.sql(
+            "UPDATE user_accounts SET recommendation_opt_in=:enabled,"
+                + " recommendation_consent_at=:consent,version_no=version_no+1 WHERE user_id=:id"
+                + " AND version_no=:version")
+        .param("enabled", enabled ? "Y" : "N")
+        .param(
+            "consent",
+            enabled ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null,
+            java.sql.Types.TIMESTAMP_WITH_TIMEZONE)
+        .param("id", userId)
+        .param("version", expectedVersion)
+        .update();
   }
 
   public int updateDisplayName(String userId, String displayName, long expectedVersion) {

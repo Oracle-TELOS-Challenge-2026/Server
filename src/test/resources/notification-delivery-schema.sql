@@ -1,6 +1,6 @@
 create table user_accounts(user_id varchar(64) primary key);
 create table notification_alerts(
-  notification_id varchar(64) primary key,user_id varchar(64) not null,waitlist_id varchar(64) not null,
+  notification_id varchar(64) primary key,user_id varchar(64) not null,waitlist_id varchar(64),
   slot_id varchar(64) not null,publication_version bigint,store_id varchar(64),title varchar(100) not null,
   body_text varchar(500) not null,expires_at timestamp with time zone not null,
   push_status varchar(10) default 'PENDING' not null,push_attempts integer default 0 not null,

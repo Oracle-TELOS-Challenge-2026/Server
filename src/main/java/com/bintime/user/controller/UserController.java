@@ -3,7 +3,9 @@ package com.bintime.user.controller;
 import com.bintime.common.dto.ApiError;
 import com.bintime.common.dto.ApiErrorResponse;
 import com.bintime.common.dto.ResponseMeta;
+import com.bintime.user.dto.NotificationPreferencesResponse;
 import com.bintime.user.dto.SaveLocationRequest;
+import com.bintime.user.dto.SaveNotificationPreferencesRequest;
 import com.bintime.user.dto.SavePreferencesRequest;
 import com.bintime.user.dto.UpdateProfileRequest;
 import com.bintime.user.dto.UserLocationResponse;
@@ -425,5 +427,51 @@ public class UserController {
     return ResponseEntity.ok(
         com.bintime.common.dto.ApiResponse.success(
             profileService().savePreferences(userId(principal), request)));
+  }
+
+  @Operation(
+      operationId = "getMyNotificationPreferences",
+      summary = "U-10 · 맞춤 빈자리 알림 설정 조회",
+      description = "예약 대기·특정 매장 설정과 별개의 앱 전체 맞춤 빈자리 알림 동의. 기본 false. 시연 경로는 위치·거리를 검사하지 않는다.")
+  @SecurityRequirement(name = "sessionCookie")
+  @ApiResponse(responseCode = "200", description = "현재 동의와 사용자 버전", useReturnTypeSchema = true)
+  @ApiResponse(responseCode = "401", description = "로그인 필요 또는 사용자 없음", content = @Content)
+  @GetMapping(
+      value = "/api/v1/users/me/notification-preferences",
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<com.bintime.common.dto.ApiResponse<NotificationPreferencesResponse>>
+      getMyNotificationPreferences(@AuthenticationPrincipal BintimePrincipal principal) {
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(
+            profileService().notificationPreferences(userId(principal))));
+  }
+
+  @Operation(
+      operationId = "saveMyNotificationPreferences",
+      summary = "U-11 · 맞춤 빈자리 알림 동의 변경",
+      description =
+          "personalizedVacancyEnabled=true이면 예약 대기 없이 선호 벡터 기반 알림을 받는다. 현재 시연은 위치·거리를 검사하지 않는다. "
+              + "활성 기기 구독도 필요하다. 활성화 시 기존 발행 빈자리도 탐색한다. expectedVersion은 사용자 최상위 버전이며 변경 시 1 증가한다. "
+              + "동의 해제는 이후 접수·푸시 제출을 차단하며 이미 제출된 푸시는 회수하지 않는다.")
+  @SecurityRequirement(name = "sessionCookie")
+  @ApiResponse(responseCode = "200", description = "설정 저장 및 탐색 작업 접수", useReturnTypeSchema = true)
+  @ApiResponse(responseCode = "400", description = "입력 오류", content = @Content)
+  @ApiResponse(responseCode = "401", description = "로그인 필요 또는 사용자 없음", content = @Content)
+  @ApiResponse(responseCode = "403", description = "CSRF 검증 실패", content = @Content)
+  @ApiResponse(responseCode = "409", description = "VERSION_CONFLICT", content = @Content)
+  @PutMapping(
+      value = "/api/v1/users/me/notification-preferences",
+      produces = MediaType.APPLICATION_JSON_VALUE,
+      consumes = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<com.bintime.common.dto.ApiResponse<NotificationPreferencesResponse>>
+      saveMyNotificationPreferences(
+          @Parameter(required = true, description = "현재 세션의 CSRF 토큰")
+              @RequestHeader(value = "X-CSRF-Token", required = false)
+              String csrfToken,
+          @AuthenticationPrincipal BintimePrincipal principal,
+          @Valid @RequestBody SaveNotificationPreferencesRequest request) {
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(
+            profileService().saveNotificationPreferences(userId(principal), request)));
   }
 }

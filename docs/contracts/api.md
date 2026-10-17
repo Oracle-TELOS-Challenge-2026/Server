@@ -2,7 +2,7 @@
 
 출처: [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4) 및 [공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 2026-10-16 조회 기준의 구현 제안 계약이다.
 
-48개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01~09는 카카오 로그인·세션·CSRF 및 [프로필·위치·선호도](../user-profile.md)로 구현했다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~20은 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. notification N-01~06은 저장·읽음·SSE·FCM으로 구현했다. chatting C-01~05와 텍스트 WebSocket은 [채팅 연동 안내](../chatting.md)에 따라 구현했다.
+50개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01~11는 카카오 로그인·세션·CSRF 및 [프로필·위치·선호도](../user-profile.md)로 구현했다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~20은 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. notification N-01~06은 저장·읽음·SSE·FCM으로 구현했다. chatting C-01~05와 텍스트 WebSocket은 [채팅 연동 안내](../chatting.md)에 따라 구현했다.
 
 Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`, `/api/v1/notifications/**`의 세션 인증·CSRF를 적용한다. store의 공개 조회 5개를 제외한 15개 API에는 세션 쿠키·CSRF 및 선택적 Bearer JWT 인증을 적용한다. [store 인증 계약](../store-auth.md)에 적용 범위와 설정을 정의한다. search는 매장 검색을 공개하고 대기·분석 API는 현재 CUSTOMER 또는 OWNER 인증과 쿠키 변경 요청 CSRF를 검증한다. 내부 검색은 별도 내부 토큰을 유지한다([search 인증](../search-auth.md)). `SearchUserAccessAdapter`가 공통 세션/JWT 인증 경계와 알림 구독 조회를 연결한다. chatting은 별도 필터 체인으로 카카오 세션 쿠키·변경 요청 CSRF를 검증하고 방의 고객·현재 매장 소유자만 허용한다. WebSocket은 세션·Origin·첫 프레임 CSRF를 검증한다. `api-docs` 프로필은 문서 열람용으로 Spring Security 필터와 DB 의존성을 제외하며, search 자체의 요청자 검증은 유지한다. 자세한 로그인 설정은 [카카오 로그인](../kakao-login.md)을 따른다.
 
@@ -13,7 +13,7 @@ Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`, `/api/v1/notifications
 - JSON 응답은 `BaseResponse<T>` 상속 기반의 `resultType/success.data/error/meta(timestamp,path)` 구조다. 기존 Notion의 최상위 data는 success.data로 이동한다. 목록의 items/page/counts 구조는 그 안에 유지한다. 204·OAuth redirect·SSE·WebSocket은 봉투 예외다. 자세한 계약은 [response.md](response.md)를 따른다.
 - ID는 String, 오프셋 포함 시각은 OffsetDateTime, 날짜는 LocalDate, 금액은 정수 원이다. Web Push expirationTime은 Unix epoch 밀리초다.
 - 사용자 API는 필수값·범위와 U-08의 필수 nullable `maxPrice` 키 존재 여부를 검증한다. 나머지 골격의 PATCH 생략/명시적 null 구분 및 필드 간 검증은 실제 구현 시 보완한다.
-- Swagger 첫 화면의 `all` 그룹은 전체 HTTP API 48개를 표시한다. `public`은 46개, `internal`은 2개를 표시한다. 내부 계약은 외부 고객의 호출용이 아니며 search 내부 인증 설정은 [search.md](../search.md)를 따른다.
+- Swagger 첫 화면의 `all` 그룹은 전체 HTTP API 50개를 표시한다. `public`은 48개, `internal`은 2개를 표시한다. 내부 계약은 외부 고객의 호출용이 아니며 search 내부 인증 설정은 [search.md](../search.md)를 따른다.
 - Notion 예시에서 생략된 선택 필드(reason, openingHours 등)는 공통 규약을 기준으로 포함한다. ST-08은 OWNER 조회 시 customer/resourceId가 추가된다.
 
 ## 명세 간 차이
@@ -35,6 +35,8 @@ Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며
 | U-06 | user | PUT `/api/v1/users/me/location` | UserController.saveMyLocation | SaveLocationRequest | UserLocationResponse |
 | U-07 | user | DELETE `/api/v1/users/me/location` | UserController.deleteMyLocation | — | — |
 | U-08 | user | PUT `/api/v1/users/me/preferences` | UserController.saveMyPreferences | SavePreferencesRequest | UserPreferencesResponse |
+| U-10 | user | GET `/api/v1/users/me/notification-preferences` | UserController.getMyNotificationPreferences | — | NotificationPreferencesResponse |
+| U-11 | user | PUT `/api/v1/users/me/notification-preferences` | UserController.saveMyNotificationPreferences | SaveNotificationPreferencesRequest | NotificationPreferencesResponse |
 | ST-01 | store | GET `/api/v1/stores/categories` | StoreController.getCategories | — | CategoryListResponse |
 | ST-02 | store | GET `/api/v1/stores/{storeId}` | StoreController.getStore | — | StoreDetailResponse |
 | ST-03 | store | GET `/api/v1/stores/{storeId}/services` | StoreController.getServices | — | StoreServiceListResponse |
@@ -87,3 +89,9 @@ store MVP는 하나의 DB 트랜잭션에서 AVAILABLE → BOOKED로 확정하�
 ### 사용자 선호 임베딩 연동
 
 사용자 벡터 입력은 `user_accounts.preferences_json`의 자유로운 JSON 문자열 전체다. 내부 `UserPreferenceService`가 읽기/저장과 변경 이벤트를 제공하고 search가 OpenAI 호출/비동기 갱신/Oracle 벡터 저장을 맡는다. U-08은 categories·keywords·maxPrice·text와 사용자 버전을 저장하고 같은 트랜잭션에서 변경 이벤트를 발행해 VECTOR 작업을 등록한다. 200 응답은 선호 저장·작업 접수 성공이며 벡터 생성 완료는 아니다. 동일 입력은 기존 벡터를 재사용하고 OpenAI 일시 장애는 worker에서 재시도한다. 다른 사용자의 선호 원문이나 벡터를 공개하는 새 HTTP API는 추가하지 않았다. 세부 오류와 마이그레이션/운영 명령은 [search 안내](../search.md)를 따른다.
+
+## 앱 전체 맞춤 알림 계약
+
+[U-10/U-11](../user-profile.md#맞춤-빈자리-알림-동의-u-10u-11)은 매장별 대기와 별개의 명시적 동의이며 기본 false다. 현재 시연은 위치를 무시하고 활성 구독·발행 VACANCY·벡터 기준으로 발송한다. 기존 WAITLIST의 명시적 필수 조건은 유지한다.
+
+N-06의 선택 필드 `audience`는 생략/null 시 `WAITLIST`이며 기존 필수 matches(1~20개)를 사용한다. `PERSONALIZED`는 matches=[]만 허용하며 user 도메인의 앱 전체 동의를 재검증한다. 외부 알림 type은 기존 `VACANCY_MATCHED`를 유지하고 `target.waitlistIds=[]`를 허용한다. 같은 사용자+슬롯은 자격 경로와 무관하게 중복 알림을 만들지 않는다.

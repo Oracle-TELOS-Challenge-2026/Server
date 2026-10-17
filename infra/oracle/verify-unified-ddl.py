@@ -141,8 +141,9 @@ def main():
     migration_names = {
         '001-user-profile.sql', '002-notification-subscriptions.sql', '003-notification-delivery.sql',
         '02-store-api.sql', '03-user-vector-generation.sql', '04-search-v2-prepare.sql',
-        '05-search-v2-finalize.sql', '06-store-search-catalog.sql', '07-store-event-delivery.sql'}
-    assert {p.name for p in MIGRATIONS.glob('*.sql')} == migration_names, 'Update verification for added/removed migrations'
+        '05-search-v2-finalize.sql', '06-store-search-catalog.sql', '07-store-event-delivery.sql', '008-personalized-notifications.sql'}
+    # Chat's separate extension is outside the base 25-table schema comparison.
+    assert {p.name for p in MIGRATIONS.glob('*.sql') if p.name != '004-chatting.sql'} == migration_names, 'Update verification for added/removed migrations'
     assert (ROOT / 'docs/sql/search-oracle.sql').read_bytes() == (ROOT / 'docs/sql/search-oracle-v2.sql').read_bytes(), 'Search v2 aliases differ'
     sources = [ROOT / 'infra/oracle/ddl.sql', ROOT / 'infra/oracle/local-setup/01ddl.sql',
                *sorted((ROOT / 'docs/sql').glob('*.sql')), *sorted(MIGRATIONS.glob('*.sql'))]
@@ -165,13 +166,13 @@ def main():
         for name in ['001-user-profile.sql', '03-user-vector-generation.sql',
                      '04-search-v2-prepare.sql', '05-search-v2-finalize.sql',
                      '06-store-search-catalog.sql', '07-store-event-delivery.sql',
-                     '002-notification-subscriptions.sql', '003-notification-delivery.sql']:
+                     '002-notification-subscriptions.sql', '003-notification-delivery.sql', '008-personalized-notifications.sql']:
             load(historical, MIGRATIONS / name)
         load(split, ROOT / 'infra/oracle/local-setup/01ddl.sql')
         load(split, ROOT / 'docs/sql/search-oracle.sql')
         for name in ['001-user-profile.sql', '06-store-search-catalog.sql',
                      '07-store-event-delivery.sql', '002-notification-subscriptions.sql',
-                     '003-notification-delivery.sql']:
+                     '003-notification-delivery.sql', '008-personalized-notifications.sql']:
             load(split, MIGRATIONS / name)
         load(unified, ROOT / 'infra/oracle/ddl.sql')
         snapshots = {key: snapshot(account) for key, account in zip(['historical', 'split', 'unified'], accounts)}

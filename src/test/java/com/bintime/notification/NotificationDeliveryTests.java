@@ -55,6 +55,21 @@ class NotificationDeliveryTests {
   FcmClient fcm;
   AtomicBoolean active;
 
+  @Test
+  void persistedRequestsAndQueuedJobsWithoutAudienceRemainWaitlistNotifications() {
+    var json = JsonMapper.builder().build();
+    String legacy =
+        "{\"eventId\":\"evt\",\"userId\":\"user\",\"type\":\"VACANCY_MATCHED\",\"slotId\":\"slot\",\"publicationVersion\":1,\"matches\":[{\"waitlistId\":\"wait\",\"waitlistVersion\":1}]}";
+    assertThat(json.readValue(legacy, DispatchNotificationRequest.class).audience())
+        .isEqualTo("WAITLIST");
+    assertThat(
+            json.readValue(
+                    "{\"userId\":\"user\",\"slotId\":\"slot\",\"publicationVersion\":1,\"matches\":[{\"waitlistId\":\"wait\",\"waitlistVersion\":1}]}",
+                    com.bintime.search.service.SearchWorker.Delivery.class)
+                .audience())
+        .isEqualTo("WAITLIST");
+  }
+
   @BeforeEach
   void setup() {
     var source =
@@ -104,7 +119,15 @@ class NotificationDeliveryTests {
     when(similarity.matches(anyString(), any())).thenReturn(true);
     service =
         new NotificationService(
-            db, subscriptions, waitlists, catalog, new ConditionRules(), tx, clock, similarity);
+            db,
+            subscriptions,
+            waitlists,
+            catalog,
+            new ConditionRules(),
+            tx,
+            clock,
+            similarity,
+            mock(com.bintime.user.contract.SearchUserAccess.class));
     worker = new NotificationDeliveryWorker(db, service, subscriptions, fcm, tx, clock, 0, false);
   }
 

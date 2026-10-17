@@ -8,6 +8,8 @@
 -- 1. USER: login identity, role, location and preferences in one table
 --------------------------------------------------------------------------------
 CREATE TABLE user_accounts (
+  recommendation_opt_in CHAR(1) DEFAULT 'N' NOT NULL,
+  recommendation_consent_at TIMESTAMP(6) WITH TIME ZONE,
                                user_id          VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                                kakao_subject    VARCHAR2(100 BYTE),
                                display_name     VARCHAR2(30 CHAR) NOT NULL,
@@ -20,7 +22,10 @@ CREATE TABLE user_accounts (
                                CONSTRAINT pk_user_accounts PRIMARY KEY (user_id),
                                CONSTRAINT uq_user_kakao UNIQUE (kakao_subject),
                                CONSTRAINT ck_user_name CHECK (TRIM(display_name) IS NOT NULL),
-                               CONSTRAINT ck_user_role CHECK (role_code IN ('CUSTOMER','OWNER')),
+                               CONSTRAINT ck_user_recommendation CHECK (
+    (recommendation_opt_in='N' AND recommendation_consent_at IS NULL)
+    OR (recommendation_opt_in='Y' AND recommendation_consent_at IS NOT NULL)),
+  CONSTRAINT ck_user_role CHECK (role_code IN ('CUSTOMER','OWNER')),
                                CONSTRAINT ck_user_location CHECK (
                                    (latitude IS NULL AND longitude IS NULL AND location_at IS NULL)
                                        OR (latitude IS NOT NULL AND longitude IS NOT NULL AND location_at IS NOT NULL
@@ -199,7 +204,7 @@ ALTER TABLE store_slots ADD CONSTRAINT fk_slot_source
 CREATE TABLE notification_alerts (
                                      notification_id    VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                                      user_id            VARCHAR2(64 BYTE) NOT NULL,
-                                     waitlist_id        VARCHAR2(64 BYTE) NOT NULL,
+                                     waitlist_id        VARCHAR2(64 BYTE),
                                      slot_id            VARCHAR2(64 BYTE) NOT NULL,
                                      publication_version NUMBER(10,0) NOT NULL,
                                      title              VARCHAR2(100 CHAR) NOT NULL,

@@ -91,7 +91,7 @@ public class NotificationRepository {
         """,
         alert.id(),
         user,
-        request.matches().getFirst().waitlistId(),
+        request.matches().isEmpty() ? null : request.matches().getFirst().waitlistId(),
         request.slotId(),
         request.publicationVersion(),
         alert.target().storeId(),
@@ -305,7 +305,9 @@ public class NotificationRepository {
                   rs.getString("store_id"),
                   rs.getString("slot_id"),
                   rs.getObject("publication_version", Long.class),
-                  List.of(rs.getString("waitlist_id"))),
+                  rs.getString("waitlist_id") == null
+                      ? List.of()
+                      : List.of(rs.getString("waitlist_id"))),
               new NotificationResponse.Action("OPEN_SLOT", "/customer/waitlist"),
               "UNKNOWN",
               read,

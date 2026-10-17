@@ -204,3 +204,9 @@ ssh -i ~/Downloads/team3/team-3-1.key -N -L 18443:127.0.0.1:443 opc@140.238.19.1
 ```
 
 다른 터미널에서 `curl --fail --connect-to 140.238.19.165:443:127.0.0.1:18443 https://140.238.19.165/healthz`를 실행한다. 인증서 검증을 끄는 `-k`는 사용하지 않는다.
+
+## 맞춤 빈자리 알림 배포
+
+기존 DB는 앱 스키마에서 [008-personalized-notifications.sql](oracle/migrations/008-personalized-notifications.sql)을 **새 앱 배포 전에** 적용한다. user_accounts에 기본 비동의 값과 동의 시각을 추가하고 notification_alerts.waitlist_id의 NOT NULL을 해제한다. 기존 데이터는 유지하며 재실행 가능하다. SQL*Plus 지시문을 지원하지 않는 IDE에서는 SET/WHENEVER를 제외하고 PL/SQL 블록과 COMMIT을 실행한다. 새 통합 ddl.sql에는 포함되어 있다. 개인화 동의는 기존 사용자를 자동 활성화하지 않으며 [설정 API](../docs/user-profile.md#맞춤-빈자리-알림-동의-u-10u-11)로 저장한다.
+
+`SEARCH_INDEX_REBUILD=false`, `SEARCH_SCHEDULING_ENABLED=true`, `BINTIME_STORE_EVENT_DELIVERY_ENABLED=true`의 정상 실행 구성을 사용하고 OpenAI/FCM 설정 및 현재 로그인 세션 FID를 준비한다. 이 시연 경로에는 프로필 위치 등록이 필요 없다. 빈자리 발행 후 비동기 매칭·푸시 제출로 진행하며 전체 ES 재색인은 필요 없다.
