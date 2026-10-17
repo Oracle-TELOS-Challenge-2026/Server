@@ -118,16 +118,70 @@ class ChatServiceTests {
         chats.create("customer", "source-room", new CreateChatRoomRequest("shop")).data().id();
     var first =
         chats.send("customer", room, new SendChatMessageRequest("request", "내일 17시 커트하고 싶어요"));
-    assertThat(chats.bookingSource("customer", room, first.id())).isEqualTo(first);
-    assertThat(chats.bookingSource("owner", room, first.id())).isEqualTo(first);
-    failure(404, "ROOM_NOT_FOUND", () -> chats.bookingSource("outsider", room, first.id()));
+    assertThat(chats.bookingContext("customer", room, first.id()).source()).isEqualTo(first);
+    assertThat(chats.bookingContext("owner", room, first.id()).source()).isEqualTo(first);
+    assertThat(chats.bookingContext("owner", room, first.id()).messages())
+        .extracting(ChatBookingContextMessage::content)
+        .containsExactly(first.content());
+    failure(404, "ROOM_NOT_FOUND", () -> chats.bookingContext("outsider", room, first.id()));
     var ownerReply = chats.send("owner", room, new SendChatMessageRequest("reply", "확인할게요"));
     failure(
-        404, "SOURCE_MESSAGE_NOT_FOUND", () -> chats.bookingSource("owner", room, ownerReply.id()));
+        404,
+        "SOURCE_MESSAGE_NOT_FOUND",
+        () -> chats.bookingContext("owner", room, ownerReply.id()));
     chats.send("customer", room, new SendChatMessageRequest("new", "ㅎㅇ"));
-    failure(409, "PROPOSAL_SOURCE_OUTDATED", () -> chats.bookingSource("owner", room, first.id()));
+    failure(409, "PROPOSAL_SOURCE_OUTDATED", () -> chats.bookingContext("owner", room, first.id()));
     assertThat(count("chatting_messages")).isEqualTo(3);
     assertThat(count("chatting_booking_proposals")).isZero();
+  }
+
+  @Test
+  void bookingContextContainsTheLastFiveCustomerMessagesInOrderWithoutOwnerOrOtherRooms() {
+    String room = room();
+    String other =
+        chats.create("customer", "other-room", new CreateChatRoomRequest("shop2")).data().id();
+    chats.send("customer", other, new SendChatMessageRequest("foreign", "다른 방 예약"));
+    var messages = new ArrayList<ChatMessageResponse>();
+    for (int i = 0; i < 6; i++) {
+      clock.advance(Duration.ofSeconds(1));
+      messages.add(
+          chats.send("customer", room, new SendChatMessageRequest("customer-" + i, "요청 " + i)));
+      chats.send("owner", room, new SendChatMessageRequest("owner-" + i, "사장님 답변 " + i));
+    }
+    var context = chats.bookingContext("owner", room, messages.getLast().id());
+    assertThat(context.source()).isEqualTo(messages.getLast());
+    assertThat(context.messages())
+        .extracting(ChatBookingContextMessage::id)
+        .containsExactlyElementsOf(
+            messages.subList(1, 6).stream().map(ChatMessageResponse::id).toList());
+    assertThat(context.messages()).extracting(ChatBookingContextMessage::sequence).isSorted();
+  }
+
+  @Test
+  void confirmedBookingEndsTheOldRequestContextEvenWhenTheLatestCustomerMessageIsUnchanged() {
+    String room = room();
+    var request =
+        chats.send("customer", room, new SendChatMessageRequest("request", "내일 17시 커트 예약하고 싶어요"));
+    var card = chats.send("owner", room, new SendChatMessageRequest("card", "예약 제안"));
+    var start = OffsetDateTime.now(clock).plusDays(1);
+    db.update(
+        """
+        insert into chatting_booking_proposals(proposal_id,room_id,card_message_id,source_message_id,
+          service_id,service_description,start_at,end_at,duration_minutes,price,status_code,
+          version_no,reservation_id,updated_at)
+        values('confirmed',?,?,?,'service','커트',?,?,60,50000,'CONFIRMED',1,'reservation',?)
+        """,
+        room,
+        card.id(),
+        request.id(),
+        start,
+        start.plusHours(1),
+        start);
+    assertThat(chats.bookingContext("owner", room, request.id()).messages()).isEmpty();
+    var greeting = chats.send("customer", room, new SendChatMessageRequest("greeting", "ㅎㅇ"));
+    assertThat(chats.bookingContext("owner", room, greeting.id()).messages())
+        .extracting(ChatBookingContextMessage::id)
+        .containsExactly(greeting.id());
   }
 
   @Test

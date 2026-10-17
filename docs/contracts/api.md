@@ -103,7 +103,7 @@ store MVP는 하나의 DB 트랜잭션에서 AVAILABLE → BOOKED로 확정하�
 
 사용자 벡터 입력은 `user_accounts.preferences_json`의 자유로운 JSON 문자열 전체다. 내부 `UserPreferenceService`가 읽기/저장과 변경 이벤트를 제공하고 search가 OpenAI 호출/비동기 갱신/Oracle 벡터 저장을 맡는다. U-08은 categories·keywords·maxPrice·text와 사용자 버전을 저장하고 같은 트랜잭션에서 변경 이벤트를 발행해 VECTOR 작업을 등록한다. 200 응답은 선호 저장·작업 접수 성공이며 벡터 생성 완료는 아니다. 동일 입력은 기존 벡터를 재사용하고 OpenAI 일시 장애는 worker에서 재시도한다. 다른 사용자의 선호 원문이나 벡터를 공개하는 새 HTTP API는 추가하지 않았다. 세부 오류와 마이그레이션/운영 명령은 [search 안내](../search.md)를 따른다.
 
-C-08은 최근 고객 TEXT의 예약 의사·한국 날짜/시간·시술을 분석한다. 저장된 원문·발송 시각을 사용하고 세션·CSRF·참여 권한을 검증한다. 예약·제안·푸시·DB 변경은 만들지 않는다. [계약과 프런트 수정 위치](../chat-booking-suggestion.md)를 따른다. 예시는 `contracts/chat-booking-suggestion.json`에 별도로 보관한다.
+C-08은 최신 고객 TEXT를 기준으로 최근 고객 메시지 최대 5개를 시간순 분석하여 예약 의사·한국 날짜/시간·시술을 합친다. `contextMessages`로 분석 원문을 반환하고 마지막 확정 제안 이전 대화는 제외한다. 저장된 원문·발송 시각을 사용하고 세션·CSRF·참여 권한을 검증한다. 예약·제안·푸시·DB 변경은 만들지 않는다. [계약과 프런트 수정 위치](../chat-booking-suggestion.md)를 따른다. 예시는 `contracts/chat-booking-suggestion.json`에 별도로 보관한다.
 
 ### 빈자리 모집의 예약 방식
 
