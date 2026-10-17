@@ -8,6 +8,7 @@ import com.bintime.chatting.dto.ChatMessageResponse;
 import com.bintime.chatting.repository.ChatRepository;
 import com.bintime.chatting.service.ChatService;
 import com.bintime.notification.fcm.FcmClient;
+import com.bintime.notification.repository.NotificationRepository;
 import com.bintime.notification.subscription.NotificationSubscriptions;
 import java.time.*;
 import java.util.*;
@@ -24,6 +25,7 @@ class ChatPushNotificationsTests {
   private final ChatRepository chats = mock(ChatRepository.class);
   private final NotificationSubscriptions subscriptions = mock(NotificationSubscriptions.class);
   private final FcmClient fcm = mock(FcmClient.class);
+  private final NotificationRepository history = mock(NotificationRepository.class);
   private final MutableClock clock = new MutableClock();
   private final ManualScheduler scheduler = new ManualScheduler(clock);
   private final AtomicBoolean eligible = new AtomicBoolean(true);
@@ -33,7 +35,7 @@ class ChatPushNotificationsTests {
 
   @BeforeEach
   void setup() {
-    push = new ChatPushNotifications(chats, subscriptions, fcm, clock, scheduler, 512);
+    push = new ChatPushNotifications(chats, subscriptions, fcm, clock, scheduler, 512, history);
     active.add("device-1");
     when(fcm.enabled()).thenReturn(true);
     when(chats.pushEligible(any(), anyString())).thenAnswer(ignored -> eligible.get());
@@ -125,6 +127,10 @@ class ChatPushNotificationsTests {
     verify(fcm, times(1))
         .sendPush(eq("fid-device-1"), anyString(), anyString(), anyMap(), anyString(), any());
     assertThat(scheduler.size()).isZero();
+    verify(history)
+        .recordPushHistory(any(), eq("device-2"), eq(1), eq("QUEUED"), eq("UNAVAILABLE"), any());
+    verify(history)
+        .recordPushHistory(any(), eq("device-2"), eq(2), eq("ACCEPTED"), eq("ACCEPTED"), any());
   }
 
   @Test
@@ -169,6 +175,64 @@ class ChatPushNotificationsTests {
     verify(fcm, never())
         .sendPush(anyString(), anyString(), anyString(), anyMap(), anyString(), any());
     assertThat(scheduler.size()).isZero();
+    verify(history)
+        .recordPushHistory(
+            any(), isNull(), eq(0), eq("SKIPPED"), eq("NO_ACTIVE_SUBSCRIPTION"), any());
+    verify(history).recordPushHistory(any(), isNull(), eq(0), eq("SKIPPED"), eq("EXPIRED"), any());
+    verify(history).recordPushHistory(any(), isNull(), eq(0), eq("SKIPPED"), eq("DISABLED"), any());
+  }
+
+  @Test
+  void failedAttemptHistoryPreventsSendingUntilTheDatabaseRecovers() {
+    doThrow(new IllegalStateException("database unavailable"))
+        .doNothing()
+        .when(history)
+        .recordPushHistory(any(), eq("device-1"), eq(1), eq("RUNNING"), isNull(), any());
+    push.messageCommitted(event("audit-before-send"));
+    scheduler.runReady();
+    verify(fcm, never())
+        .sendPush(anyString(), anyString(), anyString(), anyMap(), anyString(), any());
+    scheduler.advance(60);
+    var order = inOrder(history, fcm);
+    order
+        .verify(history, times(2))
+        .recordPushHistory(any(), eq("device-1"), eq(1), eq("RUNNING"), isNull(), any());
+    order.verify(fcm).sendPush(anyString(), anyString(), anyString(), anyMap(), anyString(), any());
+    order
+        .verify(history)
+        .recordPushHistory(any(), eq("device-1"), eq(1), eq("ACCEPTED"), eq("ACCEPTED"), any());
+    assertThat(scheduler.size()).isZero();
+  }
+
+  @Test
+  void resultHistoryFailureDoesNotResendAnAcceptedPushOrLeakQueueCapacity() {
+    doThrow(new IllegalStateException("database unavailable"))
+        .when(history)
+        .recordPushHistory(any(), anyString(), anyInt(), eq("ACCEPTED"), any(), any());
+    var event = event("audit-after-send");
+    push.messageCommitted(event);
+    scheduler.runReady();
+    push.messageCommitted(event);
+    scheduler.advance(60);
+    verify(fcm).sendPush(anyString(), anyString(), anyString(), anyMap(), anyString(), any());
+    verify(history).recordPushHistory(any(), eq("device-1"), eq(1), eq("RUNNING"), isNull(), any());
+    assertThat(scheduler.size()).isZero();
+  }
+
+  @Test
+  void everyDeviceRejectedByCapacityHasASkipRecord() {
+    push.shutdown();
+    var limited = new ManualScheduler(clock);
+    push = new ChatPushNotifications(chats, subscriptions, fcm, clock, limited, 1, history);
+    when(subscriptions.activeTargets("owner"))
+        .thenReturn(List.of(target("device-1"), target("device-2"), target("device-3")));
+    push.messageCommitted(event("device-limit"));
+    limited.runReady();
+    verify(history)
+        .recordPushHistory(any(), eq("device-2"), eq(0), eq("SKIPPED"), eq("QUEUE_FULL"), any());
+    verify(history)
+        .recordPushHistory(any(), eq("device-3"), eq(0), eq("SKIPPED"), eq("QUEUE_FULL"), any());
+    verify(fcm).sendPush(anyString(), anyString(), anyString(), anyMap(), anyString(), any());
   }
 
   @Test
@@ -246,7 +310,8 @@ class ChatPushNotificationsTests {
   void boundedAdmissionIncludesDeviceRetriesAndSchedulerRejectionIsSafe() {
     push.shutdown();
     var boundedScheduler = new ManualScheduler(clock);
-    push = new ChatPushNotifications(chats, subscriptions, fcm, clock, boundedScheduler, 2);
+    push =
+        new ChatPushNotifications(chats, subscriptions, fcm, clock, boundedScheduler, 2, history);
     doReturn(new FcmClient.Result(false, "UNAVAILABLE", true, 60))
         .when(fcm)
         .sendPush(anyString(), anyString(), anyString(), anyMap(), anyString(), any());

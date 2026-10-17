@@ -4,18 +4,25 @@ import com.bintime.notification.dto.DispatchNotificationRequest;
 import com.bintime.notification.dto.NotificationResponse;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 @Repository
 @Profile("!api-docs")
 public class NotificationRepository {
+  private static final Logger log = LoggerFactory.getLogger(NotificationRepository.class);
   private final JdbcTemplate jdbc;
   private final JsonMapper mapper;
 
@@ -101,6 +108,7 @@ public class NotificationRepository {
         alert.createdAt(),
         mapper.writeValueAsString(alert),
         mapper.writeValueAsString(request));
+    appendPushHistory(push(user, alert), null, 0, "QUEUED", null, alert.createdAt());
     jdbc.update(
         "insert into notification_dedup(user_id,slot_id,notification_id) values (?,?,?)",
         user,
@@ -201,20 +209,29 @@ public class NotificationRepository {
             id,
             now)
         == 0) return null;
-    return jdbc.queryForObject(
-        """
-        select d.*,a.user_id from notification_deliveries d
-        join notification_alerts a on a.notification_id=d.notification_id where d.delivery_id=?
-        """,
-        (rs, row) ->
-            new Delivery(
-                id,
-                rs.getString("notification_id"),
-                rs.getString("user_id"),
-                rs.getString("subscription_id"),
-                rs.getInt("attempts"),
-                owner),
-        id);
+    var delivery =
+        jdbc.queryForObject(
+            """
+            select d.*,a.user_id from notification_deliveries d
+            join notification_alerts a on a.notification_id=d.notification_id where d.delivery_id=?
+            """,
+            (rs, row) ->
+                new Delivery(
+                    id,
+                    rs.getString("notification_id"),
+                    rs.getString("user_id"),
+                    rs.getString("subscription_id"),
+                    rs.getInt("attempts"),
+                    owner),
+            id);
+    appendPushHistory(
+        push(delivery),
+        delivery.subscriptionId(),
+        delivery.attempts(),
+        "RUNNING",
+        null,
+        OffsetDateTime.ofInstant(Instant.ofEpochMilli(now), ZoneOffset.UTC));
+    return delivery;
   }
 
   /**
@@ -286,7 +303,65 @@ public class NotificationRepository {
         "ACCEPTED".equals(status) ? now : null,
         code,
         delivery.notificationId());
+    try {
+      appendPushHistory(
+          push(delivery), delivery.subscriptionId(), delivery.attempts(), status, code, now);
+    } catch (RuntimeException unavailable) {
+      // 결과 이력만 실패하면 기존 발송 상태를 유지해 이미 접수된 푸시를 재발송하지 않는다.
+      log.warn(
+          "Notification push result history unavailable; notification={}",
+          delivery.notificationId());
+    }
   }
+
+  private Push push(Delivery delivery) {
+    return push(
+        delivery.userId(), find(delivery.userId(), delivery.notificationId()).notification());
+  }
+
+  private static Push push(String user, NotificationResponse notification) {
+    return new Push(
+        notification.type(),
+        notification.id(),
+        user,
+        notification.title(),
+        notification.body(),
+        notification.action().path());
+  }
+
+  /** 생성 기록은 원본 알림/메시지와 같은 트랜잭션에서 저장한다. */
+  public void appendPushHistory(
+      Push push, String subscription, int attempt, String status, String code, OffsetDateTime now) {
+    jdbc.update(
+        """
+        insert into notification_push_history
+          (history_id,notification_type,notification_id,user_id,subscription_id,attempt_no,
+           status,error_code,title,body_text,action_path,created_at)
+        values (?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        UUID.randomUUID().toString(),
+        push.type(),
+        push.id(),
+        push.userId(),
+        subscription,
+        attempt,
+        status,
+        code,
+        push.title(),
+        push.body(),
+        push.path(),
+        now);
+  }
+
+  /** AFTER_COMMIT 콜백의 남아 있는 트랜잭션에 이력 쓰기가 묶이지 않게 한다. */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void recordPushHistory(
+      Push push, String subscription, int attempt, String status, String code, OffsetDateTime now) {
+    appendPushHistory(push, subscription, attempt, status, code, now);
+  }
+
+  public record Push(
+      String type, String id, String userId, String title, String body, String path) {}
 
   private Alert alert(ResultSet rs, int row) throws SQLException {
     String json = rs.getString("snapshot_json");

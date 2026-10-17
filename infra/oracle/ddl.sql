@@ -854,3 +854,24 @@ INSERT INTO search_user_lock(bucket_id) VALUES(253);
 INSERT INTO search_user_lock(bucket_id) VALUES(254);
 INSERT INTO search_user_lock(bucket_id) VALUES(255);
 COMMIT;
+
+-- Push audit history; FCM acceptance is not a device delivery receipt.
+CREATE TABLE notification_push_history (
+  history_id VARCHAR2(64 BYTE) NOT NULL,
+  notification_type VARCHAR2(32 BYTE) NOT NULL,
+  notification_id VARCHAR2(64 BYTE) NOT NULL,
+  user_id VARCHAR2(64 BYTE) NOT NULL,
+  subscription_id VARCHAR2(64 BYTE),
+  attempt_no NUMBER(6,0) DEFAULT 0 NOT NULL,
+  status VARCHAR2(16 BYTE) NOT NULL,
+  error_code VARCHAR2(100 BYTE),
+  title VARCHAR2(200 CHAR) NOT NULL,
+  body_text VARCHAR2(1000 CHAR),
+  action_path VARCHAR2(2048 BYTE) NOT NULL,
+  created_at TIMESTAMP(6) WITH TIME ZONE NOT NULL,
+  CONSTRAINT pk_notification_push_history PRIMARY KEY(history_id),
+  CONSTRAINT ck_push_history_attempt CHECK(attempt_no>=0),
+  CONSTRAINT ck_push_history_status CHECK(status IN ('QUEUED','RUNNING','ACCEPTED','FAILED','SKIPPED'))
+);
+CREATE INDEX ix_push_history_notification ON notification_push_history(notification_type,notification_id,created_at);
+CREATE INDEX ix_push_history_user ON notification_push_history(user_id,created_at);

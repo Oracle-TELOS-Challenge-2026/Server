@@ -141,7 +141,8 @@ def main():
     migration_names = {
         '001-user-profile.sql', '002-notification-subscriptions.sql', '003-notification-delivery.sql',
         '02-store-api.sql', '03-user-vector-generation.sql', '04-search-v2-prepare.sql',
-        '05-search-v2-finalize.sql', '06-store-search-catalog.sql', '07-store-event-delivery.sql'}
+        '05-search-v2-finalize.sql', '06-store-search-catalog.sql', '07-store-event-delivery.sql', '004-chatting.sql',
+        '08-chat-booking-proposals.sql', '009-notification-push-history.sql'}
     assert {p.name for p in MIGRATIONS.glob('*.sql')} == migration_names, 'Update verification for added/removed migrations'
     assert (ROOT / 'docs/sql/search-oracle.sql').read_bytes() == (ROOT / 'docs/sql/search-oracle-v2.sql').read_bytes(), 'Search v2 aliases differ'
     sources = [ROOT / 'infra/oracle/ddl.sql', ROOT / 'infra/oracle/local-setup/01ddl.sql',
@@ -165,15 +166,18 @@ def main():
         for name in ['001-user-profile.sql', '03-user-vector-generation.sql',
                      '04-search-v2-prepare.sql', '05-search-v2-finalize.sql',
                      '06-store-search-catalog.sql', '07-store-event-delivery.sql',
-                     '002-notification-subscriptions.sql', '003-notification-delivery.sql']:
+                     '002-notification-subscriptions.sql', '003-notification-delivery.sql',
+                     '009-notification-push-history.sql', '004-chatting.sql', '08-chat-booking-proposals.sql']:
             load(historical, MIGRATIONS / name)
         load(split, ROOT / 'infra/oracle/local-setup/01ddl.sql')
         load(split, ROOT / 'docs/sql/search-oracle.sql')
         for name in ['001-user-profile.sql', '06-store-search-catalog.sql',
                      '07-store-event-delivery.sql', '002-notification-subscriptions.sql',
-                     '003-notification-delivery.sql']:
+                     '003-notification-delivery.sql', '009-notification-push-history.sql', '004-chatting.sql', '08-chat-booking-proposals.sql']:
             load(split, MIGRATIONS / name)
         load(unified, ROOT / 'infra/oracle/ddl.sql')
+        load(unified, MIGRATIONS / '004-chatting.sql')
+        load(unified, MIGRATIONS / '08-chat-booking-proposals.sql')
         snapshots = {key: snapshot(account) for key, account in zip(['historical', 'split', 'unified'], accounts)}
         # user_tab_columns includes physical byte sizes and BYTE/CHAR semantics, not column order.
         differences = compare(snapshots['historical'], snapshots['unified'], 'All migrations -> unified')
@@ -185,7 +189,7 @@ def main():
             'NAME': 'IX_STORE_EVENT_QUEUE'}, sort_keys=True, ensure_ascii=False)]}}
         assert not differences, 'Unified schema differs from full migration chain'
         assert split_diff == expected_extra, 'Unexpected difference from current split installation'
-        assert len(snapshots['unified']['tables']) == 25
+        assert len(snapshots['unified']['tables']) == 29
         assert {int(row['BUCKET_ID']) for row in snapshots['unified']['locks']} == set(range(256))
         invalid = sql("SELECT COUNT(*) FROM user_objects WHERE status <> 'VALID';", unified).strip()
         assert invalid == '0', 'Invalid schema objects: ' + invalid
@@ -196,7 +200,7 @@ def main():
                 assert sql(f'SELECT COUNT(*) FROM {name};', unified).strip() == '0', name
         args.report.write_text(json.dumps({'sources_sha256': source_hashes, 'snapshots': snapshots, 'historical_difference': differences,
                                           'split_difference': split_diff}, ensure_ascii=False, indent=2) + '\n')
-        print('25 tables, 256 exact lock buckets, valid objects, no business seed rows. Report: ' + str(args.report), flush=True)
+        print('29 tables, 256 exact lock buckets, valid objects, no business seed rows. Report: ' + str(args.report), flush=True)
         if args.run_store_tests:
             # Existing StoreApiTests permits only its dedicated schema prefix.
             name = 'BT_STORE_' + secrets.token_hex(6).upper()
