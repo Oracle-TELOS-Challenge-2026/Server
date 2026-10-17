@@ -2,7 +2,9 @@
 
 2026-10-16 기준. [infra/oracle/ddl.sql](../infra/oracle/ddl.sql)은 신규 빈 앱 계정에 **25개 기본 테이블**을 생성한다. 기존 초기 DDL, search v2, 마이그레이션 9개(notification 003까지)의 결과를 한 파일에 반영했다. 외부 SQL 파일을 불러오는 `@`/`@@` 명령 없이 단독 실행한다.
 
-**현재 채팅 기능까지 실행하려면 통합 DDL 다음에 [004-chatting.sql](../infra/oracle/migrations/004-chatting.sql)을 추가 실행해야 한다.** 통합본에는 채팅 v1의 상태·최근 메시지 시각 컬럼과 읽음·HTTP 멱등성 테이블이 포함되어 있지 않다. 004 적용 후에는 전체 **27개 테이블**, 채팅 **4개 테이블**이 된다. 기존 OCI 공유 DB처럼 이미 004를 적용한 환경에는 통합 DDL을 다시 실행하지 않는다.
+**텍스트 채팅 v1에는 통합 DDL 다음에 [004-chatting.sql](../infra/oracle/migrations/004-chatting.sql)을 추가 실행해야 한다.** 통합본에는 채팅 v1의 상태·최근 메시지 시각 컬럼과 읽음·HTTP 멱등성 테이블이 포함되어 있지 않다. 004 적용 후에는 전체 **27개 테이블**, 채팅 **4개 테이블**이 된다. 기존 OCI 공유 DB처럼 이미 004를 적용한 환경에는 통합 DDL을 다시 실행하지 않는다.
+
+**예약 제안 기능에는 004 다음 [08-chat-booking-proposals.sql](../infra/oracle/migrations/08-chat-booking-proposals.sql)이 추가로 필요하다.** 제안 테이블 1개와 예약 설명 컬럼을 추가해 전체 28개, 채팅 5개가 된다. 새 코드 배포 전에 로컬·OCI 각각 적용하며 기존 데이터는 유지한다. 아래의 통합본 대조·QA 기록은 08을 포함하지 않은 당시 기준이다. 추가 계약은 [채팅 DB 안내](chatting-db.md)를 따른다.
 
 ## 실행 대상과 방법
 

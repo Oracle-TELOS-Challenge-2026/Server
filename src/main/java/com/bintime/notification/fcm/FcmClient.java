@@ -99,34 +99,55 @@ public class FcmClient {
   public Result send(
       String installationId, NotificationResponse notification, BooleanSupplier stillActive) {
     if (!enabled()) return new Result(false, "DISABLED", false, 0);
-    if (installationId == null
-        || installationId.isEmpty()
-        || installationId.length() > 128
-        || installationId
-            .codePoints()
-            .anyMatch(
-                c ->
-                    Character.isWhitespace(c)
-                        || Character.isSpaceChar(c)
-                        || Character.isISOControl(c)))
+    if (!validInstallationId(installationId))
       return new Result(false, "INVALID_INSTALLATION_ID", false, 0);
     if (notification == null
         || notification.id() == null
         || notification.id().isBlank()
         || notification.title() == null
         || notification.body() == null) return new Result(false, "INVALID_ARGUMENT", false, 0);
+    return sendPush(
+        installationId,
+        notification.title(),
+        notification.body(),
+        Map.of("notificationId", notification.id()),
+        CLICK_PATH,
+        stillActive);
+  }
+
+  public Result sendPush(
+      String installationId,
+      String title,
+      String body,
+      Map<String, String> data,
+      String path,
+      BooleanSupplier stillActive) {
+    if (!enabled()) return new Result(false, "DISABLED", false, 0);
+    if (!validInstallationId(installationId))
+      return new Result(false, "INVALID_INSTALLATION_ID", false, 0);
+    URI click = clickLink(path);
+    if (title == null
+        || body == null
+        || data == null
+        || data.entrySet().stream()
+            .anyMatch(
+                entry ->
+                    entry.getKey() == null || entry.getKey().isBlank() || entry.getValue() == null)
+        || click == null
+        || stillActive == null) return new Result(false, "INVALID_ARGUMENT", false, 0);
 
     Map<String, Object> message = new LinkedHashMap<>();
     message.put("fid", installationId);
-    message.put("notification", Map.of("title", notification.title(), "body", notification.body()));
-    message.put("data", Map.of("url", CLICK_PATH, "notificationId", notification.id()));
+    message.put("notification", Map.of("title", title, "body", body));
+    var payload = new LinkedHashMap<>(data);
+    // The validated click path owns data.url as well as the browser's click link.
+    payload.put("url", path);
+    message.put("data", payload);
     // FCM only accepts HTTPS click links; local HTTP still receives the relative data URL.
     if ("https".equals(frontend.getScheme()))
-      message.put(
-          "webpush",
-          Map.of("fcm_options", Map.of("link", frontend.resolve(CLICK_PATH).toString())));
-    String body = json.writeValueAsString(Map.of("message", message));
-    if (body.getBytes(StandardCharsets.UTF_8).length > 4096)
+      message.put("webpush", Map.of("fcm_options", Map.of("link", click.toString())));
+    String serialized = json.writeValueAsString(Map.of("message", message));
+    if (serialized.getBytes(StandardCharsets.UTF_8).length > 4096)
       return new Result(false, "INVALID_ARGUMENT", false, 0);
 
     String token;
@@ -144,7 +165,7 @@ public class FcmClient {
               .timeout(timeout)
               .header("Authorization", "Bearer " + token)
               .header("Content-Type", "application/json; charset=UTF-8")
-              .POST(HttpRequest.BodyPublishers.ofString(body))
+              .POST(HttpRequest.BodyPublishers.ofString(serialized))
               .build();
       // OAuth refresh may outlast the login session; recheck at the actual submission boundary.
       if (!stillActive.getAsBoolean()) return new Result(false, "INACTIVE_SUBSCRIPTION", false, 0);
@@ -171,6 +192,39 @@ public class FcmClient {
       return new Result(false, "INTERRUPTED", true, 60);
     } catch (IOException e) {
       return new Result(false, "CONNECTION_FAILED", true, 60);
+    }
+  }
+
+  private static boolean validInstallationId(String installationId) {
+    return installationId != null
+        && !installationId.isEmpty()
+        && installationId.length() <= 128
+        && installationId
+            .codePoints()
+            .noneMatch(
+                c ->
+                    Character.isWhitespace(c)
+                        || Character.isSpaceChar(c)
+                        || Character.isISOControl(c));
+  }
+
+  private URI clickLink(String path) {
+    if (path == null
+        || !path.startsWith("/")
+        || path.startsWith("//")
+        || path.indexOf('\\') >= 0
+        || path.codePoints().anyMatch(Character::isISOControl)) return null;
+    try {
+      URI relative = URI.create(path);
+      URI resolved = frontend.resolve(relative);
+      return !relative.isAbsolute()
+              && relative.getRawAuthority() == null
+              && frontend.getScheme().equals(resolved.getScheme())
+              && frontend.getRawAuthority().equals(resolved.getRawAuthority())
+          ? resolved
+          : null;
+    } catch (IllegalArgumentException invalid) {
+      return null;
     }
   }
 

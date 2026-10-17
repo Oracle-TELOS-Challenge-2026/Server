@@ -143,7 +143,8 @@ class ChatRestSecurityTests {
                 List.of(message()), new ChatMessageListResponse.Page(false, null)));
     mvc.perform(get(ROOMS).servletPath(ROOMS).session(session))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.success.data.items[0].id").value("room"));
+        .andExpect(jsonPath("$.success.data.items[0].id").value("room"))
+        .andExpect(jsonPath("$.success.data.items[0].peerReadSequence").value(0));
     mvc.perform(
             get(ROOMS)
                 .servletPath(ROOMS)
@@ -262,6 +263,7 @@ class ChatRestSecurityTests {
         "OPEN",
         null,
         0,
+        0L,
         0L,
         NOW);
   }
