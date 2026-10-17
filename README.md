@@ -203,3 +203,7 @@ Notion v0.1의 알림 대상·슬롯 상태와 기존 기획 간 차이 및 stor
 기존 DB는 현재 적용 상태에 맞춰 `infra/oracle/migrations/`의 변경 SQL을 사용한다. 통합 DDL은 기존 DB 업데이트용이 아니다. 기존 초기 store DB에는 `02-store-api.sql`, 기존 search v1에는 04·05 전환이 필요하며 프로필·알림·카탈로그·이벤트 전달 변경도 확인한다. `ddl-auto=validate`를 유지한다. 기존 분산 SQL은 마이그레이션 이력과 QA 비교를 위해 보존한다.
 
 `StoreApiTests`는 H2에서 API·동시성·멱등성·시간·대기 연동을 검증한다. `python3 infra/oracle/verify-store.py`는 로컬 Oracle의 격리 스키마에서 초기/변경 SQL·기존 데이터 보존·같은 API 및 경합 테스트를 실행한다. 인증 연결 조건, 테스트 실행 옵션, 후속 작업 소비 계약은 [store.md](docs/store.md)에 정리했다.
+
+## 기본 N 계정의 맞춤 알림
+
+현재 시연은 recommendation_opt_in=N/Y와 무관하게 모든 CUSTOMER/OWNER를 맞춤 후보에 포함한다. 활성 기기 구독·유효한 미래 빈자리·선호 벡터 유사도 0.5 이상을 확인하고 위치·매장별 대기는 요구하지 않는다. FID 등록 시 기존 빈자리도 탐색한다. DB를 Y로 변경하거나 기존 동의 API를 켤 필요가 없다. 수신 중단은 기기 구독 해제를 사용한다. [실행·호환 API 안내](docs/user-profile.md#맞춤-빈자리-알림-동의-u-10u-11)를 따른다.

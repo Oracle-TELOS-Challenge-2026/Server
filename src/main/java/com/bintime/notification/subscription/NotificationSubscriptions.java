@@ -18,6 +18,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -34,6 +35,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class NotificationSubscriptions {
   private static final String SESSION_BINDING =
       NotificationSubscriptions.class.getName() + ".binding";
+  private final ApplicationEventPublisher events;
   private final JdbcClient jdbc;
   private final TransactionTemplate transactions;
   private final Clock clock;
@@ -47,7 +49,9 @@ public class NotificationSubscriptions {
       JdbcClient jdbc,
       PlatformTransactionManager transactionManager,
       Clock clock,
-      @Value("${bintime.fcm.project-id:bintime-33512}") String projectId) {
+      @Value("${bintime.fcm.project-id:bintime-33512}") String projectId,
+      ApplicationEventPublisher events) {
+    this.events = events;
     this.jdbc = jdbc;
     this.transactions = new TransactionTemplate(transactionManager);
     this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -144,6 +148,9 @@ public class NotificationSubscriptions {
                       .update();
                   deactivateOrphans();
                   require(valid(new LiveSession(session, userId)), 401, "UNAUTHENTICATED");
+                  // 기기 연결과 기존 빈자리 탐색 작업을 함께 커밋해 등록 직후 누락을 막는다.
+                  events.publishEvent(
+                      new com.bintime.notification.contract.PushSubscriptionRegistered(userId));
                   return new Registration(
                       new PushSubscriptionResponse(stored.id(), stored.createdAt(), null), created);
                 });

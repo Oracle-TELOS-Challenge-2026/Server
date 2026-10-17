@@ -45,8 +45,9 @@ public class PushSubscriptionController {
       operationId = "registerPushSubscription",
       summary = "N-04 · FCM 설치 ID 등록",
       description =
-          "동일 계정+FID 재등록은 기존 ID와 생성 시각을 유지. 다른 계정의 활성 FID는 409 SUBSCRIPTION_IN_USE. "
-              + "현재 로그인 세션의 FID만 교체하고 다른 세션은 유지. 등록 성공은 발송·수신 완료를 의미하지 않음.\n\n"
+          "동일 계정+FID 재등록은 기존 ID와 생성 시각을 유지. 다른 계정의 활성 FID는 409 SUBSCRIPTION_IN_USE. 현재 로그인 세션의 FID만"
+              + " 교체하고 다른 세션은 유지. 등록 시 기존 발행 빈자리 탐색도 접수한다. recommendation_opt_in=N도 대상이며 등록 성공은"
+              + " 발송·수신 완료를 의미하지 않음.\n\n"
               + "- 로그인 세션 — 본인 데이터\n"
               + "- X-CSRF-Token 필수. 만료 시각을 알 수 없어 expiresAt은 null.",
       externalDocs =

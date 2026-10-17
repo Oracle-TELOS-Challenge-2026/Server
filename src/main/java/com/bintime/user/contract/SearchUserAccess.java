@@ -12,8 +12,9 @@ public interface SearchUserAccess {
   /** 자연어를 포함하는 자유로운 JSON 전체. 원본을 특정 선호 DTO로 변환하지 않는다. */
   String explicitPreferences(String userId);
 
-  /** 앱 전체 맞춤 알림에 명시적으로 동의한 계정만 ID 순으로 조회한다. 위치는 검사하지 않는다. */
+  /** CUSTOMER/OWNER 계정을 ID 순으로 조회한다. 기존 recommendation_opt_in 값과 위치는 검사하지 않는다. */
   List<String> personalizedCandidates(String after, int limit);
 
-  boolean personalizedNotificationsEnabled(String userId);
+  /** 현재 계정 존재·역할만 확인한다. 실제 발송에는 활성 기기와 벡터 검증도 필요하다. */
+  boolean personalizedCandidateExists(String userId);
 }

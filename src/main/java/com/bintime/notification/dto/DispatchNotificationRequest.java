@@ -48,8 +48,8 @@ public record DispatchNotificationRequest(
         OffsetDateTime expiresAt,
     @Schema(
             description =
-                "알림 자격 근거. 생략은 기존 WAITLIST. PERSONALIZED는 matches=[]이며 앱 전체 동의·선호 벡터를 사용하고 위치는 검사하지"
-                    + " 않는다.",
+                "알림 자격 근거. 생략은 기존 WAITLIST. PERSONALIZED는 matches=[]이며 활성 기기·선호 벡터를 사용하고 기존 동의 플래그와"
+                    + " 위치는 검사하지 않는다.",
             allowableValues = {"WAITLIST", "PERSONALIZED"})
         String audience) {
   public DispatchNotificationRequest {

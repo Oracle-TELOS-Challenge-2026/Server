@@ -103,4 +103,9 @@ store MVP는 하나의 DB 트랜잭션에서 AVAILABLE → BOOKED로 확정하�
 
 사용자 벡터 입력은 `user_accounts.preferences_json`의 자유로운 JSON 문자열 전체다. 내부 `UserPreferenceService`가 읽기/저장과 변경 이벤트를 제공하고 search가 OpenAI 호출/비동기 갱신/Oracle 벡터 저장을 맡는다. U-08은 categories·keywords·maxPrice·text와 사용자 버전을 저장하고 같은 트랜잭션에서 변경 이벤트를 발행해 VECTOR 작업을 등록한다. 200 응답은 선호 저장·작업 접수 성공이며 벡터 생성 완료는 아니다. 동일 입력은 기존 벡터를 재사용하고 OpenAI 일시 장애는 worker에서 재시도한다. 다른 사용자의 선호 원문이나 벡터를 공개하는 새 HTTP API는 추가하지 않았다. 세부 오류와 마이그레이션/운영 명령은 [search 안내](../search.md)를 따른다.
 
+## 기본 N 계정의 맞춤 알림
+
+현재 시연은 recommendation_opt_in=N/Y와 동의 시각에 관계없이 CUSTOMER/OWNER를 후보에 포함한다. 활성 기기·유효한 미래 VACANCY·선호 유사도 기준(기본 0.5 이상)은 유지하며 위치·매장별 대기는 필요 없다. U-10/U-11은 기존 저장값 호환 API로 deprecated이며 false 저장도 발송을 차단하지 않는다. N-04 FID 등록은 기존 빈자리 탐색을 함께 접수하고 N-05 구독 해제는 해당 기기의 수신을 중단한다. HTTP 경로·응답 필드는 유지한다.
+
+N-06의 audience 생략/null은 WAITLIST이며 matches는 1~20개다. PERSONALIZED는 matches=[]이고 현재 계정·활성 기기·슬롯·벡터를 재검증한다. 두 경로 모두 공개 type=VACANCY_MATCHED이며 대기 없는 알림의 target.waitlistIds=[]를 허용한다. 사용자+슬롯 중복 방지는 공통이다.
 C-08은 최근 고객 TEXT의 예약 의사·한국 날짜/시간·시술을 분석한다. 저장된 원문·발송 시각을 사용하고 세션·CSRF·참여 권한을 검증한다. 예약·제안·푸시·DB 변경은 만들지 않는다. [계약과 프런트 수정 위치](../chat-booking-suggestion.md)를 따른다. 예시는 `contracts/chat-booking-suggestion.json`에 별도로 보관한다.

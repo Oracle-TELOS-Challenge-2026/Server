@@ -55,7 +55,7 @@ public class SearchUserAccessAdapter implements SearchUserAccess {
   }
 
   @Override
-  public boolean personalizedNotificationsEnabled(String userId) {
-    return preferences.personalizedNotificationsEnabled(userId);
+  public boolean personalizedCandidateExists(String userId) {
+    return preferences.personalizedCandidateExists(userId);
   }
 }
