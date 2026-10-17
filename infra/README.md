@@ -164,7 +164,7 @@ Spring의 `prod` 프로필은 로컬 `.env`를 직접 읽지 않는다. 서버�
 `.env`는 Git·Docker 이미지에 포함하지 않는다.
 
 필요할 때 저장소 루트에서 `bash deploy.sh`를 실행한다. Docker Desktop과 Java 21이 필요하다.
-스크립트는 서버 인증서 존재 확인, 빌드·테스트, ARM64 이미지와 인프라 설정 전송, 자동 갱신 타이머 활성화, 서버 설정에 따른 FCM 선택, Compose 설정 검증, 컨테이너 실행, Nginx 검증·리로드, 내부·외부 HTTPS 상태 확인을 수행한다.
+스크립트는 Docker와 병합 충돌 확인, 서버 인증서 존재 확인, 빌드·테스트, ARM64 이미지와 인프라 설정 전송, 자동 갱신 타이머 활성화, 서버 설정에 따른 FCM 선택, Compose 설정 검증, 컨테이너 실행, Nginx 검증·리로드, 내부·외부 HTTPS 상태 확인을 수행한다. 호출한 위치와 관계없이 스크립트가 있는 저장소에서 빌드한다. 이미지에 현재 커밋의 `org.opencontainers.image.revision`을 기록하며 미커밋 변경이 있으면 `-dirty`를 붙인다. 전송한 이미지 ID·revision과 실행 중인 앱 컨테이너가 다르면 성공 처리하지 않는다. 실제 배포 없이 스크립트 흐름을 확인하려면 `python3 infra/test-deploy.py`를 실행한다.
 DB 마이그레이션과 Elasticsearch 최초 색인은 자동 실행하지 않는다. 앱 쓰기를 중지하고 백업한 뒤 해당 환경에 필요한 SQL을 먼저 적용한다. search v1 환경은 [v2 전환 절차](../docs/search-schema-v2.md), store는 migration `06`·`07`, FCM은 `002`·`003`, 채팅은 [채팅 DB 안내](../docs/chatting-db.md)를 확인한다. 최초 ES 인덱스/alias 생성은 [초기 색인 안내](../docs/search.md#store-카탈로그-연결-및-초기-색인)에 따라 별도 수행한다.
 최초 인증서 발급을 마친 서버를 대상으로 한다. 인증서가 없으면 설정을 덮어쓰기 전에 중단한다.
 SSH 키 기본 경로는 `~/Downloads/team3/team-3-1.key`이며 다른 PC에서는 `BINTIME_SSH_KEY=/키/경로 bash deploy.sh`로 지정한다.

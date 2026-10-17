@@ -108,7 +108,9 @@ Idempotency-Key: ...
 
 ## DB·배포 순서
 
-**기존 운영 DB는 새 앱 배포 전에** `infra/oracle/migrations/010-vacancy-booking-approval.sql`을 ADMIN 콘솔에서 전체 한 문장으로 실행한다. 대상은 BINTIME_APP으로 고정한다. 앱 쓰기를 중지하고 백업 후 적용하며 Oracle DDL은 자동 커밋이다. 이 파일은 작성만 했으며 운영에 적용하지 않았다.
+**기존 DB는 새 앱 배포 전에** `infra/oracle/migrations/010-vacancy-booking-approval.sql`을 ADMIN 콘솔에서 전체 한 문장으로 실행한다. 대상은 BINTIME_APP으로 고정한다. 앱 쓰기를 중지하고 백업 후 적용하며 Oracle DDL은 자동 커밋이다.
+
+2026-10-17 운영 BINTIME_APP에는 사용자 승인 후 010을 적용·검증했다. 앱 쓰기를 잠시 중지하고 변경 대상 두 테이블의 DDL·CSV를 서버 `/home/opc/bintime/backups/vacancy-010-20261017T014601Z`에 백업했다(디렉터리 700, 파일 600). 적용 전후 슬롯 53건·예약 25건이 동일하고, 컬럼·상태 제약·새 인덱스 3개와 기존 대기 유일성 제약 제거를 확인했다. 기존 이미지의 앱을 복구하고 HTTPS readiness UP을 확인했다. 새 앱 배포는 아직 실행하지 않았다. 이 운영 DB에는 010을 다시 실행할 필요 없고, 다른 환경은 별도로 적용 상태를 확인한다.
 
 - store_slots.instant_booking CHAR(1) DEFAULT 'Y' NOT NULL과 Y/N 체크를 추가한다. Java도 CHAR로 명시해 시작 검증의 타입 불일치를 막는다.
 - store_reservations 상태 CHECK를 확장한다.
