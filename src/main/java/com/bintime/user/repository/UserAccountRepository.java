@@ -55,8 +55,7 @@ public class UserAccountRepository {
 
   public List<String> personalizedCandidates(String after, int limit) {
     return jdbc.sql(
-            "SELECT user_id FROM user_accounts WHERE recommendation_opt_in='Y' "
-                + "AND recommendation_consent_at IS NOT NULL AND role_code IN ('CUSTOMER','OWNER') "
+            "SELECT user_id FROM user_accounts WHERE role_code IN ('CUSTOMER','OWNER') "
                 + "AND (:after IS NULL OR user_id>:after) ORDER BY user_id FETCH FIRST "
                 + limit
                 + " ROWS ONLY")
@@ -65,10 +64,9 @@ public class UserAccountRepository {
         .list();
   }
 
-  public boolean personalizedNotificationsEnabled(String userId) {
+  public boolean personalizedCandidateExists(String userId) {
     return jdbc.sql(
-                "SELECT COUNT(*) FROM user_accounts WHERE user_id=:id AND recommendation_opt_in='Y'"
-                    + " AND recommendation_consent_at IS NOT NULL AND role_code IN"
+                "SELECT COUNT(*) FROM user_accounts WHERE user_id=:id AND role_code IN"
                     + " ('CUSTOMER','OWNER')")
             .param("id", userId)
             .query(Integer.class)

@@ -47,7 +47,7 @@ public class SearchConfiguration {
         throw SearchFailure.unavailable();
       }
 
-      public boolean personalizedNotificationsEnabled(String userId) {
+      public boolean personalizedCandidateExists(String userId) {
         throw SearchFailure.unavailable();
       }
     };

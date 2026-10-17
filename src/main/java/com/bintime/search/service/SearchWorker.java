@@ -178,7 +178,7 @@ public class SearchWorker {
   }
 
   private void enqueuePersonalized(String user, Slot slot) {
-    if (!users.personalizedNotificationsEnabled(user) || !users.notificationsEnabled(user)) return;
+    if (!users.personalizedCandidateExists(user) || !users.notificationsEnabled(user)) return;
     db.enqueue(
         "NOTIFY",
         db.encode(
@@ -187,7 +187,7 @@ public class SearchWorker {
   }
 
   private void personalizedUser(String user, String work, String owner) {
-    if (!users.personalizedNotificationsEnabled(user) || !users.notificationsEnabled(user)) return;
+    if (!users.personalizedCandidateExists(user) || !users.notificationsEnabled(user)) return;
     String cursor = null;
     do {
       renew(work, owner);
@@ -294,8 +294,8 @@ public class SearchWorker {
     Slot s = valid.getFirst();
     if (!Objects.equals(s.publicationVersion(), delivery.publicationVersion())) return;
     if ("PERSONALIZED".equals(delivery.audience())) {
-      if (!"VACANCY".equals(s.source())
-          || !users.personalizedNotificationsEnabled(delivery.userId())) return;
+      if (!"VACANCY".equals(s.source()) || !users.personalizedCandidateExists(delivery.userId()))
+        return;
       if (!similarity.matches(delivery.userId(), s)) return;
       notifications.dispatch(
           new DispatchNotificationRequest(

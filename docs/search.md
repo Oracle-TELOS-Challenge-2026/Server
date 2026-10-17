@@ -224,10 +224,10 @@ SEARCH_ELASTICSEARCH_URL=http://localhost:9200 ./gradlew test --tests '*StoreCat
 
 ## 예약 대기 없는 맞춤 빈자리 알림
 
-사용자 공개 계약 `SearchUserAccess.personalizedCandidates`로 앱 전체 맞춤 알림 동의가 있는 CUSTOMER/OWNER를 ID 기준 100명씩 조회한다. 활성 FID 구독, 현재 유효한 VACANCY와 발행 버전, 선호 벡터 코사인 유사도 기준(기본 0.5 이상)을 확인한다. **시연에서는 저장된 사용자 위치와 거리를 조회하거나 필터링하지 않는다.** 매장별 알림 신청이나 ACTIVE 대기는 필요하지 않다. 일반 REGULAR 슬롯 생성은 이 경로의 알림 대상이 아니다.
+`SearchUserAccess.personalizedCandidates`는 CUSTOMER/OWNER 전체를 ID 기준 100명씩 조회한다. `recommendation_opt_in=N/Y`와 동의 시각을 후보·접수·FCM 제출 조건으로 사용하지 않는다. `personalizedCandidateExists`는 현재 계정 존재와 역할만 재검증한다. 활성 세션의 FID 구독, 유효한 미래 VACANCY와 현재 발행 버전, 선호 벡터 코사인 유사도 기준(기본 0.5 이상)은 유지한다. 프로필 위치·매장별 대기는 필요 없다. REGULAR 슬롯은 새 맞춤 경로에서 제외한다.
 
-기존 WAITLIST 경로는 대기 동의·시간·가격·거리·지정 매장 등 필수 조건과 벡터 기준을 유지한다. 앱 전체 동의는 이와 독립적이며 기본 false다. 설정 API·동의 DB 마이그레이션·실행 순서는 [사용자 설정 안내](user-profile.md#맞춤-빈자리-알림-동의-u-10u-11)를 따른다.
+SLOT 소비 시 기존 WAITLIST와 PERSONALIZED 경로를 각각 탐색한다. WAITLIST의 명시적 동의·시간·가격·거리·지정 매장 조건은 유지한다. N 계정이 이 별도의 무대기 경로에서 추천될 수 있다. 사용자+슬롯 중복 방지는 공통으로 적용하며 알림 생성과 기기별 QUEUED 이력은 notification이 함께 저장한다.
 
-SLOT 소비 시 두 경로를 탐색한다. 동의 활성화 이벤트 `NotificationPreferencesChanged`와 동의 사용자의 `UserPreferencesChanged`는 `PERSONALIZE` 작업을 같은 트랜잭션에 기록하고 기존 발행 빈자리도 탐색한다. NOTIFY와 내부 알림 요청에는 `audience=PERSONALIZED`, `matches=[]`를 사용한다. 기존 작업/요청의 audience 생략은 WAITLIST로 해석한다. notification은 접수·FCM 직전에도 동의·슬롯·구독·벡터를 재검증하며 사용자+슬롯 중복 방지는 두 경로에 공통으로 적용한다. 두 경로가 동시에 일치하면 먼저 저장된 알림의 자격 근거를 전달 시 재검증한다.
+선호 변경의 UserPreferencesChanged는 VECTOR와 PERSONALIZE 작업을 저장한다. FID 등록의 PushSubscriptionRegistered는 구독 연결과 같은 트랜잭션에 PERSONALIZE를 등록한다. 따라서 선호를 먼저 저장하고 나중에 기기를 등록해도 기존 발행 빈자리를 탐색한다. 기기 등록 재요청과 기존 NotificationPreferencesChanged(true)의 재탐색은 사용자+슬롯 단위로 중복 알림을 만들지 않는다. 구독 등록의 작업 접수 실패는 구독 변경과 함께 롤백된다.
 
-벡터가 없거나 오래되면 기존 VECTOR/STORE_VECTOR 생성 작업을 요청하고 NOTIFY를 보류한다. OpenAI 오류를 무시하고 보내지 않는다. 전체 동의와 활성 기기가 있어도 선호가 비어 있거나 점수가 기준 미만이면 발송하지 않는다. 선호·슬롯의 카테고리 문자열을 동일성 비교하는 방식으로 대체하지 않는다. 이 경로에는 대기 시간대·최대 가격·지정 매장 필터가 없으며 프로필 선호 JSON은 벡터 입력으로 사용한다.
+NOTIFY의 audience=PERSONALIZED는 matches=[]를 사용한다. 생략한 기존 audience는 WAITLIST로 해석한다. 벡터가 없거나 오래되면 기존 VECTOR/STORE_VECTOR 생성을 요청하고 보류하며, 유사도 미달·빈 선호·비활성 기기·무효 슬롯은 발송하지 않는다. 기존 설정 API false는 맞춤 알림을 중단하지 않으며 수신 중단은 기기 구독 해제를 사용한다([사용자 안내](user-profile.md#맞춤-빈자리-알림-동의-u-10u-11)).

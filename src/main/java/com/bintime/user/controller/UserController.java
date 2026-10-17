@@ -431,8 +431,9 @@ public class UserController {
 
   @Operation(
       operationId = "getMyNotificationPreferences",
+      deprecated = true,
       summary = "U-10 · 맞춤 빈자리 알림 설정 조회",
-      description = "예약 대기·특정 매장 설정과 별개의 앱 전체 맞춤 빈자리 알림 동의. 기본 false. 시연 경로는 위치·거리를 검사하지 않는다.")
+      description = "기존 설정값 조회용 호환 API. 기본 false이며 현재 발송 판정에는 사용하지 않는다. N/false도 맞춤 알림 후보에 포함한다.")
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(responseCode = "200", description = "현재 동의와 사용자 버전", useReturnTypeSchema = true)
   @ApiResponse(responseCode = "401", description = "로그인 필요 또는 사용자 없음", content = @Content)
@@ -448,11 +449,13 @@ public class UserController {
 
   @Operation(
       operationId = "saveMyNotificationPreferences",
+      deprecated = true,
       summary = "U-11 · 맞춤 빈자리 알림 동의 변경",
       description =
-          "personalizedVacancyEnabled=true이면 예약 대기 없이 선호 벡터 기반 알림을 받는다. 현재 시연은 위치·거리를 검사하지 않는다. "
-              + "활성 기기 구독도 필요하다. 활성화 시 기존 발행 빈자리도 탐색한다. expectedVersion은 사용자 최상위 버전이며 변경 시 1 증가한다. "
-              + "동의 해제는 이후 접수·푸시 제출을 차단하며 이미 제출된 푸시는 회수하지 않는다.")
+          "기존 설정 저장용 호환 API. 저장값 true/false는 현재 맞춤 알림 발송을 허용하거나 차단하지 않는다. "
+              + "신규 기본 N 계정도 활성 FID·유효한 빈자리·선호 유사도 기준을 통과하면 알림을 받는다. 위치는 검사하지 않는다. "
+              + "true 저장은 기존 빈자리 재탐색 요청도 유지한다. 수신 중단은 기기 구독 해제 API를 사용한다. "
+              + "expectedVersion은 사용자 최상위 버전이며 변경 시 1 증가한다.")
   @SecurityRequirement(name = "sessionCookie")
   @ApiResponse(responseCode = "200", description = "설정 저장 및 탐색 작업 접수", useReturnTypeSchema = true)
   @ApiResponse(responseCode = "400", description = "입력 오류", content = @Content)

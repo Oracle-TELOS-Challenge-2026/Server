@@ -59,7 +59,7 @@ public class PersonalizationService {
           if (n == 0)
             db.jdbc().update("insert into search_user_vector(user_id,revision) values(?,1)", user);
           db.enqueue("VECTOR", user, clock.millis());
-          if (users.personalizedNotificationsEnabled(user))
+          if (users.personalizedCandidateExists(user))
             db.enqueue("PERSONALIZE", user, clock.millis());
         });
   }
@@ -67,6 +67,16 @@ public class PersonalizationService {
   @EventListener
   public void notificationPreferencesChanged(NotificationPreferencesChanged event) {
     if (!event.enabled()) return;
+    tx.executeWithoutResult(
+        t -> {
+          db.lockUser(event.userId());
+          db.enqueue("PERSONALIZE", event.userId(), clock.millis());
+        });
+  }
+
+  @EventListener
+  public void pushSubscriptionRegistered(
+      com.bintime.notification.contract.PushSubscriptionRegistered event) {
     tx.executeWithoutResult(
         t -> {
           db.lockUser(event.userId());
@@ -281,10 +291,18 @@ public class PersonalizationService {
     } catch (Exception e) {
       throw SearchFailure.bad("INVALID_PREFERENCES_JSON");
     }
-    return value == null
-        || value.isNull()
-        || value.isContainer() && value.isEmpty()
-        || value.isString() && value.asText().isBlank();
+    return emptyValue(value);
+  }
+
+  private boolean emptyValue(JsonNode value) {
+    if (value == null || value.isNull()) return true;
+    if (value.isString()) return value.asText().isBlank();
+    if (value.isContainer()) {
+      // 신규 계정의 categories=[], keywords=[], maxPrice=null도 입력한 선호로 보지 않는다.
+      for (JsonNode child : value) if (!emptyValue(child)) return false;
+      return true;
+    }
+    return false;
   }
 
   private record Generation(Snapshot snapshot, String owner) {}

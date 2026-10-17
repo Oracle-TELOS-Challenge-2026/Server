@@ -136,7 +136,7 @@ public class NotificationService implements SearchNotificationGateway {
         });
   }
 
-  /** Each audience rechecks its own consent and the current slot before enqueue and FCM. */
+  /** Recheck the current account, slot and audience requirements before enqueue and FCM. */
   public Eligible eligible(DispatchNotificationRequest request) {
     if (request == null
         || (request.expiresAt() != null
@@ -149,9 +149,9 @@ public class NotificationService implements SearchNotificationGateway {
             .orElse(null);
     if (slot == null) return null;
     if ("PERSONALIZED".equals(request.audience())) {
-      // 맞춤 알림은 예약 대기나 위치 없이 앱 전체 동의와 선호 벡터로 재검증한다.
+      // 맞춤 알림은 기존 동의 플래그·예약 대기·위치 없이 현재 계정과 선호 벡터로 재검증한다.
       return "VACANCY".equals(slot.source())
-              && users.personalizedNotificationsEnabled(request.userId())
+              && users.personalizedCandidateExists(request.userId())
               && similarity.matches(request.userId(), slot)
           ? new Eligible(slot, List.of())
           : null;

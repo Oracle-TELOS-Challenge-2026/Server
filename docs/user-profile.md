@@ -78,19 +78,14 @@ U-04~U-08을 구현한다. 모든 요청은 카카오 로그인으로 발급된 
 
 ## 맞춤 빈자리 알림 동의 (U-10/U-11)
 
-특정 매장이나 예약 대기를 등록하지 않아도, 앱 전체 맞춤 알림에 동의한 사용자는 선호 벡터가 유사한 발행 빈자리 알림을 받을 수 있다. **현재 시연에서는 사용자 프로필 위치·거리·반경을 전혀 검사하지 않는다.** 사용자 선호 벡터와 매장·시술 설명 벡터의 코사인 유사도가 기본 0.5 이상이어야 한다. 기존 예약 대기의 시간·가격·거리 조건 검증은 유지한다.
+현재 시연은 `recommendation_opt_in=N/Y`, 동의 시각 유무와 무관하게 CUSTOMER/OWNER 전체를 맞춤 알림 후보로 조회한다. 특정 매장·예약 대기·사용자 프로필 위치는 필요 없다. 실제 접수·FCM 제출에는 현재 계정, 활성 로그인 세션의 FID 구독, 유효한 미래 VACANCY, 선호 벡터 코사인 유사도 기준(기본 0.5 이상)이 필요하다. 선호가 없거나 유사도가 낮으면 보내지 않는다. 기존 WAITLIST 경로의 시간·가격·거리 등 조건은 유지한다.
 
-기존 DB에는 배포 전 [008-personalized-notifications.sql](../infra/oracle/migrations/008-personalized-notifications.sql)전체를 ADMIN 콘솔에서 하나의 PL/SQL 문장으로 실행한다. 변경 대상은 `BINTIME_APP`으로 명시되어 있다. 기존 사용자의 기본값은 동의하지 않음(false)이다. 구독 등록만으로 전체 맞춤 알림 동의를 대신하지 않는다.
+1. 로그인하고 선호도를 저장한다. `OPENAI_API_KEY`와 search worker가 필요하다.
+2. `POST /api/v1/notifications/push-subscriptions`로 현재 기기의 FID를 등록한다.
+3. 등록과 같은 트랜잭션에서 기존 발행 빈자리의 PERSONALIZE 탐색 작업을 접수한다. 새 빈자리 발행·선호 변경도 탐색을 수행한다.
 
-1. 로그인 후 선호도를 저장한다. `OPENAI_API_KEY`와 search worker가 필요하다.
-2. 현재 로그인 세션에서 FID를 `POST /api/v1/notifications/push-subscriptions`로 등록한다.
-3. `GET /api/v1/users/me/notification-preferences`로 `personalizedVacancyEnabled`, `version`을 조회한다.
-4. 같은 경로에 PUT으로 동의를 저장한다. 세션 쿠키와 `X-CSRF-Token`이 필요하다.
+기존 계정이나 신규 기본 N 계정을 Y로 일괄 변경할 필요가 없다. 수신 중단은 기존 `DELETE /api/v1/notifications/push-subscriptions/{subscriptionId}`를 사용한다. 해당 기기 구독을 해제하므로 채팅 푸시에도 적용된다. 재배포·로그아웃 뒤에는 로그인과 FID 등록을 다시 수행한다.
 
-```json
-{"personalizedVacancyEnabled":true,"expectedVersion":2}
-```
+U-10 GET / U-11 PUT `/api/v1/users/me/notification-preferences`는 하위 호환을 위해 유지하지만 OpenAPI에서 deprecated로 표시한다. 응답 `personalizedVacancyEnabled`는 기존 DB 저장값이며 실제 발송 가능 여부가 아니다. false/N이어도 후보에 포함하고, PUT false로 저장해도 발송을 차단하지 않는다. true 저장 시 기존 빈자리 재탐색은 유지한다. 세션·CSRF·공유 expectedVersion/409 검증은 기존과 동일하다.
 
-`expectedVersion`에는 GET의 현재 버전을 보낸다(예시의 2를 고정해서 사용하지 않는다). 응답 `success.data`는 `{"personalizedVacancyEnabled":true,"version":3}`이다. 버전은 이름·선호도 변경과 공유하며 불일치는 409다. 필수 boolean/양의 정수 누락·형식 오류는 400, 미인증·없는 계정은 401, CSRF 오류는 403이다. OWNER도 동일하게 이용할 수 있다.
-
-활성화와 선호 변경은 기존에 발행된 유효한 VACANCY도 비동기로 탐색한다. 200 응답은 설정 저장·작업 접수를 뜻하며 푸시 제출 완료를 의미하지 않는다. 탐색 시 활성 기기 구독이 있어야 하므로 FID를 먼저 등록한다. 동의 해제는 같은 PUT에 false를 보내며 이후 맞춤 알림 접수와 FCM 제출을 차단한다. 이미 외부에 제출된 푸시는 회수하지 않는다. 별도로 동의한 예약 대기 알림은 계속 작동한다.
+기존 [008 마이그레이션](../infra/oracle/migrations/008-personalized-notifications.sql)의 컬럼·체크 제약은 유지하며 이번 정책 변경을 위한 추가 SQL은 없다. 컬럼은 Oracle CHAR(1)이고 JPA도 SqlTypes.CHAR로 매핑한다. ddl-auto=validate는 유지한다.

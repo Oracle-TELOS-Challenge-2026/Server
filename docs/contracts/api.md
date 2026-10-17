@@ -108,3 +108,9 @@ C-08은 최신 고객 TEXT를 기준으로 최근 고객 메시지 최대 5개�
 ### 빈자리 모집의 예약 방식
 
 ST-15 instantBooking=false이면 ST-06은 선점 없는 PENDING 신청을 생성한다. ST-21 `GET /api/v1/owner/stores/{storeId}/reservation-requests`는 신청 시각순 목록을 반환하고 ST-13의 CONFIRMED/REJECTED로 사장님이 선택·거절한다. 나머지 신청 마감과 시작 시각 만료, 알림 정책 필드, DB 010 적용 순서는 [빈자리 예약 방식](../vacancy-booking-approval.md)을 따른다.
+
+## 기본 N 계정의 맞춤 알림
+
+현재 시연은 recommendation_opt_in=N/Y와 동의 시각에 관계없이 CUSTOMER/OWNER를 후보에 포함한다. 활성 기기·유효한 미래 VACANCY·선호 유사도 기준(기본 0.5 이상)은 유지하며 위치·매장별 대기는 필요 없다. U-10/U-11은 기존 저장값 호환 API로 deprecated이며 false 저장도 발송을 차단하지 않는다. N-04 FID 등록은 기존 빈자리 탐색을 함께 접수하고 N-05 구독 해제는 해당 기기의 수신을 중단한다. HTTP 경로·응답 필드는 유지한다.
+
+N-06의 audience 생략/null은 WAITLIST이며 matches는 1~20개다. PERSONALIZED는 matches=[]이고 현재 계정·활성 기기·슬롯·벡터를 재검증한다. 두 경로 모두 공개 type=VACANCY_MATCHED이며 대기 없는 알림의 target.waitlistIds=[]를 허용한다. 사용자+슬롯 중복 방지는 공통이다.
