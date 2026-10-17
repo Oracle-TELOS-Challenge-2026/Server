@@ -111,9 +111,9 @@ class ApiContractTests {
     JsonNode allDoc = getDoc("all");
     JsonNode publicDoc = getDoc("public");
     JsonNode internalDoc = getDoc("internal");
-    assertThat(operationCount(publicDoc)).isEqualTo(48);
+    assertThat(operationCount(publicDoc)).isEqualTo(50);
     assertThat(operationCount(internalDoc)).isEqualTo(2);
-    assertThat(operationCount(allDoc)).isEqualTo(50);
+    assertThat(operationCount(allDoc)).isEqualTo(52);
     var operationIds = new HashSet<String>();
 
     for (JsonNode contract : contracts()) {
