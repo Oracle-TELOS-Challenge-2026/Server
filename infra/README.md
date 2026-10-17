@@ -132,6 +132,8 @@ Oracle Free와 Autonomous DB는 관리 기능·접속 방식 등이 다르므로
 
 ## FCM 알림 설정
 
+채팅·매칭 공통 발송 이력을 사용하는 새 앱 배포 전에는 기존 로컬·OCI DB의 `BINTIME_APP`에 [009-notification-push-history.sql](oracle/migrations/009-notification-push-history.sql)을 적용한다. 테이블 1개와 인덱스 2개만 추가하며 기존 데이터는 변경하지 않는다. 신규 `ddl.sql`과 `local-setup/01ddl.sql`에는 포함되어 있다. 기록 상태와 조회 SQL은 [발송 이력 안내](../docs/push-history.md)를 참고한다.
+
 기존 DB에는 `002-notification-subscriptions.sql`, `003-notification-delivery.sql`을 순서대로 적용한다. 파일은 `infra/oracle/migrations/`에 있으며 재실행할 수 있다. 기존 Web Push 구독은 비활성화되므로 프런트에서 로그인 세션으로 FID를 다시 등록해야 한다.
 
 기본값 `FCM_ENABLED=false`에서는 외부 전송을 하지 않고 매칭 알림의 DB 발송 대기열을 보존한다. 채팅 푸시는 비활성화 중 생긴 요청을 보관·재생하지 않는다. 로컬에서 실제 전송을 켤 때 `.env`의 `FCM_PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`(저장소 밖 서비스 계정 JSON의 절대 경로), `FCM_ENABLED=true`를 설정한다. Windows 경로는 `/`를 사용하고 Java Properties가 읽는 비 ASCII 문자는 Unicode escape로 작성한다. 키 파일은 Git이나 이미지에 포함하지 않는다.

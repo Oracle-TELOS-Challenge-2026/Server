@@ -182,6 +182,8 @@ def main():
                      '003-notification-delivery.sql', '008-personalized-notifications.sql']:
             load(split, MIGRATIONS / name)
         load(unified, ROOT / 'infra/oracle/ddl.sql')
+        load(unified, MIGRATIONS / '004-chatting.sql')
+        load(unified, MIGRATIONS / '08-chat-booking-proposals.sql')
         snapshots = {key: snapshot(account) for key, account in zip(['historical', 'split', 'unified'], accounts)}
         # user_tab_columns includes physical byte sizes and BYTE/CHAR semantics, not column order.
         differences = compare(snapshots['historical'], snapshots['unified'], 'All migrations -> unified')
@@ -193,7 +195,7 @@ def main():
             'NAME': 'IX_STORE_EVENT_QUEUE'}, sort_keys=True, ensure_ascii=False)]}}
         assert not differences, 'Unified schema differs from full migration chain'
         assert split_diff == expected_extra, 'Unexpected difference from current split installation'
-        assert len(snapshots['unified']['tables']) == 25
+        assert len(snapshots['unified']['tables']) == 29
         assert {int(row['BUCKET_ID']) for row in snapshots['unified']['locks']} == set(range(256))
         invalid = sql("SELECT COUNT(*) FROM user_objects WHERE status <> 'VALID';", unified).strip()
         assert invalid == '0', 'Invalid schema objects: ' + invalid
@@ -204,7 +206,7 @@ def main():
                 assert sql(f'SELECT COUNT(*) FROM {name};', unified).strip() == '0', name
         args.report.write_text(json.dumps({'sources_sha256': source_hashes, 'snapshots': snapshots, 'historical_difference': differences,
                                           'split_difference': split_diff}, ensure_ascii=False, indent=2) + '\n')
-        print('25 tables, 256 exact lock buckets, valid objects, no business seed rows. Report: ' + str(args.report), flush=True)
+        print('29 tables, 256 exact lock buckets, valid objects, no business seed rows. Report: ' + str(args.report), flush=True)
         if args.run_store_tests:
             # Existing StoreApiTests permits only its dedicated schema prefix.
             name = 'BT_STORE_' + secrets.token_hex(6).upper()
