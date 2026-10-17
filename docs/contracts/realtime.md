@@ -42,6 +42,7 @@ store 발행 → search 매칭 → 알림 접수·발송의 연결과 통합 테
 - N-06의 HTTP 호출은 `X-Internal-Token`과 `notification.internal-token`이 일치해야 한다. 빈 서버 설정은 거절한다. 검색 모듈은 `SearchNotificationGateway`를 직접 호출한다. 외부 고객의 임의 발송 API는 없다.
 - 사용자+슬롯당 알림을 한 번 저장한다. 무효 후보는 200 SKIPPED, 접수·중복 접수는 202 QUEUED다. FCM 제출 직전 현재 대기·슬롯·세션 구독을 다시 확인한다. 목록의 availability도 현재 슬롯을 기준으로 계산하며 외부 확인 실패 시 UNKNOWN이다.
 - 기기별 작업을 DB에 보존하고 5초 간격으로 처리한다. 사용자당 발송 간격 기본 1초(`notification.delivery.minimum-interval-seconds`)는 지연 처리하며 알림을 버리지 않는다. FCM 429/5xx·통신 실패는 Retry-After 및 지수 지연을 적용해 최대 5회 시도한다. UNREGISTERED만 구독을 비활성화하며 일반 INVALID_ARGUMENT는 비활성화하지 않는다.
+- 채팅·매칭 공통 생성/기기별 발송 이력은 `notification_push_history`에 누적한다. [발송 이력 안내](../push-history.md)를 따른다. 기존 REST·SSE·WebSocket 응답과 N-01 목록은 변경하지 않는다.
 - 발송 성공은 FCM 접수이며 기기 수신·읽음·예약 확정을 뜻하지 않는다. 통신 응답 유실·프로세스 중단 후 재시도는 같은 notificationId를 사용하지만 FCM 전송 자체의 정확히 한 번 처리를 보장하지 않는다. 클라이언트도 notificationId로 중복을 제거해야 한다.
 - FCM payload는 `message.fid`, notification title/body, 문자열 data.url=`/customer/waitlist`, data.notificationId를 포함한다. HTTPS 프론트의 동일 origin 링크만 webpush.fcm_options.link에 넣으며 로컬 HTTP에서는 해당 링크 필드를 생략한다.
 

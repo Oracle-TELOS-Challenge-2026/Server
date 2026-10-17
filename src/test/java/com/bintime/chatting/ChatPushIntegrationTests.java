@@ -17,6 +17,7 @@ import com.bintime.chatting.push.ChatPushNotifications;
 import com.bintime.chatting.repository.ChatRepository;
 import com.bintime.chatting.service.ChatService;
 import com.bintime.notification.fcm.FcmClient;
+import com.bintime.notification.repository.NotificationRepository;
 import com.bintime.notification.subscription.NotificationSubscriptions;
 import com.bintime.store.contract.StoreReservationPort;
 import com.bintime.user.security.BintimePrincipal;
@@ -147,6 +148,26 @@ class ChatPushIntegrationTests {
         .singleElement()
         .satisfies(attempt -> assertThat(attempt.fid()).isEqualTo("customer-fid"));
     assertThat(count("chatting_messages")).isEqualTo(2);
+    await(() -> countHistory("ACCEPTED") == 2);
+    assertThat(countHistory("QUEUED")).isEqualTo(2);
+    assertThat(countHistory("RUNNING")).isEqualTo(2);
+    assertThat(count("notification_push_history")).isEqualTo(6);
+    assertThat(
+            db.queryForList(
+                "select distinct notification_type from notification_push_history", String.class))
+        .containsExactly("CHAT_MESSAGE");
+    assertThat(
+            db.queryForList(
+                "select body_text from notification_push_history where notification_id=?",
+                String.class,
+                first.data().id()))
+        .containsOnly("예약 문의입니다");
+    assertThat(
+            db.queryForList(
+                "select user_id from notification_push_history where notification_id=?",
+                String.class,
+                first.data().id()))
+        .containsOnly("owner");
   }
 
   @Test
@@ -159,6 +180,7 @@ class ChatPushIntegrationTests {
 
     assertThat(committed.events).isEmpty();
     assertThat(count("chatting_messages")).isZero();
+    assertThat(count("notification_push_history")).isZero();
     verify(fcm, never())
         .sendPush(anyString(), anyString(), anyString(), anyMap(), anyString(), any());
   }
@@ -180,6 +202,41 @@ class ChatPushIntegrationTests {
     assertThat(chats.history("owner", room, null, 30).items()).containsExactly(result.data());
     assertThat(accepted).isEmpty();
     assertThat(attempts).allSatisfy(attempt -> assertThat(attempt.transactionActive()).isFalse());
+    await(() -> countHistory("QUEUED") == 2);
+    assertThat(countHistory("RUNNING")).isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select error_code from notification_push_history where error_code is not null",
+                String.class))
+        .isEqualTo("DEPENDENCY_UNAVAILABLE");
+  }
+
+  @Test
+  void missingHistoryStorageRollsBackTheMessageBeforeAnyPush() {
+    db.execute("drop table notification_push_history");
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> chats.send("customer", room, new SendChatMessageRequest("no-audit", "저장 안 됨")))
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    assertThat(count("chatting_messages")).isZero();
+    verify(fcm, never())
+        .sendPush(anyString(), anyString(), anyString(), anyMap(), anyString(), any());
+  }
+
+  @Test
+  void disabledPushStillLeavesACommittedCreationAndSkipHistory() {
+    when(fcm.enabled()).thenReturn(false);
+    var message = chats.send("customer", room, new SendChatMessageRequest("disabled", "푸시 비활성"));
+    assertThat(countHistory("QUEUED")).isEqualTo(1);
+    assertThat(countHistory("SKIPPED")).isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select error_code from notification_push_history where notification_id=? and"
+                    + " status='SKIPPED'",
+                String.class,
+                message.id()))
+        .isEqualTo("DISABLED");
+    verify(fcm, never())
+        .sendPush(anyString(), anyString(), anyString(), anyMap(), anyString(), any());
   }
 
   @Test
@@ -259,6 +316,11 @@ class ChatPushIntegrationTests {
     return db.queryForObject("select count(*) from " + table, Integer.class);
   }
 
+  private int countHistory(String status) {
+    return db.queryForObject(
+        "select count(*) from notification_push_history where status=?", Integer.class, status);
+  }
+
   private static void await(BooleanSupplier condition) throws InterruptedException {
     long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
     while (!condition.getAsBoolean() && System.nanoTime() < deadline) Thread.sleep(10);
@@ -289,7 +351,8 @@ class ChatPushIntegrationTests {
     ChatService.class,
     ChatRepository.class,
     NotificationSubscriptions.class,
-    ChatPushNotifications.class
+    ChatPushNotifications.class,
+    NotificationRepository.class
   })
   static class Application {
     @Bean(destroyMethod = "close")
@@ -303,7 +366,8 @@ class ChatPushIntegrationTests {
       source.setMaximumPoolSize(8);
       new ResourceDatabasePopulator(
               new ClassPathResource("chatting-schema.sql"),
-              new ClassPathResource("notification-subscriptions-schema.sql"))
+              new ClassPathResource("notification-subscriptions-schema.sql"),
+              new ClassPathResource("notification-push-history-schema.sql"))
           .execute(source);
       return source;
     }

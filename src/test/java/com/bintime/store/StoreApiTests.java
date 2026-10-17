@@ -674,7 +674,9 @@ class StoreApiTests {
     Assumptions.assumeTrue(System.getenv("STORE_TEST_DB_URL") == null);
     var fixture =
         new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
-            new org.springframework.core.io.ClassPathResource("chatting-store-schema.sql"));
+            new org.springframework.core.io.ClassPathResource("chatting-store-schema.sql"),
+            new org.springframework.core.io.ClassPathResource(
+                "notification-push-history-schema.sql"));
     try {
       fixture.execute(Objects.requireNonNull(db.getDataSource()));
       String shop = shop("owner"), svc = service(shop, 60);
@@ -776,6 +778,7 @@ class StoreApiTests {
       assertThat(db.queryForObject("select count(*) from store_slots", Integer.class)).isEqualTo(1);
     } finally {
       // 이 테스트만 만든 chat FK가 다른 store 테스트의 사용자/매장 정리를 막지 않게 한다.
+      db.execute("drop table if exists notification_push_history");
       for (String table :
           List.of(
               "chatting_booking_proposals",

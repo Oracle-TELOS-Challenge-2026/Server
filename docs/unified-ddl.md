@@ -1,10 +1,12 @@
 # 통합 Oracle DDL
 
-2026-10-16 기준. [infra/oracle/ddl.sql](../infra/oracle/ddl.sql)은 신규 빈 앱 계정에 **25개 기본 테이블**을 생성한다. 기존 초기 DDL, search v2, 마이그레이션 9개(notification 003까지)의 결과를 한 파일에 반영했다. 외부 SQL 파일을 불러오는 `@`/`@@` 명령 없이 단독 실행한다.
+2026-10-17 기준. 현재 통합 DDL은 발송 이력 migration 009를 포함해 **26개 기본 테이블**을 생성한다. 004·08 적용 후에는 **29개**다. 기존 DB에는 [009](../infra/oracle/migrations/009-notification-push-history.sql)만 추가 적용하며 기존 데이터는 변경하지 않는다. 아래 25개 및 검증 수치는 009 이전 기록이다.
 
-**텍스트 채팅 v1에는 통합 DDL 다음에 [004-chatting.sql](../infra/oracle/migrations/004-chatting.sql)을 추가 실행해야 한다.** 통합본에는 채팅 v1의 상태·최근 메시지 시각 컬럼과 읽음·HTTP 멱등성 테이블이 포함되어 있지 않다. 004 적용 후에는 전체 **27개 테이블**, 채팅 **4개 테이블**이 된다. 기존 OCI 공유 DB처럼 이미 004를 적용한 환경에는 통합 DDL을 다시 실행하지 않는다.
+[infra/oracle/ddl.sql](../infra/oracle/ddl.sql)은 기존 초기 DDL, search v2, 사용자·매장·알림 마이그레이션 결과를 한 파일에 반영했다. 외부 SQL 파일을 불러오는 `@`/`@@` 명령 없이 단독 실행한다.
 
-**예약 제안 기능에는 004 다음 [08-chat-booking-proposals.sql](../infra/oracle/migrations/08-chat-booking-proposals.sql)이 추가로 필요하다.** 제안 테이블 1개와 예약 설명 컬럼을 추가해 전체 28개, 채팅 5개가 된다. 새 코드 배포 전에 로컬·OCI 각각 적용하며 기존 데이터는 유지한다. 아래의 통합본 대조·QA 기록은 08을 포함하지 않은 당시 기준이다. 추가 계약은 [채팅 DB 안내](chatting-db.md)를 따른다.
+**텍스트 채팅 v1에는 통합 DDL 다음에 [004-chatting.sql](../infra/oracle/migrations/004-chatting.sql)을 추가 실행해야 한다.** 통합본에는 채팅 v1의 상태·최근 메시지 시각 컬럼과 읽음·HTTP 멱등성 테이블이 포함되어 있지 않다. 004 적용 후에는 전체 **28개 테이블**, 채팅 **4개 테이블**이 된다. 기존 OCI 공유 DB처럼 이미 004를 적용한 환경에는 통합 DDL을 다시 실행하지 않는다.
+
+**예약 제안 기능에는 004 다음 [08-chat-booking-proposals.sql](../infra/oracle/migrations/08-chat-booking-proposals.sql)이 추가로 필요하다.** 제안 테이블 1개와 예약 설명 컬럼을 추가해 전체 29개, 채팅 5개가 된다. 새 코드 배포 전에 로컬·OCI 각각 적용하며 기존 데이터는 유지한다. 아래의 통합본 대조·QA 기록은 08을 포함하지 않은 당시 기준이다. 추가 계약은 [채팅 DB 안내](chatting-db.md)를 따른다.
 
 ## 실행 대상과 방법
 
@@ -38,9 +40,11 @@
 | `002-notification-subscriptions.sql` | FCM project/FID, legacy Web Push 4개 필드 nullable, 세션 연결 테이블·FK·인덱스, FID 유일 인덱스 2개, project/FID 쌍 CHECK, 주석 |
 | `003-notification-delivery.sql` | 알림 store/snapshot/request, nullable 발행 버전, legacy 대기 FK 제거, dedup/SSE events/deliveries/delivery clock 4개 테이블과 제약·인덱스 |
 
+`009-notification-push-history.sql`의 발송 이력 테이블·상태 제약·인덱스 2개도 통합본에 포함되어 있다. 기존 알림·채팅 데이터와 독립적으로 이력을 보존한다.
+
 `infra/oracle/app-user-grants.sql`과 `local-setup/01-app-user.sh`는 계정/권한/테이블스페이스 준비용이다. 앱 데이터 모델 DDL과 실행 주체가 다르므로 통합 파일에 섞지 않았다. 시퀀스는 원본 앱 스키마에서 사용하지 않으며 기존 ID 기본값인 `LOWER(RAWTOHEX(SYS_GUID()))`를 유지했다.
 
-## 통합 DDL 자체의 테이블 목록 (25개)
+## 통합 DDL 자체의 테이블 목록 (26개)
 
 | 영역 | 개수 | 테이블 |
 | --- | --- | --- |
@@ -48,11 +52,11 @@
 | store | 7 | `store_shops`, `store_services`, `store_slots`, `store_reservations`, `store_customer_locks`, `store_idempotency`, `store_events` |
 | 기존 대기 호환 | 1 | `search_waitlists` |
 | search v2 | 7 | `search_user_lock`, `search_intent`, `search_idempotency`, `search_work`, `search_offer`, `search_user_vector`, `search_store_vector` |
-| notification | 7 | `notification_alerts`, `notification_subscriptions`, `notification_subscription_sessions`, `notification_dedup`, `notification_events`, `notification_deliveries`, `notification_delivery_clock` |
+| notification | 8 | `notification_alerts`, `notification_subscriptions`, `notification_subscription_sessions`, `notification_dedup`, `notification_events`, `notification_deliveries`, `notification_delivery_clock`, `notification_push_history` |
 | chatting | 2 | `chatting_rooms`, `chatting_messages` |
-| 합계 | **25** | 기존 대기 호환 테이블과 v2 대기를 모두 유지 |
+| 합계 | **26** | 기존 대기 호환 테이블과 v2 대기를 모두 유지 |
 
-`004-chatting.sql`을 별도 적용하면 `chatting_read_positions`, `chatting_idempotency`가 추가되어 채팅은 4개, 전체는 27개 테이블이 된다. 아래 통합 DDL 비교·검증 수치는 004 적용 전의 25개 기본 테이블에 대한 기록이다.
+`004-chatting.sql`을 별도 적용하면 `chatting_read_positions`, `chatting_idempotency`가 추가되어 채팅은 4개, 전체는 28개 테이블이 된다. 아래 통합 DDL 비교·검증 수치는 004 적용 전의 25개 기본 테이블에 대한 기록이다.
 
 생성하지 않는 v1 테이블은 `search_consent`, `search_vector`, `search_preference_revision`, `search_vector_generation`, `search_match_job`, `search_store_projection`이다. 현재 동의는 intent, 매칭 job 식별자는 work, 사용자 벡터·revision·lease는 user_vector, 매장 벡터 캐시는 store_vector에 반영한다.
 
@@ -91,7 +95,7 @@
 
 ## 실제 Oracle 검증
 
-아래는 **채팅 004 이전의 25개 기본 테이블**을 비교한 기존 검증 범위와 실행 기록이다. 현재 `verify-unified-ddl.py`의 마이그레이션 목록에는 004가 없어 파일 목록 검사에서 `Update verification for added/removed migrations`로 중단된다. 검증기 목록·비교 경로를 갱신하기 전에는 현재 채팅까지 검증한 결과로 해석하지 않는다. 이 작업에서는 기존 SQL·검증 스크립트를 변경하지 않았으며 채팅 004는 [별도 검증 SQL](../infra/oracle/verify-chatting.sql)을 사용한다.
+아래는 **채팅 004 이전의 25개 기본 테이블**을 비교한 기존 검증 범위와 실행 기록이다. 현재 검증기는 세 경로 모두에 004·08·009를 적용한 29개 테이블을 비교한다. 채팅 동작 검증에는 [별도 검증 SQL](../infra/oracle/verify-chatting.sql)을 사용한다. 아래 실행 수치는 이전 25개 검증 당시 기록이다.
 
 [verify-unified-ddl.py](../infra/oracle/verify-unified-ddl.py)는 앱 DB에 접근하지 않고 로컬 Oracle 컨테이너 안에 매번 새 임시 계정을 생성한다. 다음 세 경로를 비교하고 생성한 계정은 종료 시 제거한다.
 

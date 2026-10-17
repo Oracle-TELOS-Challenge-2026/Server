@@ -142,6 +142,7 @@ class NotificationDeliveryTests {
     assertThat(count("notification_alerts")).isEqualTo(1);
     assertThat(count("notification_deliveries")).isEqualTo(2);
     assertThat(count("notification_events")).isEqualTo(1);
+    assertThat(count("notification_push_history")).isEqualTo(1);
   }
 
   @Test
@@ -168,6 +169,26 @@ class NotificationDeliveryTests {
         .isEqualTo("SENT");
     assertThat(jdbc.queryForObject("select attempts from notification_deliveries", Integer.class))
         .isEqualTo(2);
+    assertThat(
+            jdbc.queryForList(
+                "select status from notification_push_history where notification_id=?",
+                String.class,
+                id))
+        .containsExactlyInAnyOrder("QUEUED", "RUNNING", "QUEUED", "RUNNING", "ACCEPTED");
+    assertThat(
+            jdbc.queryForList(
+                "select attempt_no from notification_push_history where notification_id=? and"
+                    + " subscription_id is not null and status='QUEUED'",
+                Integer.class,
+                id))
+        .containsExactly(1);
+    assertThat(
+            jdbc.queryForList(
+                "select error_code from notification_push_history where notification_id=? and"
+                    + " error_code is not null",
+                String.class,
+                id))
+        .containsExactly("UNAVAILABLE");
   }
 
   @Test
@@ -179,6 +200,32 @@ class NotificationDeliveryTests {
     assertThat(jdbc.queryForObject("select attempts from notification_deliveries", Integer.class))
         .isZero();
     verify(fcm, never()).send(anyString(), any(), any());
+    assertThat(count("notification_push_history")).isEqualTo(1);
+  }
+
+  @Test
+  void resultHistoryFailureDoesNotUndoAcceptanceOrCauseAnotherSend() {
+    service.enqueue(request("slot"));
+    jdbc.execute(
+        "alter table notification_push_history add constraint reject_result check(status <>"
+            + " 'ACCEPTED')");
+    worker.run();
+    assertThat(status()).isEqualTo("ACCEPTED");
+    assertThat(jdbc.queryForList("select status from notification_push_history", String.class))
+        .containsExactlyInAnyOrder("QUEUED", "RUNNING");
+    worker.run();
+    verify(fcm).send(anyString(), any(), any());
+  }
+
+  @Test
+  void rolledBackMatchingNotificationDoesNotLeaveCreationHistory() {
+    tx.executeWithoutResult(
+        status -> {
+          service.enqueue(request("slot"));
+          status.setRollbackOnly();
+        });
+    assertThat(count("notification_alerts")).isZero();
+    assertThat(count("notification_push_history")).isZero();
   }
 
   @ParameterizedTest
