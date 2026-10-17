@@ -46,7 +46,14 @@ def sql(script, account=None):
 
 
 def load(account, path):
-    sql(path.read_text(), account)
+    script = path.read_text()
+    if path.name == '008-personalized-notifications.sql':
+        # Production targets BINTIME_APP explicitly; verification must only alter its generated schema.
+        assert account[0].startswith('BT_DDL_')
+        marker = ":= 'BINTIME_APP';"
+        assert script.count(marker) == 1
+        script = script.replace(marker, f":= '{account[0]}';") + '\n/\n'
+    sql(script, account)
 
 
 def xml_rows(account, query):

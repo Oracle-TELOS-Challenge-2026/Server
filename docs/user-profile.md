@@ -80,7 +80,7 @@ U-04~U-08을 구현한다. 모든 요청은 카카오 로그인으로 발급된 
 
 특정 매장이나 예약 대기를 등록하지 않아도, 앱 전체 맞춤 알림에 동의한 사용자는 선호 벡터가 유사한 발행 빈자리 알림을 받을 수 있다. **현재 시연에서는 사용자 프로필 위치·거리·반경을 전혀 검사하지 않는다.** 사용자 선호 벡터와 매장·시술 설명 벡터의 코사인 유사도가 기본 0.5 이상이어야 한다. 기존 예약 대기의 시간·가격·거리 조건 검증은 유지한다.
 
-기존 DB에는 배포 전 [008-personalized-notifications.sql](../infra/oracle/migrations/008-personalized-notifications.sql)을 앱 스키마로 실행한다. 기존 사용자의 기본값은 동의하지 않음(false)이다. 구독 등록만으로 전체 맞춤 알림 동의를 대신하지 않는다.
+기존 DB에는 배포 전 [008-personalized-notifications.sql](../infra/oracle/migrations/008-personalized-notifications.sql)전체를 ADMIN 콘솔에서 하나의 PL/SQL 문장으로 실행한다. 변경 대상은 `BINTIME_APP`으로 명시되어 있다. 기존 사용자의 기본값은 동의하지 않음(false)이다. 구독 등록만으로 전체 맞춤 알림 동의를 대신하지 않는다.
 
 1. 로그인 후 선호도를 저장한다. `OPENAI_API_KEY`와 search worker가 필요하다.
 2. 현재 로그인 세션에서 FID를 `POST /api/v1/notifications/push-subscriptions`로 등록한다.
