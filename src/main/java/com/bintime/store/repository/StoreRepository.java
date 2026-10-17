@@ -53,9 +53,10 @@ public class StoreRepository {
   public ReservationCounts reservationCounts(String userId, java.time.OffsetDateTime moment) {
     Object[] row =
         em.createQuery(
-                "select count(e), coalesce(sum(case when e.status='CONFIRMED' and e.end>?2 then 1"
-                    + " else 0 end),0), coalesce(sum(case when e.status='CANCELED' then 1 else 0"
-                    + " end),0) from Reservation e where e.userId=?1",
+                "select count(e), coalesce(sum(case when e.status in ('CONFIRMED','PENDING') and"
+                    + " e.end>?2 then 1 else 0 end),0), coalesce(sum(case when e.status in"
+                    + " ('CANCELED','REJECTED','EXPIRED','WITHDRAWN') then 1 else 0 end),0) from"
+                    + " Reservation e where e.userId=?1",
                 Object[].class)
             .setParameter(1, userId)
             .setParameter(2, moment)

@@ -41,8 +41,9 @@ public class ReservationController {
       operationId = "createReservation",
       summary = "ST-06 · 예약 확정",
       description =
-          "Idempotency-Key 필수. 자원 시간·고객 시간·대기를 잠금 처리. 409"
-              + " SLOT_UNAVAILABLE/PRICE_CHANGED/RESERVATION_TIME_CONFLICT.\n\n"
+          "슬롯 instantBooking=false이면 PENDING 신청만 저장하며 선점·예약 확정·대기 완료는 하지 않는다. true이면 기존 즉시확정. 동일"
+              + " 고객·슬롯의 중복 대기 신청은 409 RESERVATION_REQUEST_EXISTS. Idempotency-Key 필수. 자원 시간·고객"
+              + " 시간·대기를 잠금 처리. 409 SLOT_UNAVAILABLE/PRICE_CHANGED/RESERVATION_TIME_CONFLICT.\n\n"
               + "- CUSTOMER — 본인 데이터\n"
               + "- X-CSRF-Token 필수\n"
               + "- Idempotency-Key 필수 (24시간 재생)\n\n"

@@ -68,7 +68,20 @@ public record NotificationResponse(
       @Schema(
               description = "일치 대기 ID 목록. 앱 전체 맞춤 알림은 빈 배열",
               requiredMode = Schema.RequiredMode.REQUIRED)
-          List<String> waitlistIds) {}
+          List<String> waitlistIds,
+      @Schema(
+              description = "true: 즉시확정, false: 사장님 선택 후 확정",
+              requiredMode = Schema.RequiredMode.REQUIRED)
+          Boolean instantBooking) {
+    public Target {
+      instantBooking = instantBooking == null ? true : instantBooking;
+    }
+
+    public Target(
+        String storeId, String slotId, Long publicationVersion, List<String> waitlistIds) {
+      this(storeId, slotId, publicationVersion, waitlistIds, true);
+    }
+  }
 
   @Schema(name = "NotificationResponseAction")
   public record Action(

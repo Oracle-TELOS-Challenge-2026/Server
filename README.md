@@ -120,13 +120,13 @@ IntelliJ에서도 Working directory를 저장소 루트로 지정하면 동일�
 
 ## API 계약 및 Swagger
 
-[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)의 REST·SSE 45개에 store 등록 API 3개와 팀 요청의 채팅 예약 제안 API 2개, 맞춤 알림 설정 API 2개 및 예약 의사 분석 API 1개를 추가해 총 53개와 별도 채팅 WebSocket 프레임을 정의했다. user U-01~11, store ST-01~20, search S-01~08의 처리 로직을 구현했다. 사용자 API는 [프로필·위치·선호도 안내](docs/user-profile.md), store는 [store 구현 계약](docs/store.md), search의 실행·의존 계약·복구 방법은 [search 안내](docs/search.md), 미연결 항목·다음 작업은 [search 진행 현황](docs/search-progress.md)을 참고한다.
+[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)의 REST·SSE 45개에 store 등록 API 3개와 팀 요청의 채팅 예약 제안 API 2개, 맞춤 알림 설정 API 2개 및 예약 의사 분석 API 1개 및 빈자리 신청 목록 API 1개를 추가해 총 54개와 별도 채팅 WebSocket 프레임을 정의했다. user U-01~11, store ST-01~21, search S-01~08의 처리 로직을 구현했다. 사용자 API는 [프로필·위치·선호도 안내](docs/user-profile.md), store는 [store 구현 계약](docs/store.md), search의 실행·의존 계약·복구 방법은 [search 안내](docs/search.md), 미연결 항목·다음 작업은 [search 진행 현황](docs/search-progress.md)을 참고한다.
 
 - [API별 Controller·DTO 이름 매핑](docs/contracts/api.md)
 - [SSE·WebSocket 계약](docs/contracts/realtime.md)
 - Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-- 기본 선택 `all`: `/v3/api-docs/all` (전체 53개 operation)
-- 외부 API OpenAPI: `/v3/api-docs/public` (51개 operation)
+- 기본 선택 `all`: `/v3/api-docs/all` (전체 54개 operation)
+- 외부 API OpenAPI: `/v3/api-docs/public` (52개 operation)
 - 내부 계약 OpenAPI: `/v3/api-docs/internal` (2개 operation)
 
 DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 명령을 실행한다. Gradle toolchain은 Java 21을 사용한다.
@@ -203,3 +203,5 @@ Notion v0.1의 알림 대상·슬롯 상태와 기존 기획 간 차이 및 stor
 기존 DB는 현재 적용 상태에 맞춰 `infra/oracle/migrations/`의 변경 SQL을 사용한다. 통합 DDL은 기존 DB 업데이트용이 아니다. 기존 초기 store DB에는 `02-store-api.sql`, 기존 search v1에는 04·05 전환이 필요하며 프로필·알림·카탈로그·이벤트 전달 변경도 확인한다. `ddl-auto=validate`를 유지한다. 기존 분산 SQL은 마이그레이션 이력과 QA 비교를 위해 보존한다.
 
 `StoreApiTests`는 H2에서 API·동시성·멱등성·시간·대기 연동을 검증한다. `python3 infra/oracle/verify-store.py`는 로컬 Oracle의 격리 스키마에서 초기/변경 SQL·기존 데이터 보존·같은 API 및 경합 테스트를 실행한다. 인증 연결 조건, 테스트 실행 옵션, 후속 작업 소비 계약은 [store.md](docs/store.md)에 정리했다.
+
+빈자리 모집은 즉시확정과 사장님 선택 방식을 지원한다. 계약·프런트 변경·DB 적용 순서는 [빈자리 예약 방식](docs/vacancy-booking-approval.md)을 따른다.

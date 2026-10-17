@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 
 /** 다른 도메인이 사용하는 store 예약 생성·확정 계약. 호출자는 인증된 본인의 사용자 ID를 전달한다. */
 public interface StoreReservationPort {
-  /** 별도 선점 없이 예약을 즉시 확정한다. 재시도에는 같은 키와 요청을 사용한다. */
+  /** 슬롯 정책에 따라 CONFIRMED 또는 PENDING을 반환한다. PENDING은 예약 확정·선점이 아니다. 재시도에는 같은 키와 요청을 사용한다. */
   ConfirmedReservation reserve(Command command);
 
   /** 제안 작성 시점의 유효성만 검사한다. 공급 슬롯을 만들거나 시간을 선점하지 않는다. */

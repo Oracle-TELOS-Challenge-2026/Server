@@ -8,7 +8,7 @@ public record UpdateReservationStatusRequest(
             description = "status",
             requiredMode = Schema.RequiredMode.REQUIRED,
             example = "COMPLETED",
-            allowableValues = {"COMPLETED", "NO_SHOW"})
+            allowableValues = {"CONFIRMED", "REJECTED", "COMPLETED", "NO_SHOW"})
         String status,
     @Schema(
             description = "변경 전 리소스 버전. 불일치 시 409 VERSION_CONFLICT",

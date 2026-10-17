@@ -219,6 +219,7 @@ public class StoreSearchCatalogService implements SearchStoreCatalog {
         s.version,
         s.publicationVersion,
         p.imageUrl,
-        description(p, List.of(v)));
+        description(p, List.of(v)),
+        !"N".equals(s.instantBooking));
   }
 }

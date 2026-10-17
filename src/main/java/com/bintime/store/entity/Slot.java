@@ -37,6 +37,11 @@ public class Slot {
   @Column(name = "status_code", nullable = false)
   public String status;
 
+  @org.hibernate.annotations.ColumnDefault("'Y'")
+  @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.CHAR)
+  @Column(name = "instant_booking", length = 1, nullable = false)
+  public String instantBooking = "Y";
+
   @Column(name = "source_type", nullable = false)
   public String source;
 

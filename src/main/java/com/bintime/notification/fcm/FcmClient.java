@@ -110,7 +110,13 @@ public class FcmClient {
         installationId,
         notification.title(),
         notification.body(),
-        Map.of("notificationId", notification.id()),
+        Map.of(
+            "notificationId",
+            notification.id(),
+            "instantBooking",
+            notification.target() == null
+                ? "true"
+                : notification.target().instantBooking().toString()),
         CLICK_PATH,
         stillActive);
   }

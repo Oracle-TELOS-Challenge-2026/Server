@@ -159,7 +159,8 @@ public class StoreSearchService {
                       best.payablePrice(),
                       "KRW",
                       best.source(),
-                      best.version()),
+                      best.version(),
+                      best.instantBooking()),
                   List.of(vector == null ? "NEARBY" : "PREFERENCE_SIMILARITY")));
         }
       }
@@ -246,7 +247,8 @@ public class StoreSearchService {
                       best.payablePrice(),
                       "KRW",
                       best.source(),
-                      best.version()),
+                      best.version(),
+                      best.instantBooking()),
               List.of("NEARBY")));
       lastDistance = distance;
       lastId = doc.id();

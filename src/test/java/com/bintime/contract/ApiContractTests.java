@@ -103,7 +103,7 @@ class ApiContractTests {
       }
     }
     assertThat(publicCount).isEqualTo(5);
-    assertThat(protectedCount).isEqualTo(15);
+    assertThat(protectedCount).isEqualTo(16);
   }
 
   @Test
@@ -111,9 +111,9 @@ class ApiContractTests {
     JsonNode allDoc = getDoc("all");
     JsonNode publicDoc = getDoc("public");
     JsonNode internalDoc = getDoc("internal");
-    assertThat(operationCount(publicDoc)).isEqualTo(51);
+    assertThat(operationCount(publicDoc)).isEqualTo(52);
     assertThat(operationCount(internalDoc)).isEqualTo(2);
-    assertThat(operationCount(allDoc)).isEqualTo(53);
+    assertThat(operationCount(allDoc)).isEqualTo(54);
     var operationIds = new HashSet<String>();
 
     for (JsonNode contract : contracts()) {
@@ -286,7 +286,8 @@ class ApiContractTests {
                     "getMyReservations",
                     "getReservation",
                     "getOwnerReservation",
-                    "getVacancies")
+                    "getVacancies",
+                    "getOwnerReservationRequests")
                 .contains(id)) expected.add("409");
           }
           assertThat(codes)

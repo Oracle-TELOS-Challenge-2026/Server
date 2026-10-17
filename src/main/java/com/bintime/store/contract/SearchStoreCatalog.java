@@ -59,5 +59,49 @@ public interface SearchStoreCatalog {
       long version,
       Long publicationVersion,
       String imageUrl,
-      String description) {}
+      String description,
+      Boolean instantBooking) {
+    public Slot {
+      instantBooking = instantBooking == null ? true : instantBooking;
+    }
+
+    public Slot(
+        String id,
+        String storeId,
+        String storeName,
+        String category,
+        String serviceId,
+        String serviceName,
+        double latitude,
+        double longitude,
+        OffsetDateTime startAt,
+        OffsetDateTime endAt,
+        long originalPrice,
+        long payablePrice,
+        String source,
+        long version,
+        Long publicationVersion,
+        String imageUrl,
+        String description) {
+      this(
+          id,
+          storeId,
+          storeName,
+          category,
+          serviceId,
+          serviceName,
+          latitude,
+          longitude,
+          startAt,
+          endAt,
+          originalPrice,
+          payablePrice,
+          source,
+          version,
+          publicationVersion,
+          imageUrl,
+          description,
+          true);
+    }
+  }
 }

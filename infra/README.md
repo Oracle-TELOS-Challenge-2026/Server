@@ -221,3 +221,7 @@ ssh -i ~/Downloads/team3/team-3-1.key -N -L 18443:127.0.0.1:443 opc@140.238.19.1
 기존 DB는 ADMIN 콘솔에서 [008-personalized-notifications.sql](oracle/migrations/008-personalized-notifications.sql) 전체를 하나의 PL/SQL 문장으로 **새 앱 배포 전에** 실행한다. 대상 스키마는 백엔드 계정 `BINTIME_APP`으로 명시되어 있다. user_accounts에 기본 비동의 값과 동의 시각을 추가하고 notification_alerts.waitlist_id의 NOT NULL을 해제한다. 기존 데이터는 유지하며 재실행 가능하다. DataGrip에 그대로 붙여 넣을 수 있도록 SET/WHENEVER와 마지막 `/`는 포함하지 않는다. 별도 COMMIT 없이 Oracle DDL이 자동 커밋된다. 새 통합 ddl.sql에는 포함되어 있다. 개인화 동의는 기존 사용자를 자동 활성화하지 않으며 [설정 API](../docs/user-profile.md#맞춤-빈자리-알림-동의-u-10u-11)로 저장한다.
 
 `SEARCH_INDEX_REBUILD=false`, `SEARCH_SCHEDULING_ENABLED=true`, `BINTIME_STORE_EVENT_DELIVERY_ENABLED=true`의 정상 실행 구성을 사용하고 OpenAI/FCM 설정 및 현재 로그인 세션 FID를 준비한다. 이 시연 경로에는 프로필 위치 등록이 필요 없다. 빈자리 발행 후 비동기 매칭·푸시 제출로 진행하며 전체 ES 재색인은 필요 없다.
+
+## 빈자리 즉시확정·사장님 선택
+
+이 기능이 포함된 새 앱은 배포 전에 [010-vacancy-booking-approval.sql](oracle/migrations/010-vacancy-booking-approval.sql)을 ADMIN에서 BINTIME_APP에 적용해야 한다. 앱 쓰기를 중지하고 백업 후 실행한다. 기존 데이터는 보존하고 기본 정책은 즉시확정이다. 운영 반영 여부와 프런트 선행 작업은 [예약 방식 안내](../docs/vacancy-booking-approval.md)를 확인한다. `deploy.sh`는 이 SQL을 자동 적용하지 않는다.

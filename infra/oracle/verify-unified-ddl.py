@@ -47,7 +47,7 @@ def sql(script, account=None):
 
 def load(account, path):
     script = path.read_text()
-    if path.name == '008-personalized-notifications.sql':
+    if path.name in {'008-personalized-notifications.sql', '010-vacancy-booking-approval.sql'}:
         # Production targets BINTIME_APP explicitly; verification must only alter its generated schema.
         assert account[0].startswith('BT_DDL_')
         marker = ":= 'BINTIME_APP';"
@@ -148,9 +148,10 @@ def main():
     migration_names = {
         '001-user-profile.sql', '002-notification-subscriptions.sql', '003-notification-delivery.sql',
         '02-store-api.sql', '03-user-vector-generation.sql', '04-search-v2-prepare.sql',
-        '05-search-v2-finalize.sql', '06-store-search-catalog.sql', '07-store-event-delivery.sql', '008-personalized-notifications.sql'}
-    # Chat's separate extension is outside the base 25-table schema comparison.
-    assert {p.name for p in MIGRATIONS.glob('*.sql') if p.name != '004-chatting.sql'} == migration_names, 'Update verification for added/removed migrations'
+        '05-search-v2-finalize.sql', '06-store-search-catalog.sql', '07-store-event-delivery.sql', '008-personalized-notifications.sql',
+        '004-chatting.sql', '08-chat-booking-proposals.sql', '009-notification-push-history.sql',
+        '010-vacancy-booking-approval.sql'}
+    assert {p.name for p in MIGRATIONS.glob('*.sql')} == migration_names, 'Update verification for added/removed migrations'
     assert (ROOT / 'docs/sql/search-oracle.sql').read_bytes() == (ROOT / 'docs/sql/search-oracle-v2.sql').read_bytes(), 'Search v2 aliases differ'
     sources = [ROOT / 'infra/oracle/ddl.sql', ROOT / 'infra/oracle/local-setup/01ddl.sql',
                *sorted((ROOT / 'docs/sql').glob('*.sql')), *sorted(MIGRATIONS.glob('*.sql'))]
@@ -182,8 +183,12 @@ def main():
                      '003-notification-delivery.sql', '008-personalized-notifications.sql']:
             load(split, MIGRATIONS / name)
         load(unified, ROOT / 'infra/oracle/ddl.sql')
-        load(unified, MIGRATIONS / '004-chatting.sql')
-        load(unified, MIGRATIONS / '08-chat-booking-proposals.sql')
+        for account in accounts:
+            for name in ['004-chatting.sql', '08-chat-booking-proposals.sql',
+                         '009-notification-push-history.sql', '010-vacancy-booking-approval.sql']:
+                load(account, MIGRATIONS / name)
+            # Apply again to verify that a repeated deployment preparation preserves the schema.
+            load(account, MIGRATIONS / '010-vacancy-booking-approval.sql')
         snapshots = {key: snapshot(account) for key, account in zip(['historical', 'split', 'unified'], accounts)}
         # user_tab_columns includes physical byte sizes and BYTE/CHAR semantics, not column order.
         differences = compare(snapshots['historical'], snapshots['unified'], 'All migrations -> unified')
@@ -215,6 +220,8 @@ def main():
                 f'GRANT CREATE SESSION,CREATE TABLE TO {name};')
             accounts.append(account)
             load(account, ROOT / 'infra/oracle/ddl.sql')
+            for migration in ['004-chatting.sql', '08-chat-booking-proposals.sql']:
+                load(account, MIGRATIONS / migration)
             env = dict(os.environ, STORE_TEST_DB_URL='jdbc:oracle:thin:@//localhost:' + os.environ.get('STORE_ORACLE_PORT', '1521') + '/FREEPDB1',
                        STORE_TEST_DB_USER=name, STORE_TEST_DB_PASSWORD=account[1])
             subprocess.run(['./gradlew', 'test', '--tests', 'com.bintime.store.StoreApiTests',

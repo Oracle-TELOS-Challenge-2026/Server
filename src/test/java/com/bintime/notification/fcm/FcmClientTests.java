@@ -81,6 +81,25 @@ class FcmClientTests {
   }
 
   @Test
+  void includesOwnerApprovalPolicyInPushData() {
+    var original = notification();
+    var alert =
+        new NotificationResponse(
+            original.id(),
+            original.type(),
+            original.title(),
+            original.body(),
+            new NotificationResponse.Target("shop", "slot", null, java.util.List.of(), false),
+            original.action(),
+            original.availability(),
+            original.readAt(),
+            original.createdAt());
+    assertThat(client("https://frontend-oracle.vercel.app").send("browser-fid", alert).accepted())
+        .isTrue();
+    assertThat(requestBody.at("/message/data/instantBooking").asText()).isEqualTo("false");
+  }
+
+  @Test
   void sendsFidWithStringDataAndFrontendHttpsClickLink() {
     var result = client("https://frontend-oracle.vercel.app").send("browser-fid", notification());
 
