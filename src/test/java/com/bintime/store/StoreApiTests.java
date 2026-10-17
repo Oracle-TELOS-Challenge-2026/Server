@@ -353,6 +353,258 @@ class StoreApiTests {
     return BASE + "/owner/stores/" + shop;
   }
 
+  private JsonNode customerTimetable(String shop, String date) throws Exception {
+    return ok("GET", BASE + "/stores/" + shop + "/timetable?date=" + date, null, null, null, 200);
+  }
+
+  private void timetableHours(String shop, boolean closed) throws Exception {
+    var hours =
+        List.of("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN").stream()
+            .map(
+                day ->
+                    closed
+                        ? Map.<String, Object>of("dayOfWeek", day, "closed", true)
+                        : Map.<String, Object>of(
+                            "dayOfWeek",
+                            day,
+                            "closed",
+                            false,
+                            "opensAt",
+                            "09:00",
+                            "closesAt",
+                            "18:00"))
+            .toList();
+    var version =
+        ok("GET", BASE + "/stores/" + shop, null, null, null, 200).path("version").asLong();
+    ok(
+        "PATCH",
+        ownerPath(shop),
+        "owner",
+        null,
+        Map.of("openingHours", hours, "expectedVersion", version),
+        200);
+  }
+
+  @Test
+  void customerTimetableIsPublicUncachedAndContainsNoIdentifyingFields() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    timetableHours(shop, false);
+    reserve(slot(shop, svc, "2026-10-20T10:00:00+09:00"), "alice");
+    slot(shop, svc, "2026-10-20T14:00:00+09:00");
+    var response =
+        client.send(
+            HttpRequest.newBuilder(
+                    URI.create(
+                        "http://localhost:"
+                            + port
+                            + BASE
+                            + "/stores/"
+                            + shop
+                            + "/timetable?date=2026-10-20"))
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+    var data = json.readTree(response.body()).at("/success/data");
+    assertThat(data.properties().stream().map(Map.Entry::getKey).toList())
+        .containsExactlyInAnyOrder(
+            "date", "timezone", "openingHours", "busyTimes", "availableTimes");
+    assertThat(data.path("date").asText()).isEqualTo("2026-10-20");
+    assertThat(data.path("timezone").asText()).isEqualTo("Asia/Seoul");
+    assertThat(data.at("/openingHours/opensAt").asText()).isEqualTo("09:00");
+    assertThat(data.at("/openingHours/closesAt").asText()).isEqualTo("18:00");
+    assertThat(data.path("busyTimes").size()).isEqualTo(1);
+    assertThat(data.at("/busyTimes/0/startAt").asText()).isEqualTo("2026-10-20T10:00:00+09:00");
+    assertThat(data.at("/availableTimes/0/startAt").asText())
+        .isEqualTo("2026-10-20T14:00:00+09:00");
+    for (String list : List.of("busyTimes", "availableTimes"))
+      for (var time : data.path(list))
+        assertThat(time.properties().stream().map(Map.Entry::getKey).toList())
+            .containsExactlyInAnyOrder("startAt", "endAt");
+    assertThat(data.toString())
+        .doesNotContain("alice", "owner", "customer", "reservationId", "slotId", "resourceId");
+  }
+
+  @Test
+  void customerTimetableValidatesDatesAndReturnsEmptyArraysAndClosedHours() throws Exception {
+    String shop = shop("owner");
+    var empty = customerTimetable(shop, "2026-10-20");
+    assertThat(empty.path("busyTimes").isEmpty()).isTrue();
+    assertThat(empty.path("availableTimes").isEmpty()).isTrue();
+    assertThat(empty.at("/openingHours/closed").asBoolean()).isFalse();
+    String path = BASE + "/stores/" + shop + "/timetable";
+    for (String query :
+        List.of(
+            "",
+            "?date=2026-02-30",
+            "?date=2026-2-03",
+            "?date=2026-10-20T00:00:00",
+            "?date=0000-01-01",
+            "?date=2026-10-20%2B09:00"))
+      assertThat(call("GET", path + query, null, null, null).status()).as(query).isEqualTo(400);
+    assertThat(
+            call("GET", BASE + "/stores/missing/timetable?date=2026-10-20", null, null, null)
+                .code())
+        .isEqualTo("STORE_NOT_FOUND");
+    timetableHours(shop, true);
+    var closed = customerTimetable(shop, "2026-10-20");
+    assertThat(closed.at("/openingHours/closed").asBoolean()).isTrue();
+    assertThat(closed.at("/openingHours/opensAt").isNull()).isTrue();
+    assertThat(closed.at("/openingHours/closesAt").isNull()).isTrue();
+    assertThat(closed.path("availableTimes").isEmpty()).isTrue();
+  }
+
+  @Test
+  void customerTimetableReflectsOwnerCancellationPublicationAndWithdrawalWithoutAutoReopening()
+      throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    var booking = reserve(slot(shop, svc, "2026-10-16T12:00:00+09:00"), "alice");
+    assertThat(customerTimetable(shop, "2026-10-16").path("busyTimes").size()).isEqualTo(1);
+    var canceled =
+        ok(
+            "POST",
+            BASE + "/reservations/" + booking.path("id").asText() + "/cancel",
+            "owner",
+            "owner-cancel",
+            Map.of(
+                "reasonCode", "STORE_REQUEST", "expectedVersion", booking.path("version").asLong()),
+            200);
+    var draft = customerTimetable(shop, "2026-10-16");
+    assertThat(draft.path("busyTimes").isEmpty()).isTrue();
+    assertThat(draft.path("availableTimes").isEmpty()).isTrue();
+    var published =
+        publish(
+            shop,
+            canceled.path("vacancy"),
+            svc,
+            "2026-10-16T12:00:00+09:00",
+            "publish-for-display");
+    assertThat(customerTimetable(shop, "2026-10-16").path("availableTimes").size()).isEqualTo(1);
+    ok(
+        "POST",
+        ownerPath(shop) + "/vacancies/" + published.at("/vacancy/id").asText() + "/withdraw",
+        "owner",
+        "withdraw-for-display",
+        Map.of("expectedVersion", published.at("/vacancy/version").asLong()),
+        200);
+    assertThat(customerTimetable(shop, "2026-10-16").path("availableTimes").isEmpty()).isTrue();
+  }
+
+  @Test
+  void customerTimetableDoesNotTreatNoShowsOrUnpublishedVacanciesAsBusyOrAvailable()
+      throws Exception {
+    String shop = shop("owner"), svc = service(shop, 120);
+    var booking = reserve(slot(shop, svc, "2026-10-16T12:00:00+09:00"), "alice");
+    when(clock.instant()).thenReturn(Instant.parse("2026-10-16T03:11:00Z"));
+    ok(
+        "POST",
+        ownerPath(shop) + "/reservations/" + booking.path("id").asText() + "/status",
+        "owner",
+        "no-show-display",
+        Map.of("status", "NO_SHOW", "expectedVersion", booking.path("version").asLong()),
+        200);
+    var timetable = customerTimetable(shop, "2026-10-16");
+    assertThat(timetable.path("busyTimes").isEmpty()).isTrue();
+    assertThat(timetable.path("availableTimes").isEmpty()).isTrue();
+    var shortService = service(shop, 60);
+    var vacancy =
+        ok("GET", ownerPath(shop) + "/vacancies?status=DRAFT", "owner", null, null, 200)
+            .at("/items/0");
+    publish(shop, vacancy, shortService, "2026-10-16T12:15:00+09:00", "no-show-publish");
+    assertThat(customerTimetable(shop, "2026-10-16").at("/availableTimes/0/startAt").asText())
+        .isEqualTo("2026-10-16T12:15:00+09:00");
+  }
+
+  @Test
+  void customerTimetableFiltersUnusableSlotsWithoutMutatingTheirStoredState() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60), inactive = service(shop, 60);
+    var elapsed = slot(shop, svc, "2026-10-16T11:00:00+09:00");
+    reserve(slot(shop, svc, "2026-10-16T12:00:00+09:00"), "alice");
+    slot(shop, svc, "2026-10-16T13:00:00+09:00");
+    slot(shop, svc, "2026-10-16T14:00:00+09:00");
+    var overlapping = slot(shop, svc, "2026-10-16T15:00:00+09:00");
+    slot(shop, inactive, "2026-10-16T16:00:00+09:00");
+    var closed = slot(shop, svc, "2026-10-16T17:00:00+09:00");
+    slot(shop, svc, "2026-10-16T20:00:00+09:00");
+    db.update("update store_services set active_yn='N' where service_id=?", inactive);
+    db.update(
+        "update store_slots set status_code='CLOSED' where slot_id=?", closed.path("id").asText());
+    db.update(
+        "update store_slots set start_at=?,end_at=? where slot_id=?",
+        OffsetDateTime.parse("2026-10-16T12:30:00+09:00"),
+        OffsetDateTime.parse("2026-10-16T13:30:00+09:00"),
+        overlapping.path("id").asText());
+    timetableHours(shop, false);
+    when(clock.instant()).thenReturn(Instant.parse("2026-10-16T02:30:00Z"));
+    var before =
+        db.queryForList("select slot_id,status_code,version_no from store_slots order by slot_id");
+    int events = db.queryForObject("select count(*) from store_events", Integer.class);
+    var timetable = customerTimetable(shop, "2026-10-16");
+    assertThat(timetable.path("availableTimes").size()).isEqualTo(2);
+    assertThat(timetable.at("/availableTimes/0/startAt").asText())
+        .isEqualTo("2026-10-16T13:00:00+09:00");
+    assertThat(timetable.at("/availableTimes/1/startAt").asText())
+        .isEqualTo("2026-10-16T14:00:00+09:00");
+    assertThat(
+            db.queryForList(
+                "select slot_id,status_code,version_no from store_slots order by slot_id"))
+        .isEqualTo(before);
+    assertThat(db.queryForObject("select count(*) from store_events", Integer.class))
+        .isEqualTo(events);
+    assertThat(
+            db.queryForObject(
+                "select status_code from store_slots where slot_id=?",
+                String.class,
+                elapsed.path("id").asText()))
+        .isEqualTo("AVAILABLE");
+    timetableHours(shop, true);
+    var holiday = customerTimetable(shop, "2026-10-16");
+    assertThat(holiday.path("availableTimes").isEmpty()).isTrue();
+    assertThat(holiday.path("busyTimes").size()).isEqualTo(1);
+  }
+
+  @Test
+  void customerTimetableOnlyShowsConfirmedReservationsForThisStoreAndKoreanDate() throws Exception {
+    String shop = shop("owner"), svc = service(shop, 60);
+    var statuses =
+        List.of(
+            "CONFIRMED",
+            "COMPLETED",
+            "CANCELED",
+            "NO_SHOW",
+            "PENDING",
+            "REJECTED",
+            "EXPIRED",
+            "WITHDRAWN");
+    for (int i = 0; i < statuses.size(); i++) {
+      var booking =
+          reserve(slot(shop, svc, String.format("2026-10-20T%02d:00:00+09:00", 9 + i)), "alice");
+      db.update(
+          "update store_reservations set status_code=? where reservation_id=?",
+          statuses.get(i),
+          booking.path("id").asText());
+      if (i == 0)
+        db.update(
+            "update store_reservations set start_at=?,end_at=? where reservation_id=?",
+            OffsetDateTime.parse("2026-10-19T14:30:00Z"),
+            OffsetDateTime.parse("2026-10-19T15:30:00Z"),
+            booking.path("id").asText());
+    }
+    reserve(slot(shop, svc, "2026-10-20T18:00:00+09:00"), "alice");
+    slot(shop, svc, "2026-10-21T14:00:00+09:00");
+    String other = shop("owner"), otherSvc = service(other, 60);
+    reserve(slot(other, otherSvc, "2026-10-20T20:00:00+09:00"), "bob");
+    var timetable = customerTimetable(shop, "2026-10-20");
+    assertThat(timetable.path("busyTimes").size()).isEqualTo(2);
+    assertThat(timetable.at("/busyTimes/0/startAt").asText())
+        .isEqualTo("2026-10-20T00:00:00+09:00");
+    assertThat(timetable.at("/busyTimes/0/endAt").asText()).isEqualTo("2026-10-20T00:30:00+09:00");
+    assertThat(timetable.at("/busyTimes/1/startAt").asText())
+        .isEqualTo("2026-10-20T18:00:00+09:00");
+    assertThat(timetable.path("availableTimes").isEmpty()).isTrue();
+  }
+
   private StoreReservationPort.Command reservationCommand(JsonNode slot, String user, String key) {
     return new StoreReservationPort.Command(
         user,

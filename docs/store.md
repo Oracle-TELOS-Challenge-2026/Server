@@ -1,6 +1,6 @@
 # Store API 구현 및 운영 계약
 
-ST-01~17과 사장님 등록 API 3개를 Oracle 원장에 구현한다. Controller → Service → Repository 구조이며 예약, 대기 완료, 멱등 응답, 후속 작업 저장은 같은 DB 트랜잭션에 참여한다. 결제, 실제 매칭·알림 발송, 로그인은 이 구현 범위에 포함하지 않는다.
+ST-01~22를 Oracle 원장에 구현한다. Controller → Service → Repository 구조이며 예약, 대기 완료, 멱등 응답, 후속 작업 저장은 같은 DB 트랜잭션에 참여한다. 결제, 실제 매칭·알림 발송, 로그인은 이 구현 범위에 포함하지 않는다.
 
 ## 등록과 API 응답
 
@@ -114,10 +114,14 @@ SearchStoreCatalog의 원장 조회와 검색 버전은 [카탈로그 계약](st
 python3 infra/oracle/verify-store.py
 ```
 
-StoreApiTests는 20개 API 흐름·입력·권한·버전·스냅샷·멱등성·커서·시간 경계·대기 완료/롤백과 동시 요청을 검증한다. Oracle 검증 스크립트는 기존 초기 스키마의 데이터 보존과 변경 SQL을 검증한 뒤 신규/변경 스키마 모두 ddl-auto=validate와 같은 API·경합 테스트를 실행한다. 테스트 계정은 BT_STORE_ 접두사를 가지며 앱 계정은 변경하지 않는다. 생성한 테스트 스키마는 결과 확인을 위해 남긴다. 초기 스키마가 이미 Git HEAD에 변경된 뒤에는 STORE_BASELINE_SQL에 변경 전 SQL 파일을 지정한다. 포트/컨테이너 변경은 STORE_ORACLE_PORT/STORE_ORACLE_CONTAINER로 지정한다.
+StoreApiTests는 store API 흐름·입력·권한·버전·스냅샷·멱등성·커서·시간 경계·대기 완료/롤백과 동시 요청을 검증한다. Oracle 검증 스크립트는 기존 초기 스키마의 데이터 보존과 변경 SQL을 검증한 뒤 신규/변경 스키마 모두 ddl-auto=validate와 같은 API·경합 테스트를 실행한다. 테스트 계정은 BT_STORE_ 접두사를 가지며 앱 계정은 변경하지 않는다. 생성한 테스트 스키마는 결과 확인을 위해 남긴다. 초기 스키마가 이미 Git HEAD에 변경된 뒤에는 STORE_BASELINE_SQL에 변경 전 SQL 파일을 지정한다. 포트/컨테이너 변경은 STORE_ORACLE_PORT/STORE_ORACLE_CONTAINER로 지정한다.
 
 직접 API를 눌러보는 QA는 [로컬 QA 서버·Postman 실행 안내](../qa/store/README.md)를 참고한다. 격리된 Oracle 스키마와 36개 순차 요청을 제공한다.
 
 ## 빈자리 신청 검토
 
 발행 정책·ST-21 목록·ST-13 승인/거절·알림 필드·DB migration 010은 [빈자리 예약 방식](vacancy-booking-approval.md)을 따른다. 원격 DB에는 별도 적용 후 새 앱을 배포해야 한다.
+
+## 손님용 조회 전용 시간표 ST-22
+
+`GET /api/v1/stores/{storeId}/timetable?date=YYYY-MM-DD`는 로그인 없이 개인 식별자 없는 시간 구간을 반환한다. 사장님 시간표와 응답을 분리하고 읽기 전용 트랜잭션을 사용한다. 요청·상태 반영 기준과 검증 내용은 [고객 시간표 계약](customer-timetable.md)을 참고한다. 이번 API는 SQL·데이터 변경과 예약 확정 정책 변경을 요구하지 않는다.

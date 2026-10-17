@@ -133,6 +133,7 @@ class StoreAuthenticationTests {
         List.of(
             "/api/v1/stores/missing",
             "/api/v1/stores/missing/services",
+            "/api/v1/stores/missing/timetable?date=2026-10-20",
             "/api/v1/stores/missing/slots?from=2026-10-17&to=2026-10-18",
             "/api/v1/stores/missing/slots/missing")) {
       int status = mvc.perform(get(path)).andReturn().getResponse().getStatus();

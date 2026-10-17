@@ -11,6 +11,7 @@ import com.bintime.store.entity.*;
 import com.bintime.store.repository.StoreRepository;
 import com.bintime.user.service.UserAccountAccess;
 import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.function.*;
@@ -1285,6 +1286,89 @@ public class StoreApplicationService {
           event(s, "WITHDRAWN");
           return new WithdrawVacancyResponse(vacancyDto(s), ownerSlotDto(s));
         });
+  }
+
+  @Transactional(readOnly = true)
+  public CustomerTimetableResponse customerTimetable(String storeId, LocalDate date) {
+    require(date != null && date.getYear() >= 1 && date.getYear() <= 9999, 400, "INVALID_DATE");
+    Shop shop = shop(storeId);
+    var opening =
+        hours(shop).stream()
+            .filter(h -> h.dayOfWeek().equals(DAYS.get(date.getDayOfWeek().getValue() - 1)))
+            .findFirst()
+            .orElseThrow();
+    var dayStart = date.atStartOfDay(SEOUL).toOffsetDateTime();
+    var dayEnd = dayStart.plusDays(1);
+    var lastInstant = dayEnd.minusNanos(1000);
+    var moment = now();
+    // 조회로 만료 처리·이벤트 발행·시간 선점을 하지 않고 현재 상태만 읽는다.
+    var reservations =
+        db.limited(
+            Reservation.class,
+            "where e.storeId=?1 and e.status='CONFIRMED' and e.start<=?2 and e.end>?3 order by"
+                + " e.start,e.end,e.id",
+            501,
+            storeId,
+            lastInstant,
+            dayStart);
+    var slots =
+        opening.closed()
+            ? List.<Slot>of()
+            : db.limited(
+                Slot.class,
+                "where e.storeId=?1 and e.status='AVAILABLE' and e.start>=?2 and e.start<=?3 and"
+                    + " e.start>?4 and e.serviceId in (select s.id from StoreService s where"
+                    + " s.active='Y') order by e.start,e.end,e.id",
+                501,
+                storeId,
+                dayStart,
+                lastInstant,
+                moment);
+    require(reservations.size() + slots.size() <= 500, 409, "TIMETABLE_LIMIT_EXCEEDED");
+    var busy =
+        reservations.stream()
+            .map(
+                r ->
+                    new CustomerTimetableResponse.TimeRange(
+                        (r.start.isBefore(dayStart) ? dayStart : r.start)
+                            .atZoneSameInstant(SEOUL)
+                            .toOffsetDateTime(),
+                        (r.end.isAfter(dayEnd) ? dayEnd : r.end)
+                            .atZoneSameInstant(SEOUL)
+                            .toOffsetDateTime()))
+            .distinct()
+            .sorted(
+                Comparator.comparing(CustomerTimetableResponse.TimeRange::startAt)
+                    .thenComparing(CustomerTimetableResponse.TimeRange::endAt))
+            .toList();
+    var available =
+        slots.stream()
+            .filter(
+                s ->
+                    !s.start.atZoneSameInstant(SEOUL).toLocalTime().isBefore(opening.opensAt())
+                        && !s.end.isAfter(
+                            date.atTime(opening.closesAt()).atZone(SEOUL).toOffsetDateTime()))
+            .filter(
+                s ->
+                    busy.stream()
+                        .noneMatch(b -> s.start.isBefore(b.endAt()) && s.end.isAfter(b.startAt())))
+            .map(
+                s ->
+                    new CustomerTimetableResponse.TimeRange(
+                        s.start.atZoneSameInstant(SEOUL).toOffsetDateTime(),
+                        s.end.atZoneSameInstant(SEOUL).toOffsetDateTime()))
+            .distinct()
+            .toList();
+    var timeFormat = DateTimeFormatter.ofPattern("HH:mm");
+    return new CustomerTimetableResponse(
+        date,
+        "Asia/Seoul",
+        new CustomerTimetableResponse.OpeningHours(
+            opening.closed(),
+            opening.closed() ? null : opening.opensAt().format(timeFormat),
+            opening.closed() ? null : opening.closesAt().format(timeFormat)),
+        busy,
+        available);
   }
 
   public TimetableResponse timetable(Actor a, String storeId, LocalDate date) {

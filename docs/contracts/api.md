@@ -2,9 +2,9 @@
 
 출처: [Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4) 및 [공통 규약 v0.1](https://app.notion.com/p/3fbdaacb8cd4813ea423d8429b2447e2). 2026-10-16 조회 기준의 구현 제안 계약이다. C-06·C-07 예약 제안은 2026-10-17 사용자 요청으로 추가한 로컬 확장이며 Notion에서 가져온 항목이 아니다. 원본 [notion-api.json](../../src/test/resources/contracts/notion-api.json)은 유지하고 [chat-booking-proposals.json](../../src/test/resources/contracts/chat-booking-proposals.json)에 추가 요청·응답 예시를 보관한다.
 
-54개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01~11은 카카오 로그인·세션·CSRF 및 [프로필·위치·선호도](../user-profile.md)로 구현했다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~21은 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. notification N-01~06은 저장·읽음·SSE·FCM으로 구현했다. chatting C-01~08과 텍스트·예약 제안 WebSocket 이벤트는 [채팅 연동 안내](../chatting.md)에 따라 구현했다.
+55개 HTTP operation(REST·SSE)와 별도 WebSocket 계약을 정의한다. U-01~11은 카카오 로그인·세션·CSRF 및 [프로필·위치·선호도](../user-profile.md)로 구현했다. **search S-01~08 구현 및 계약 변경은 [search.md](../search.md)를 우선한다. S-03/S-06은 notificationConsent=true가 필수이며 501 골격 대상에서 제외한다.** store ST-01~22는 [store 구현 계약](../store.md)에 따라 영속 동작을 제공한다. notification N-01~06은 저장·읽음·SSE·FCM으로 구현했다. chatting C-01~08과 텍스트·예약 제안 WebSocket 이벤트는 [채팅 연동 안내](../chatting.md)에 따라 구현했다.
 
-Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`, `/api/v1/notifications/**`의 세션 인증·CSRF를 적용한다. store의 공개 조회 5개를 제외한 15개 API에는 세션 쿠키·CSRF 및 선택적 Bearer JWT 인증을 적용한다. [store 인증 계약](../store-auth.md)에 적용 범위와 설정을 정의한다. search는 매장 검색을 공개하고 대기·분석 API는 현재 CUSTOMER 또는 OWNER 인증과 쿠키 변경 요청 CSRF를 검증한다. 내부 검색은 별도 내부 토큰을 유지한다([search 인증](../search-auth.md)). `SearchUserAccessAdapter`가 공통 세션/JWT 인증 경계와 알림 구독 조회를 연결한다. chatting은 별도 필터 체인으로 카카오 세션 쿠키·변경 요청 CSRF를 검증하고 방의 고객·현재 매장 소유자만 허용한다. WebSocket은 세션·Origin·첫 프레임 CSRF를 검증한다. `api-docs` 프로필은 문서 열람용으로 Spring Security 필터와 DB 의존성을 제외하며, search 자체의 요청자 검증은 유지한다. 자세한 로그인 설정은 [카카오 로그인](../kakao-login.md)을 따른다.
+Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`, `/api/v1/notifications/**`의 세션 인증·CSRF를 적용한다. store의 공개 조회 6개를 제외한 16개 API에는 세션 쿠키·CSRF 및 선택적 Bearer JWT 인증을 적용한다. [store 인증 계약](../store-auth.md)에 적용 범위와 설정을 정의한다. search는 매장 검색을 공개하고 대기·분석 API는 현재 CUSTOMER 또는 OWNER 인증과 쿠키 변경 요청 CSRF를 검증한다. 내부 검색은 별도 내부 토큰을 유지한다([search 인증](../search-auth.md)). `SearchUserAccessAdapter`가 공통 세션/JWT 인증 경계와 알림 구독 조회를 연결한다. chatting은 별도 필터 체인으로 카카오 세션 쿠키·변경 요청 CSRF를 검증하고 방의 고객·현재 매장 소유자만 허용한다. WebSocket은 세션·Origin·첫 프레임 CSRF를 검증한다. `api-docs` 프로필은 문서 열람용으로 Spring Security 필터와 DB 의존성을 제외하며, search 자체의 요청자 검증은 유지한다. 자세한 로그인 설정은 [카카오 로그인](../kakao-login.md)을 따른다.
 
 ## 이름 및 응답 규칙
 
@@ -13,7 +13,7 @@ Spring Security가 `/api/v1/auth/**`, `/api/v1/users/**`, `/api/v1/notifications
 - JSON 응답은 `BaseResponse<T>` 상속 기반의 `resultType/success.data/error/meta(timestamp,path)` 구조다. 기존 Notion의 최상위 data는 success.data로 이동한다. 목록의 items/page/counts 구조는 그 안에 유지한다. 204·OAuth redirect·SSE·WebSocket은 봉투 예외다. 자세한 계약은 [response.md](response.md)를 따른다.
 - ID는 String, 오프셋 포함 시각은 OffsetDateTime, 날짜는 LocalDate, 금액은 정수 원이다. Web Push expirationTime은 Unix epoch 밀리초다.
 - 사용자 API는 필수값·범위와 U-08의 필수 nullable `maxPrice` 키 존재 여부를 검증한다. 나머지 골격의 PATCH 생략/명시적 null 구분 및 필드 간 검증은 실제 구현 시 보완한다.
-- Swagger 첫 화면의 `all` 그룹은 전체 HTTP API 54개를 표시한다. `public`은 52개, `internal`은 2개를 표시한다. chatting의 HTTP API는 8개이며 WebSocket은 이 수에 포함하지 않는다. 내부 계약은 외부 고객의 호출용이 아니며 search 내부 인증 설정은 [search.md](../search.md)를 따른다.
+- Swagger 첫 화면의 `all` 그룹은 전체 HTTP API 55개를 표시한다. `public`은 53개, `internal`은 2개를 표시한다. chatting의 HTTP API는 8개이며 WebSocket은 이 수에 포함하지 않는다. 내부 계약은 외부 고객의 호출용이 아니며 search 내부 인증 설정은 [search.md](../search.md)를 따른다.
 - Notion 예시에서 생략된 선택 필드(reason, openingHours 등)는 공통 규약을 기준으로 포함한다. ST-08은 OWNER 조회 시 customer/resourceId가 추가된다.
 
 ## 명세 간 차이
@@ -52,6 +52,7 @@ Notion v0.1은 슬롯 상태를 AVAILABLE/BOOKED/BLOCKED/EXPIRED로 정의하며
 | ST-15 | store | POST `/api/v1/owner/stores/{storeId}/vacancies/{vacancyId}/publish` | OwnerVacancyController.publishVacancy | PublishVacancyRequest | PublishVacancyResponse |
 | ST-16 | store | POST `/api/v1/owner/stores/{storeId}/vacancies/{vacancyId}/withdraw` | OwnerVacancyController.withdrawVacancy | WithdrawVacancyRequest | WithdrawVacancyResponse |
 | ST-17 | store | PATCH `/api/v1/owner/stores/{storeId}/services/{serviceId}` | OwnerStoreController.updateService | UpdateStoreServiceRequest | StoreServiceResponse |
+| ST-22 | store | GET `/api/v1/stores/{storeId}/timetable` | StoreController.getCustomerTimetable | — | CustomerTimetableResponse |
 | S-01 | search | GET `/api/v1/search/stores` | SearchController.searchStores | — | StoreSearchResponse |
 | S-02 | search | POST `/api/v1/search/intents/analyze` | SearchController.analyzeIntent | AnalyzeIntentRequest | AnalyzeIntentResponse |
 | S-03 | search | POST `/api/v1/search/waitlists` | WaitlistController.createWaitlist | CreateWaitlistRequest | WaitlistResponse |
@@ -114,3 +115,7 @@ ST-15 instantBooking=false이면 ST-06은 선점 없는 PENDING 신청을 생성
 현재 시연은 recommendation_opt_in=N/Y와 동의 시각에 관계없이 CUSTOMER/OWNER를 후보에 포함한다. 활성 기기·유효한 미래 VACANCY·선호 유사도 기준(기본 0.5 이상)은 유지하며 위치·매장별 대기는 필요 없다. U-10/U-11은 기존 저장값 호환 API로 deprecated이며 false 저장도 발송을 차단하지 않는다. N-04 FID 등록은 기존 빈자리 탐색을 함께 접수하고 N-05 구독 해제는 해당 기기의 수신을 중단한다. HTTP 경로·응답 필드는 유지한다.
 
 N-06의 audience 생략/null은 WAITLIST이며 matches는 1~20개다. PERSONALIZED는 matches=[]이고 현재 계정·활성 기기·슬롯·벡터를 재검증한다. 두 경로 모두 공개 type=VACANCY_MATCHED이며 대기 없는 알림의 target.waitlistIds=[]를 허용한다. 사용자+슬롯 중복 방지는 공통이다.
+
+### 손님용 조회 전용 시간표
+
+ST-22는 로그인 없이 date(YYYY-MM-DD, Asia/Seoul)로 조회하며 `Cache-Control: no-store`를 반환한다. `openingHours`, 확정 예약의 시간만 담은 `busyTimes`, 공개된 유효 슬롯의 `availableTimes`를 제공하고 고객·예약·슬롯 ID는 포함하지 않는다. 취소·노쇼 후 미발행 빈자리는 가능 시간에 포함하지 않는다. 이 API는 예약·상태 변경을 만들지 않으며 기존 확정 정책과 취소 API는 유지한다. [응답과 프런트 연결](../customer-timetable.md)을 참고한다.

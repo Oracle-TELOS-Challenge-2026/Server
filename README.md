@@ -120,13 +120,13 @@ IntelliJ에서도 Working directory를 저장소 루트로 지정하면 동일�
 
 ## API 계약 및 Swagger
 
-[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)의 REST·SSE 45개에 store 등록 API 3개와 팀 요청의 채팅 예약 제안 API 2개, 맞춤 알림 설정 API 2개 및 예약 의사 분석 API 1개 및 빈자리 신청 목록 API 1개를 추가해 총 54개와 별도 채팅 WebSocket 프레임을 정의했다. user U-01~11, store ST-01~21, search S-01~08의 처리 로직을 구현했다. 사용자 API는 [프로필·위치·선호도 안내](docs/user-profile.md), store는 [store 구현 계약](docs/store.md), search의 실행·의존 계약·복구 방법은 [search 안내](docs/search.md), 미연결 항목·다음 작업은 [search 진행 현황](docs/search-progress.md)을 참고한다.
+[Notion 통합 API 명세](https://false-resolution-beb.notion.site/34c9cc5a61234f3d92bb3c6bd58a0df4)의 REST·SSE 45개에 store 등록 API 3개와 팀 요청의 채팅 예약 제안 API 2개, 맞춤 알림 설정 API 2개 및 예약 의사 분석 API 1개 및 빈자리 신청 목록 API 1개 및 손님용 조회 전용 시간표 API 1개를 추가해 총 55개와 별도 채팅 WebSocket 프레임을 정의했다. user U-01~11, store ST-01~22, search S-01~08의 처리 로직을 구현했다. 사용자 API는 [프로필·위치·선호도 안내](docs/user-profile.md), store는 [store 구현 계약](docs/store.md), search의 실행·의존 계약·복구 방법은 [search 안내](docs/search.md), 미연결 항목·다음 작업은 [search 진행 현황](docs/search-progress.md)을 참고한다.
 
 - [API별 Controller·DTO 이름 매핑](docs/contracts/api.md)
 - [SSE·WebSocket 계약](docs/contracts/realtime.md)
 - Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-- 기본 선택 `all`: `/v3/api-docs/all` (전체 54개 operation)
-- 외부 API OpenAPI: `/v3/api-docs/public` (52개 operation)
+- 기본 선택 `all`: `/v3/api-docs/all` (전체 55개 operation)
+- 외부 API OpenAPI: `/v3/api-docs/public` (53개 operation)
 - 내부 계약 OpenAPI: `/v3/api-docs/internal` (2개 operation)
 
 DB·Redis 없이 문서를 확인하려면 Java 21 이상 환경에서 다음 명령을 실행한다. Gradle toolchain은 Java 21을 사용한다.
@@ -209,3 +209,5 @@ Notion v0.1의 알림 대상·슬롯 상태와 기존 기획 간 차이 및 stor
 ## 기본 N 계정의 맞춤 알림
 
 현재 시연은 recommendation_opt_in=N/Y와 무관하게 모든 CUSTOMER/OWNER를 맞춤 후보에 포함한다. 활성 기기 구독·유효한 미래 빈자리·선호 벡터 유사도 0.5 이상을 확인하고 위치·매장별 대기는 요구하지 않는다. FID 등록 시 기존 빈자리도 탐색한다. DB를 Y로 변경하거나 기존 동의 API를 켤 필요가 없다. 수신 중단은 기기 구독 해제를 사용한다. [실행·호환 API 안내](docs/user-profile.md#맞춤-빈자리-알림-동의-u-10u-11)를 따른다.
+
+손님용 조회 전용 시간표 ST-22는 [고객 시간표 안내](docs/customer-timetable.md)를 따른다. DB 마이그레이션 없이 공개 조회만 추가하며 기존 예약 확정 정책은 변경하지 않는다.

@@ -58,6 +58,7 @@ public class StoreSecurityConfig {
                         "/api/v1/stores/categories",
                         "/api/v1/stores/{storeId}",
                         "/api/v1/stores/{storeId}/services",
+                        "/api/v1/stores/{storeId}/timetable",
                         "/api/v1/stores/{storeId}/slots",
                         "/api/v1/stores/{storeId}/slots/{slotId}")
                     .permitAll()

@@ -1,0 +1,24 @@
+[
+  {
+    "id": "ST-22",
+    "domain": "store",
+    "controller": "StoreController",
+    "methodName": "getCustomerTimetable",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/timetable",
+    "request": null,
+    "response": "CustomerTimetableResponse",
+    "status": 200,
+    "query": [{"name": "date", "required": true}],
+    "auth": "공개 조회. 세션·CSRF·Idempotency-Key 불필요",
+    "requestExample": null,
+    "responseExample": {
+      "date": "2026-10-20",
+      "timezone": "Asia/Seoul",
+      "openingHours": {"closed": false, "opensAt": "09:00", "closesAt": "18:00"},
+      "busyTimes": [{"startAt": "2026-10-20T10:00:00+09:00", "endAt": "2026-10-20T11:00:00+09:00"}],
+      "availableTimes": [{"startAt": "2026-10-20T14:00:00+09:00", "endAt": "2026-10-20T15:00:00+09:00"}]
+    },
+    "source": "Local user request, 2026-10-17; docs/customer-timetable.md"
+  }
+]

@@ -1,18 +1,22 @@
 package com.bintime.store.controller;
 
 import com.bintime.store.dto.CategoryListResponse;
+import com.bintime.store.dto.CustomerTimetableResponse;
 import com.bintime.store.dto.ReservationSlotListResponse;
 import com.bintime.store.dto.ReservationSlotResponse;
 import com.bintime.store.dto.StoreDetailResponse;
 import com.bintime.store.dto.StoreServiceListResponse;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +37,51 @@ public class StoreController {
       com.bintime.common.auth.CurrentActor actor) {
     this.svc = svc;
     this.actor = actor;
+  }
+
+  @Operation(
+      operationId = "getCustomerTimetable",
+      summary = "ST-22 · 손님용 조회 전용 시간표",
+      description =
+          "로그인 없이 조회. date는 YYYY-MM-DD, Asia/Seoul 기준. 확정 예약의 시간만 busyTimes에 반환하고 취소·노쇼·완료·미확정 요청은"
+              + " 제외한다. availableTimes는 공개된 미래 AVAILABLE 슬롯 중 활성 시술·영업시간·확정 예약 충돌 조건을 만족하는 구간이다."
+              + " 미발행 빈자리는 제외한다. 휴무일은 closed=true, opensAt/closesAt=null, availableTimes=[]. 양쪽 목록에"
+              + " 없는 영업시간은 확인 필요이며 빈 시간을 자동 생성하지 않는다. 개인정보·예약/슬롯 ID 없이 반환하며 Cache-Control:"
+              + " no-store. 조회로 예약·선점·상태 변경·알림을 만들지 않는다. 일별 최대 500개를 초과하면 409.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "성공. Cache-Control: no-store",
+      headers =
+          @Header(name = "Cache-Control", schema = @Schema(type = "string", example = "no-store")),
+      useReturnTypeSchema = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              examples =
+                  @ExampleObject(
+                      name = "success",
+                      value =
+                          """
+                          {"resultType":"SUCCESS","success":{"data":{
+                            "date":"2026-10-20","timezone":"Asia/Seoul",
+                            "openingHours":{"closed":false,"opensAt":"09:00","closesAt":"18:00"},
+                            "busyTimes":[{"startAt":"2026-10-20T10:00:00+09:00","endAt":"2026-10-20T11:00:00+09:00"}],
+                            "availableTimes":[{"startAt":"2026-10-20T14:00:00+09:00","endAt":"2026-10-20T15:00:00+09:00"}]
+                          }},"error":null,"meta":{"timestamp":"2026-10-17T12:00:00","path":"/api/v1/stores/{storeId}/timetable"}}
+                          """)))
+  @ApiResponse(responseCode = "400", description = "필수 date 누락·형식 오류 / INVALID_DATE")
+  @ApiResponse(responseCode = "404", description = "STORE_NOT_FOUND")
+  @ApiResponse(responseCode = "409", description = "TIMETABLE_LIMIT_EXCEEDED")
+  @GetMapping(
+      value = "/api/v1/stores/{storeId}/timetable",
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<com.bintime.common.dto.ApiResponse<CustomerTimetableResponse>>
+      getCustomerTimetable(
+          @PathVariable String storeId,
+          @RequestParam @DateTimeFormat(pattern = "uuuu-MM-dd") LocalDate date) {
+    return ResponseEntity.ok()
+        .cacheControl(CacheControl.noStore())
+        .body(com.bintime.common.dto.ApiResponse.success(svc.customerTimetable(storeId, date)));
   }
 
   @Operation(

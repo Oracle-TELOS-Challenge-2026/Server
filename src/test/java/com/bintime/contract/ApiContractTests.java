@@ -102,7 +102,7 @@ class ApiContractTests {
         }
       }
     }
-    assertThat(publicCount).isEqualTo(5);
+    assertThat(publicCount).isEqualTo(6);
     assertThat(protectedCount).isEqualTo(16);
   }
 
@@ -111,9 +111,9 @@ class ApiContractTests {
     JsonNode allDoc = getDoc("all");
     JsonNode publicDoc = getDoc("public");
     JsonNode internalDoc = getDoc("internal");
-    assertThat(operationCount(publicDoc)).isEqualTo(52);
+    assertThat(operationCount(publicDoc)).isEqualTo(53);
     assertThat(operationCount(internalDoc)).isEqualTo(2);
-    assertThat(operationCount(allDoc)).isEqualTo(54);
+    assertThat(operationCount(allDoc)).isEqualTo(55);
     var operationIds = new HashSet<String>();
 
     for (JsonNode contract : contracts()) {
@@ -273,7 +273,12 @@ class ApiContractTests {
                     "getCategories", "getStore", "getSlot", "getReservation", "getOwnerReservation")
                 .contains(id)) expected.add("400");
             if (!java.util.Set.of(
-                    "getCategories", "getStore", "getServices", "getAvailableSlots", "getSlot")
+                    "getCategories",
+                    "getStore",
+                    "getServices",
+                    "getAvailableSlots",
+                    "getSlot",
+                    "getCustomerTimetable")
                 .contains(id)) expected.addAll(java.util.Set.of("401", "403"));
             if (!java.util.Set.of("getCategories", "getMyReservations", "createStore").contains(id))
               expected.add("404");
@@ -606,6 +611,7 @@ class ApiContractTests {
         new String[] {
           "/contracts/notion-api.json",
           "/contracts/chat-booking-proposals.json",
+          "/contracts/customer-timetable.json",
           "/contracts/chat-booking-suggestion.json"
         }) {
       try (var stream = getClass().getResourceAsStream(resource)) {

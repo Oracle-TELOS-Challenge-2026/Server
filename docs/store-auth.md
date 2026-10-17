@@ -11,6 +11,7 @@ store는 기존 카카오 로그인 세션 쿠키(`bt_session`)를 그대로 사
 | ST-03 | GET `/stores/{storeId}/services` | 공개 |
 | ST-04 | GET `/stores/{storeId}/slots` | 공개 |
 | ST-05 | GET `/stores/{storeId}/slots/{slotId}` | 공개 |
+| ST-22 | GET `/stores/{storeId}/timetable` | 공개, 시간만 반환·no-store |
 | ST-06 | POST `/reservations` | 로그인 |
 | ST-07 | GET `/reservations/me` | 로그인, 본인 목록 |
 | ST-08 | GET `/reservations/{reservationId}` | 예약자 본인 또는 해당 매장 소유자 |
@@ -75,6 +76,6 @@ Bearer 인증은 요청 단위이며 세션에 저장하지 않는다. 브라우
 
 기존 `local`/`test` + `bintime.auth.local-enabled=true`에서만 `X-Local-User-Id` 대체 식별을 지원한다. prod가 함께 활성화되면 무효다. 대체 식별은 QA용이며 기존 계정이 있어야 한다. `api-docs`는 실행용이 아닌 문서용 프로필이다.
 
-Swagger의 보호 store operation은 sessionCookie 또는 bearerJwt 중 하나를 선택한다. 공개 5개 operation에는 인증 요구를 선언하지 않는다.
+Swagger의 보호 store operation은 sessionCookie 또는 bearerJwt 중 하나를 선택한다. 공개 6개 operation에는 인증 요구를 선언하지 않는다.
 
 `StoreAuthenticationTests`는 세션·CSRF, 공개/보호 구분, 현재 DB 역할, 삭제 계정, 실제 RSA 서명 JWT·만료·issuer/audience 불일치·위조와 쿠키 대체 차단을 검증한다. 기존 `StoreApiTests`는 소유권·예약·동시성·멱등성 및 local QA 경로를 검증한다. 실제 카카오 계정과 배포 발급자의 JWT를 사용한 브라우저 QA는 별도다.
