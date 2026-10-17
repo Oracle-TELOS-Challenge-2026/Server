@@ -1,0 +1,25 @@
+[
+  {
+    "id": "C-08",
+    "domain": "chatting",
+    "controller": "ChatBookingSuggestionController",
+    "methodName": "analyze",
+    "method": "POST",
+    "path": "/api/v1/chatting/rooms/{roomId}/messages/{messageId}/booking-suggestion",
+    "request": null,
+    "response": "ChatBookingSuggestionResponse",
+    "status": 200,
+    "query": [],
+    "auth": "채팅방 참여자의 세션 쿠키와 X-CSRF-Token 필수. 본문 없음",
+    "requestExample": null,
+    "responseExample": {
+      "sourceMessageId": "msg_customer_001",
+      "sourceContent": "내일 17시에 머리자르고 싶어요",
+      "bookingRequested": true,
+      "date": "2026-10-18",
+      "time": "17:00",
+      "serviceDescription": "커트"
+    },
+    "source": "Local user request, 2026-10-17; docs/chat-booking-suggestion.md"
+  }
+]
