@@ -146,6 +146,22 @@ public class ChatService {
         new ChatMessageListResponse.Page(older, older ? visible.getFirst().sequence() : null));
   }
 
+  public ChatMessageResponse bookingSource(String user, String roomId, String messageId) {
+    actor(user, false);
+    var room = participant(user, roomId, false);
+    require("OPEN".equals(room.status()), 409, "ROOM_READ_ONLY");
+    id(messageId);
+    var source = db.message(room, messageId);
+    require(
+        source != null
+            && "TEXT".equals(source.type())
+            && room.customer().equals(source.sender().id()),
+        404,
+        "SOURCE_MESSAGE_NOT_FOUND");
+    require(source.sequence() == db.latestCustomerSequence(room), 409, "PROPOSAL_SOURCE_OUTDATED");
+    return source;
+  }
+
   public Result<ChatMessageResponse> send(
       String user, String id, String key, SendChatMessageRequest request) {
     validate(request);
