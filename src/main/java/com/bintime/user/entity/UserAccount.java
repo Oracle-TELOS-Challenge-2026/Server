@@ -17,6 +17,7 @@ public class UserAccount {
   public String role;
 
   @org.hibernate.annotations.ColumnDefault("'N'")
+  @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.CHAR)
   @Column(name = "recommendation_opt_in", nullable = false, length = 1)
   public String recommendationOptIn = "N";
 
