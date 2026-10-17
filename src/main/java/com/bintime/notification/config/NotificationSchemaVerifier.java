@@ -36,7 +36,9 @@ public class NotificationSchemaVerifier implements ApplicationRunner {
                 "user_id,sequence_no,event_id,event_type,payload_json,created_at",
             "notification_deliveries",
                 "delivery_id,notification_id,subscription_id,status,attempts,available_at,lease_owner,error_code,accepted_at",
-            "notification_delivery_clock", "user_id,last_sent_at")
+            "notification_delivery_clock", "user_id,last_sent_at",
+            "notification_push_history",
+                "history_id,notification_type,notification_id,user_id,subscription_id,attempt_no,status,error_code,title,body_text,action_path,created_at")
         .forEach(
             (table, columns) ->
                 jdbc.queryForList("select " + columns + " from " + table + " where 1=0"));
