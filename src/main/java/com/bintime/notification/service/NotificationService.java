@@ -16,6 +16,7 @@ import com.bintime.search.service.NotificationSimilarityService;
 import com.bintime.search.service.SearchFailure;
 import com.bintime.search.service.WaitlistService;
 import com.bintime.store.contract.SearchStoreCatalog;
+import com.bintime.user.contract.SearchUserAccess;
 import com.bintime.user.security.BintimePrincipal;
 import java.time.Clock;
 import java.time.OffsetDateTime;
@@ -38,6 +39,7 @@ public class NotificationService implements SearchNotificationGateway {
   private final TransactionTemplate tx;
   private final Clock clock;
   private final NotificationSimilarityService similarity;
+  private final SearchUserAccess users;
 
   public NotificationService(
       NotificationRepository db,
@@ -47,7 +49,8 @@ public class NotificationService implements SearchNotificationGateway {
       ConditionRules rules,
       TransactionTemplate tx,
       Clock clock,
-      NotificationSimilarityService similarity) {
+      NotificationSimilarityService similarity,
+      SearchUserAccess users) {
     this.db = db;
     this.subscriptions = subscriptions;
     this.waitlists = waitlists;
@@ -56,6 +59,7 @@ public class NotificationService implements SearchNotificationGateway {
     this.tx = tx;
     this.clock = clock;
     this.similarity = similarity;
+    this.users = users;
   }
 
   @Override
@@ -82,7 +86,8 @@ public class NotificationService implements SearchNotificationGateway {
             request.slotId(),
             request.publicationVersion(),
             valid.matches(),
-            request.expiresAt());
+            request.expiresAt(),
+            request.audience());
     return tx.execute(
         status -> {
           require(db.lockUser(request.userId()), 404, "NOT_FOUND");
@@ -99,14 +104,18 @@ public class NotificationService implements SearchNotificationGateway {
                   "noti_" + UUID.randomUUID(),
                   "VACANCY_MATCHED",
                   "빈자리 알림",
-                  "신청한 조건에 맞는 빈자리가 생겼어요.",
+                  ("PERSONALIZED".equals(request.audience())
+                          ? "선호와 유사한 빈자리가 생겼어요."
+                          : "신청한 조건에 맞는 빈자리가 생겼어요.")
+                      + (valid.slot().instantBooking() ? " 즉시확정 예약이에요." : " 사장님 승인 후 확정돼요."),
                   new NotificationResponse.Target(
                       valid.slot().storeId(),
                       request.slotId(),
                       request.publicationVersion(),
                       valid.matches().stream()
                           .map(DispatchNotificationRequest.MatcheItem::waitlistId)
-                          .toList()),
+                          .toList(),
+                      valid.slot().instantBooking()),
                   new NotificationResponse.Action("OPEN_SLOT", "/customer/waitlist"),
                   "AVAILABLE",
                   null,
@@ -127,7 +136,7 @@ public class NotificationService implements SearchNotificationGateway {
         });
   }
 
-  /** ACTIVE waitlists can only be created/updated with explicit notification consent. */
+  /** Recheck the current account, slot and audience requirements before enqueue and FCM. */
   public Eligible eligible(DispatchNotificationRequest request) {
     if (request == null
         || (request.expiresAt() != null
@@ -139,6 +148,15 @@ public class NotificationService implements SearchNotificationGateway {
             .findFirst()
             .orElse(null);
     if (slot == null) return null;
+    if ("PERSONALIZED".equals(request.audience())) {
+      // 맞춤 알림은 기존 동의 플래그·예약 대기·위치 없이 현재 계정과 선호 벡터로 재검증한다.
+      return "VACANCY".equals(slot.source())
+              && users.personalizedCandidateExists(request.userId())
+              && similarity.matches(request.userId(), slot)
+          ? new Eligible(slot, List.of())
+          : null;
+    }
+    if (!"WAITLIST".equals(request.audience())) return null;
     var matches = new ArrayList<DispatchNotificationRequest.MatcheItem>();
     for (var match : request.matches()) {
       try {
@@ -246,11 +264,19 @@ public class NotificationService implements SearchNotificationGateway {
         "INVALID_NOTIFICATION");
     require("VACANCY_MATCHED".equals(request.type()), 400, "INVALID_NOTIFICATION_TYPE");
     require(
+        java.util.Set.of("WAITLIST", "PERSONALIZED").contains(request.audience()),
+        400,
+        "INVALID_NOTIFICATION_AUDIENCE");
+    require(
         request.publicationVersion() == null || request.publicationVersion() >= 1,
         400,
         "INVALID_PUBLICATION_VERSION");
     require(
-        request.matches() != null && !request.matches().isEmpty() && request.matches().size() <= 20,
+        request.matches() != null
+            && request.matches().size() <= 20
+            && ("PERSONALIZED".equals(request.audience())
+                ? request.matches().isEmpty()
+                : !request.matches().isEmpty()),
         400,
         "INVALID_MATCHES");
     require(

@@ -1995,4 +1995,309 @@ class StoreApiTests {
                 .code())
         .isEqualTo("INVALID_OPENING_HOURS");
   }
+
+  private JsonNode approvalVacancy() throws Exception {
+    String shop = shop("owner"), service = service(shop, 60);
+    var original = slot(shop, service, "2026-10-16T12:00:00+09:00");
+    var vacancy = cancel(reserve(original, "alice")).path("vacancy");
+    return ok(
+            "POST",
+            ownerPath(shop) + "/vacancies/" + vacancy.path("id").asText() + "/publish",
+            "owner",
+            UUID.randomUUID().toString(),
+            Map.of(
+                "serviceId",
+                service,
+                "startAt",
+                "2026-10-16T12:00:00+09:00",
+                "discount",
+                Map.of("type", "PERCENT", "value", 30),
+                "expectedVersion",
+                vacancy.path("version").asLong(),
+                "instantBooking",
+                false),
+            200)
+        .path("slot");
+  }
+
+  private Result review(JsonNode slot, JsonNode request, String actor, String status, String key)
+      throws Exception {
+    return call(
+        "POST",
+        ownerPath(slot.path("storeId").asText())
+            + "/reservations/"
+            + request.path("id").asText()
+            + "/status",
+        actor,
+        key,
+        Map.of("status", status, "expectedVersion", request.path("version").asLong()));
+  }
+
+  @Test
+  void multipleRequestsKeepSupplyAvailableAndOwnerListUsesApplicationOrder() throws Exception {
+    var slot = approvalVacancy();
+    assertThat(slot.path("instantBooking").asBoolean(true)).isFalse();
+    var first = ok("POST", BASE + "/reservations", "alice", "apply-alice", booking(slot), 201);
+    when(clock.instant()).thenReturn(NOW.plusSeconds(1));
+    var second = reserve(slot, "bob");
+    assertThat(first.path("status").asText()).isEqualTo("PENDING");
+    assertThat(second.path("status").asText()).isEqualTo("PENDING");
+    assertThat(ok("POST", BASE + "/reservations", "alice", "apply-alice", booking(slot), 201))
+        .isEqualTo(first);
+    assertThat(call("POST", BASE + "/reservations", "alice", "duplicate", booking(slot)).code())
+        .isEqualTo("RESERVATION_REQUEST_EXISTS");
+    assertThat(catalog.revalidate(List.of(slot.path("id").asText())))
+        .singleElement()
+        .satisfies(s -> assertThat(s.instantBooking()).isFalse());
+    var current =
+        ok(
+            "GET",
+            BASE
+                + "/stores/"
+                + slot.path("storeId").asText()
+                + "/slots/"
+                + slot.path("id").asText(),
+            null,
+            null,
+            null,
+            200);
+    assertThat(current.path("status").asText()).isEqualTo("AVAILABLE");
+    assertThat(current.path("version")).isEqualTo(slot.path("version"));
+    String path = ownerPath(slot.path("storeId").asText()) + "/reservation-requests";
+    var page = ok("GET", path + "?limit=1", "owner", null, null, 200);
+    assertThat(page.at("/items/0/id")).isEqualTo(first.path("id"));
+    assertThat(page.at("/items/0/allowedActions").toString()).contains("APPROVE", "REJECT");
+    var next =
+        ok(
+            "GET",
+            path + "?limit=1&cursor=" + page.at("/page/nextCursor").asText(),
+            "owner",
+            null,
+            null,
+            200);
+    assertThat(next.at("/items/0/id")).isEqualTo(second.path("id"));
+    assertThat(call("GET", path, "otherOwner", null, null).status()).isEqualTo(403);
+    assertThat(call("GET", path, "alice", null, null).status()).isEqualTo(403);
+    var upcoming = ok("GET", BASE + "/reservations/me?scope=UPCOMING", "bob", null, null, 200);
+    assertThat(upcoming.at("/items/0/status").asText()).isEqualTo("PENDING");
+  }
+
+  @Test
+  void ownerCanSelectLaterApplicantAndOnlyOneRequestIsConfirmed() throws Exception {
+    var slot = approvalVacancy();
+    var alice = reserve(slot, "alice");
+    var bob = reserve(slot, "bob");
+    assertThat(review(slot, bob, "otherOwner", "CONFIRMED", "wrong-owner").status()).isEqualTo(403);
+    assertThat(review(slot, bob, "alice", "CONFIRMED", "customer-approve").status()).isEqualTo(403);
+    var confirmed = review(slot, bob, "owner", "CONFIRMED", "select-bob");
+    assertThat(confirmed.status()).as(confirmed.body().toString()).isEqualTo(200);
+    assertThat(confirmed.data().at("/reservation/status").asText()).isEqualTo("CONFIRMED");
+    assertThat(review(slot, bob, "owner", "CONFIRMED", "select-bob").data())
+        .isEqualTo(confirmed.data());
+    assertThat(
+            db.queryForObject(
+                "select status_code from store_reservations where reservation_id=?",
+                String.class,
+                alice.path("id").asText()))
+        .isEqualTo("REJECTED");
+    assertThat(
+            db.queryForObject(
+                "select status_code from store_slots where slot_id=?",
+                String.class,
+                slot.path("id").asText()))
+        .isEqualTo("BOOKED");
+    assertThat(review(slot, alice, "owner", "CONFIRMED", "select-alice").status()).isEqualTo(409);
+    assertThat(catalog.revalidate(List.of(slot.path("id").asText()))).isEmpty();
+  }
+
+  @Test
+  void concurrentApprovalsConfirmExactlyOneApplicant() throws Exception {
+    var slot = approvalVacancy();
+    var alice = reserve(slot, "alice");
+    var bob = reserve(slot, "bob");
+    var ready = new CountDownLatch(2);
+    var start = new CountDownLatch(1);
+    try (var pool = Executors.newFixedThreadPool(2)) {
+      var a =
+          pool.submit(
+              () -> {
+                ready.countDown();
+                start.await();
+                return review(slot, alice, "owner", "CONFIRMED", "race-a");
+              });
+      var b =
+          pool.submit(
+              () -> {
+                ready.countDown();
+                start.await();
+                return review(slot, bob, "owner", "CONFIRMED", "race-b");
+              });
+      assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+      start.countDown();
+      assertThat(
+              List.of(a.get(15, TimeUnit.SECONDS).status(), b.get(15, TimeUnit.SECONDS).status()))
+          .containsExactlyInAnyOrder(200, 409);
+    }
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_reservations where slot_id=? and"
+                    + " status_code='CONFIRMED'",
+                Integer.class,
+                slot.path("id").asText()))
+        .isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select count(*) from store_reservations where slot_id=? and status_code='PENDING'",
+                Integer.class,
+                slot.path("id").asText()))
+        .isZero();
+  }
+
+  @Test
+  void rejectedAndWithdrawnApplicationsDoNotCreateVacanciesOrConsumeSupply() throws Exception {
+    var slot = approvalVacancy();
+    var alice = reserve(slot, "alice");
+    assertThat(review(slot, alice, "owner", "REJECTED", "reject").status()).isEqualTo(200);
+    var retry = reserve(slot, "alice");
+    var withdrawn = cancel(retry);
+    assertThat(withdrawn.at("/reservation/status").asText()).isEqualTo("WITHDRAWN");
+    assertThat(withdrawn.path("vacancy").isNull()).isTrue();
+    assertThat(db.queryForObject("select count(*) from store_slots", Integer.class)).isEqualTo(2);
+    assertThat(catalog.revalidate(List.of(slot.path("id").asText()))).hasSize(1);
+    assertThat(reserve(slot, "bob").path("status").asText()).isEqualTo("PENDING");
+  }
+
+  @Test
+  void applicationsExpireAtStartAndCannotBeApproved() throws Exception {
+    var slot = approvalVacancy();
+    var request = reserve(slot, "bob");
+    when(clock.instant()).thenReturn(Instant.parse("2026-10-16T03:00:00Z"));
+    assertThat(review(slot, request, "owner", "CONFIRMED", "too-late").code())
+        .isEqualTo("RESERVATION_REQUEST_EXPIRED");
+    var pending =
+        ok(
+            "GET",
+            ownerPath(slot.path("storeId").asText()) + "/reservation-requests",
+            "owner",
+            null,
+            null,
+            200);
+    assertThat(pending.path("items")).isEmpty();
+    assertThat(
+            db.queryForObject(
+                "select status_code from store_reservations where reservation_id=?",
+                String.class,
+                request.path("id").asText()))
+        .isEqualTo("EXPIRED");
+    assertThat(
+            ok("GET", BASE + "/reservations/me?scope=CANCELED", "bob", null, null, 200)
+                .at("/items/0/status")
+                .asText())
+        .isEqualTo("EXPIRED");
+  }
+
+  @Test
+  void waitlistRemainsActiveUntilApprovalAndLosingCustomerKeepsWaiting() throws Exception {
+    var slot = approvalVacancy();
+    String shop = slot.path("storeId").asText(), service = slot.path("serviceId").asText();
+    seedIntent("approval-wait-a", "alice", shop, service);
+    seedIntent("approval-wait-b", "bob", shop, service);
+    var a = new HashMap<>(booking(slot));
+    a.put("waitlistId", "approval-wait-a");
+    var b = new HashMap<>(booking(slot));
+    b.put("waitlistId", "approval-wait-b");
+    var alice = ok("POST", BASE + "/reservations", "alice", "wait-apply-a", a, 201);
+    var bob = ok("POST", BASE + "/reservations", "bob", "wait-apply-b", b, 201);
+    assertThat(waitlists.get("alice", "approval-wait-a").status()).isEqualTo("ACTIVE");
+    assertThat(waitlists.get("bob", "approval-wait-b").status()).isEqualTo("ACTIVE");
+    assertThat(review(slot, alice, "owner", "CONFIRMED", "wait-select-a").status()).isEqualTo(200);
+    assertThat(waitlists.get("alice", "approval-wait-a").status()).isEqualTo("FULFILLED");
+    assertThat(waitlists.get("bob", "approval-wait-b").status()).isEqualTo("ACTIVE");
+    assertThat(
+            db.queryForObject(
+                "select status_code from store_reservations where reservation_id=?",
+                String.class,
+                bob.path("id").asText()))
+        .isEqualTo("REJECTED");
+  }
+
+  @Test
+  void approvalChecksCustomerScheduleAgainAndCanSelectSomeoneElse() throws Exception {
+    var slot = approvalVacancy();
+    var alice = reserve(slot, "alice");
+    var bob = reserve(slot, "bob");
+    String other = shop("owner"), service = service(other, 60);
+    reserve(slot(other, service, "2026-10-16T12:00:00+09:00"), "alice");
+    assertThat(review(slot, alice, "owner", "CONFIRMED", "conflicting").code())
+        .isEqualTo("RESERVATION_TIME_CONFLICT");
+    assertThat(review(slot, bob, "owner", "CONFIRMED", "available-bob").status()).isEqualTo(200);
+  }
+
+  @Test
+  void withdrawalClosesAllApplicationsAndRepublishingCanUseInstantBooking() throws Exception {
+    var slot = approvalVacancy();
+    var request = reserve(slot, "bob");
+    String shop = slot.path("storeId").asText();
+    var withdrawn =
+        ok(
+            "POST",
+            ownerPath(shop) + "/vacancies/" + slot.path("id").asText() + "/withdraw",
+            "owner",
+            "withdraw-apps",
+            Map.of("expectedVersion", slot.path("version").asLong()),
+            200);
+    assertThat(
+            db.queryForObject(
+                "select status_code from store_reservations where reservation_id=?",
+                String.class,
+                request.path("id").asText()))
+        .isEqualTo("REJECTED");
+    var published =
+        publish(
+                shop,
+                withdrawn.path("vacancy"),
+                slot.path("serviceId").asText(),
+                "2026-10-16T12:00:00+09:00",
+                "republish-instant")
+            .path("slot");
+    assertThat(published.path("instantBooking").asBoolean()).isTrue();
+    assertThat(reserve(published, "bob").path("status").asText()).isEqualTo("CONFIRMED");
+  }
+
+  @Test
+  void approvalFailureRollsBackSelectedAndOtherApplicationsTogether() throws Exception {
+    var slot = approvalVacancy();
+    var alice = reserve(slot, "alice");
+    var bob = reserve(slot, "bob");
+    db.update("delete from store_events where event_type='BOOKED'");
+    db.execute(
+        "alter table store_events add constraint approval_event_failure"
+            + " check(event_type<>'BOOKED')");
+    try {
+      assertThat(review(slot, bob, "owner", "CONFIRMED", "failed-approval").status())
+          .isEqualTo(500);
+      assertThat(
+              db.queryForObject(
+                  "select count(*) from store_reservations where slot_id=? and"
+                      + " status_code='PENDING'",
+                  Integer.class,
+                  slot.path("id").asText()))
+          .isEqualTo(2);
+      assertThat(
+              db.queryForObject(
+                  "select status_code from store_slots where slot_id=?",
+                  String.class,
+                  slot.path("id").asText()))
+          .isEqualTo("AVAILABLE");
+    } finally {
+      db.execute("alter table store_events drop constraint approval_event_failure");
+    }
+    assertThat(review(slot, bob, "owner", "CONFIRMED", "failed-approval").status()).isEqualTo(200);
+    assertThat(
+            db.queryForObject(
+                "select status_code from store_reservations where reservation_id=?",
+                String.class,
+                alice.path("id").asText()))
+        .isEqualTo("REJECTED");
+  }
 }

@@ -72,4 +72,6 @@ public record WaitlistOfferResponse(
             description = "validatedAt",
             requiredMode = Schema.RequiredMode.REQUIRED,
             example = "2026-10-16T14:20:00+09:00")
-        OffsetDateTime validatedAt) {}
+        OffsetDateTime validatedAt,
+    @Schema(description = "고객 신청 즉시확정 여부", requiredMode = Schema.RequiredMode.REQUIRED)
+        Boolean instantBooking) {}

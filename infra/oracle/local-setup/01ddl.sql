@@ -8,6 +8,8 @@
 -- 1. USER: login identity, role, location and preferences in one table
 --------------------------------------------------------------------------------
 CREATE TABLE user_accounts (
+  recommendation_opt_in CHAR(1) DEFAULT 'N' NOT NULL,
+  recommendation_consent_at TIMESTAMP(6) WITH TIME ZONE,
                                user_id          VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                                kakao_subject    VARCHAR2(100 BYTE),
                                display_name     VARCHAR2(30 CHAR) NOT NULL,
@@ -20,7 +22,10 @@ CREATE TABLE user_accounts (
                                CONSTRAINT pk_user_accounts PRIMARY KEY (user_id),
                                CONSTRAINT uq_user_kakao UNIQUE (kakao_subject),
                                CONSTRAINT ck_user_name CHECK (TRIM(display_name) IS NOT NULL),
-                               CONSTRAINT ck_user_role CHECK (role_code IN ('CUSTOMER','OWNER')),
+                               CONSTRAINT ck_user_recommendation CHECK (
+    (recommendation_opt_in='N' AND recommendation_consent_at IS NULL)
+    OR (recommendation_opt_in='Y' AND recommendation_consent_at IS NOT NULL)),
+  CONSTRAINT ck_user_role CHECK (role_code IN ('CUSTOMER','OWNER')),
                                CONSTRAINT ck_user_location CHECK (
                                    (latitude IS NULL AND longitude IS NULL AND location_at IS NULL)
                                        OR (latitude IS NOT NULL AND longitude IS NOT NULL AND location_at IS NOT NULL
@@ -80,6 +85,7 @@ CREATE TABLE store_services (
 -- source_reservation_id FK is added after reservations have been created.
 --------------------------------------------------------------------------------
 CREATE TABLE store_slots (
+  instant_booking CHAR(1) DEFAULT 'Y' NOT NULL CONSTRAINT ck_slot_instant CHECK (instant_booking IN ('Y','N')),
  original_service_id VARCHAR2(64 BYTE), vacancy_original_price NUMBER(10,0), published_at TIMESTAMP(6) WITH TIME ZONE, discount_type VARCHAR2(12 BYTE), discount_value NUMBER(10,0),
                              slot_id               VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                              store_id              VARCHAR2(64 BYTE) NOT NULL,
@@ -175,19 +181,25 @@ CREATE TABLE store_reservations (
                                     created_at      TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
                                     CONSTRAINT pk_store_reservations PRIMARY KEY (reservation_id),
                                     CONSTRAINT uq_reservation_store UNIQUE (reservation_id, store_id),
-                                    CONSTRAINT uq_reservation_waitlist UNIQUE (waitlist_id),
                                     CONSTRAINT fk_reservation_user FOREIGN KEY (user_id) REFERENCES user_accounts(user_id),
                                     CONSTRAINT fk_reservation_slot FOREIGN KEY (slot_id, store_id) REFERENCES store_slots(slot_id, store_id),
                                     CONSTRAINT ck_reservation_time CHECK (start_at < end_at),
                                     CONSTRAINT ck_reservation_price CHECK (original_price BETWEEN 0 AND 10000000
                                         AND payable_price BETWEEN 0 AND original_price),
-                                    CONSTRAINT ck_reservation_status CHECK (status_code IN ('CONFIRMED','CANCELED','COMPLETED','NO_SHOW')),
+                                    CONSTRAINT ck_reservation_status CHECK (status_code IN ('PENDING','CONFIRMED','REJECTED','EXPIRED','WITHDRAWN','CANCELED','COMPLETED','NO_SHOW')),
                                     CONSTRAINT ck_reservation_version CHECK (version_no >= 1)
 );
 
 CREATE UNIQUE INDEX ux_reservation_confirmed_slot ON store_reservations (
                                                                          CASE WHEN status_code = 'CONFIRMED' THEN slot_id END
     );
+
+CREATE UNIQUE INDEX ux_reservation_waitlist_final ON store_reservations (
+  CASE WHEN status_code IN ('CONFIRMED','CANCELED','COMPLETED','NO_SHOW') THEN waitlist_id END);
+CREATE UNIQUE INDEX ux_reservation_pending_user ON store_reservations (
+  CASE WHEN status_code='PENDING' THEN user_id END,
+  CASE WHEN status_code='PENDING' THEN slot_id END);
+CREATE INDEX ix_reservation_requests ON store_reservations(store_id,status_code,created_at,reservation_id);
 
 ALTER TABLE store_slots ADD CONSTRAINT fk_slot_source
     FOREIGN KEY (source_reservation_id, store_id)
@@ -199,7 +211,7 @@ ALTER TABLE store_slots ADD CONSTRAINT fk_slot_source
 CREATE TABLE notification_alerts (
                                      notification_id    VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
                                      user_id            VARCHAR2(64 BYTE) NOT NULL,
-                                     waitlist_id        VARCHAR2(64 BYTE) NOT NULL,
+                                     waitlist_id        VARCHAR2(64 BYTE),
                                      slot_id            VARCHAR2(64 BYTE) NOT NULL,
                                      publication_version NUMBER(10,0) NOT NULL,
                                      title              VARCHAR2(100 CHAR) NOT NULL,

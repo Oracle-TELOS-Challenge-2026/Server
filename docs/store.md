@@ -22,7 +22,7 @@ PATCH에서 생략한 필드는 유지하고 명시적 null은 `400 NULL_PATCH_F
 
 ## 예약 상태와 잠금
 
-외부 슬롯 상태는 `AVAILABLE / BOOKED / BLOCKED / EXPIRED`다. 이 MVP는 별도 HELD 상태·선점 유지 시간 없이 하나의 트랜잭션에서 `AVAILABLE → BOOKED`로 확정한다. 예약 상태는 `CONFIRMED → CANCELED / COMPLETED / NO_SHOW`만 허용한다. 기존 AGENTS.md의 일반 HELD 흐름에 대한 store MVP의 구체화다.
+외부 슬롯 상태는 `AVAILABLE / BOOKED / BLOCKED / EXPIRED`다. 이 MVP는 별도 HELD 상태·선점 유지 시간 없이 하나의 트랜잭션에서 `AVAILABLE → BOOKED`로 확정한다. 기존 즉시확정 예약은 `CONFIRMED → CANCELED / COMPLETED / NO_SHOW`를 따른다. 비즉시확정 빈자리에는 선점 없는 PENDING 신청을 여러 건 받고 사장님이 한 명을 선택한다. 상태와 만료 규칙은 [빈자리 예약 방식](vacancy-booking-approval.md)을 따른다. 기존 AGENTS.md의 일반 HELD 흐름에 대한 store MVP의 구체화다.
 
 쓰기는 요청자 계정/고객 잠금 → 매장 잠금 → 대상 슬롯/예약 → search 대기 순서로 처리한다. 취소·완료는 매장 잠금 안에서 처리하므로 다른 고객의 계정 잠금을 역순으로 잡지 않는다. 고객별 잠금은 다른 매장에 대한 동시 중복 예약도 막는다. 매장당 자원이 1개이므로 동일 매장 쓰기를 직렬화한다. 확인된 슬롯의 DB 유일 인덱스도 중복 확정을 방어한다.
 
@@ -117,3 +117,7 @@ python3 infra/oracle/verify-store.py
 StoreApiTests는 20개 API 흐름·입력·권한·버전·스냅샷·멱등성·커서·시간 경계·대기 완료/롤백과 동시 요청을 검증한다. Oracle 검증 스크립트는 기존 초기 스키마의 데이터 보존과 변경 SQL을 검증한 뒤 신규/변경 스키마 모두 ddl-auto=validate와 같은 API·경합 테스트를 실행한다. 테스트 계정은 BT_STORE_ 접두사를 가지며 앱 계정은 변경하지 않는다. 생성한 테스트 스키마는 결과 확인을 위해 남긴다. 초기 스키마가 이미 Git HEAD에 변경된 뒤에는 STORE_BASELINE_SQL에 변경 전 SQL 파일을 지정한다. 포트/컨테이너 변경은 STORE_ORACLE_PORT/STORE_ORACLE_CONTAINER로 지정한다.
 
 직접 API를 눌러보는 QA는 [로컬 QA 서버·Postman 실행 안내](../qa/store/README.md)를 참고한다. 격리된 Oracle 스키마와 36개 순차 요청을 제공한다.
+
+## 빈자리 신청 검토
+
+발행 정책·ST-21 목록·ST-13 승인/거절·알림 필드·DB migration 010은 [빈자리 예약 방식](vacancy-booking-approval.md)을 따른다. 원격 DB에는 별도 적용 후 새 앱을 배포해야 한다.

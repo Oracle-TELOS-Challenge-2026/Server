@@ -22,7 +22,16 @@ public record OwnerReservationResponse(
             description = "status",
             requiredMode = Schema.RequiredMode.REQUIRED,
             example = "CONFIRMED",
-            allowableValues = {"CONFIRMED", "COMPLETED", "CANCELED", "NO_SHOW"})
+            allowableValues = {
+              "PENDING",
+              "CONFIRMED",
+              "REJECTED",
+              "EXPIRED",
+              "WITHDRAWN",
+              "COMPLETED",
+              "CANCELED",
+              "NO_SHOW"
+            })
         String status,
     @Schema(
             description = "startAt",

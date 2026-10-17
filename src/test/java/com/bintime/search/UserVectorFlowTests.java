@@ -31,6 +31,7 @@ class UserVectorFlowTests {
   @Autowired SearchUserAccess userAccess;
   @Autowired TransactionTemplate tx;
   @MockitoBean IntentAiPort ai;
+  @MockitoBean com.bintime.notification.subscription.NotificationSubscriptions subscriptions;
   static final String FIRST =
       "{\"취향\":\"네일에 관심이 있고 경력 3년 이상의 시술자를 원해요\",\"기타\":{\"메모\":[\"조용한 곳\",\"심플한 디자인\"]}}";
   static final String SECOND = "{\"freeText\":\"다채로운 아트를 선호해요\",\"unknownField\":true}";
@@ -67,7 +68,10 @@ class UserVectorFlowTests {
   void arbitraryJsonIsLoadedThroughUserContractAndEmbeddedWithoutWaitlistData() {
     preferences.replace("vector-user", FIRST);
     assertThat(userAccess.explicitPreferences("vector-user")).isEqualTo(FIRST);
-    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select count(*) from search_work where kind='VECTOR'", Integer.class))
+        .isEqualTo(1);
     worker.poll();
     verify(ai).embed(FIRST);
     assertThat(vectors.vector("vector-user")).containsExactly(validVector());
@@ -94,7 +98,10 @@ class UserVectorFlowTests {
           t.setRollbackOnly();
         });
     assertThat(userAccess.explicitPreferences("vector-user")).isEqualTo("{}");
-    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isZero();
+    assertThat(
+            db.queryForObject(
+                "select count(*) from search_work where kind='VECTOR'", Integer.class))
+        .isZero();
     assertThat(db.queryForObject("select count(*) from search_user_vector", Integer.class))
         .isZero();
   }
@@ -104,15 +111,22 @@ class UserVectorFlowTests {
     preferences.replace("vector-user", FIRST);
     doThrow(EmbeddingFailure.invalidResponse()).when(ai).embed(anyString());
     worker.poll();
-    assertThat(db.queryForObject("select status from search_work", String.class))
+    assertThat(
+            db.queryForObject("select status from search_work where kind='VECTOR'", String.class))
         .isEqualTo("FAILED");
     assertThatThrownBy(() -> vectors.requestMatchingRefresh("vector-user"))
         .hasMessage("USER_MATCH_VECTOR_FAILED");
-    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select count(*) from search_work where kind='VECTOR'", Integer.class))
+        .isEqualTo(1);
     // 운영자의 명시적 재생성은 허용하며 같은 사용자에 대한 중복 작업 요청은 합친다.
     vectors.requestRefresh("vector-user");
     vectors.requestRefresh("vector-user");
-    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isEqualTo(2);
+    assertThat(
+            db.queryForObject(
+                "select count(*) from search_work where kind='VECTOR'", Integer.class))
+        .isEqualTo(2);
     doReturn(validVector()).when(ai).embed(anyString());
     worker.poll();
     assertThat(vectors.vector("vector-user")).containsExactly(validVector());
@@ -173,16 +187,23 @@ class UserVectorFlowTests {
     preferences.replace("vector-user", FIRST);
     doThrow(new EmbeddingFailure("OPENAI_AUTHENTICATION_FAILED", false)).when(ai).embed(any());
     worker.poll();
-    assertThat(db.queryForObject("select status from search_work", String.class))
+    assertThat(
+            db.queryForObject("select status from search_work where kind='VECTOR'", String.class))
         .isEqualTo("FAILED");
-    assertThat(db.queryForObject("select attempts from search_work", Integer.class)).isEqualTo(1);
-    assertThat(db.queryForObject("select last_error from search_work", String.class))
+    assertThat(
+            db.queryForObject(
+                "select attempts from search_work where kind='VECTOR'", Integer.class))
+        .isEqualTo(1);
+    assertThat(
+            db.queryForObject(
+                "select last_error from search_work where kind='VECTOR'", String.class))
         .isEqualTo("OPENAI_AUTHENTICATION_FAILED");
     db.update("delete from search_work");
     doThrow(new EmbeddingFailure("OPENAI_RATE_LIMITED", true)).when(ai).embed(any());
     vectors.requestRefresh("vector-user");
     worker.poll();
-    assertThat(db.queryForObject("select status from search_work", String.class))
+    assertThat(
+            db.queryForObject("select status from search_work where kind='VECTOR'", String.class))
         .isEqualTo("QUEUED");
   }
 
@@ -192,13 +213,19 @@ class UserVectorFlowTests {
         .hasMessage("INVALID_PREFERENCES_JSON");
     assertThatThrownBy(() -> preferences.replace("vector-user", "{} {}"))
         .hasMessage("INVALID_PREFERENCES_JSON");
-    assertThat(db.queryForObject("select count(*) from search_work", Integer.class)).isZero();
+    assertThat(
+            db.queryForObject(
+                "select count(*) from search_work where kind='VECTOR'", Integer.class))
+        .isZero();
     preferences.replace("vector-user", "{\"text\":\"" + "가".repeat(3000) + "\"}");
     worker.poll();
     verifyNoInteractions(ai);
-    assertThat(db.queryForObject("select status from search_work", String.class))
+    assertThat(
+            db.queryForObject("select status from search_work where kind='VECTOR'", String.class))
         .isEqualTo("FAILED");
-    assertThat(db.queryForObject("select last_error from search_work", String.class))
+    assertThat(
+            db.queryForObject(
+                "select last_error from search_work where kind='VECTOR'", String.class))
         .isEqualTo("PREFERENCES_INPUT_TOO_LARGE");
   }
 
@@ -283,9 +310,13 @@ class UserVectorFlowTests {
       db.update("update search_work set available_at=0");
       worker.poll();
     }
-    assertThat(db.queryForObject("select status from search_work", String.class))
+    assertThat(
+            db.queryForObject("select status from search_work where kind='VECTOR'", String.class))
         .isEqualTo("QUEUED");
-    assertThat(db.queryForObject("select attempts from search_work", Integer.class)).isZero();
+    assertThat(
+            db.queryForObject(
+                "select attempts from search_work where kind='VECTOR'", Integer.class))
+        .isZero();
     verifyNoInteractions(ai);
   }
 }

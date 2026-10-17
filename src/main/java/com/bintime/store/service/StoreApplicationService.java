@@ -277,7 +277,25 @@ public class StoreApplicationService {
             && !"REGULAR".equals(s.source));
   }
 
+  private void closeRequests(Slot slot, String status, String except) {
+    for (Reservation request :
+        db.query(Reservation.class, "where e.slotId=?1 and e.status='PENDING'", slot.id)) {
+      if (request.id.equals(except)) continue;
+      request.status = status;
+      request.version++;
+    }
+  }
+
   private void expire(Shop shop) {
+    for (Reservation request :
+        db.query(
+            Reservation.class,
+            "where e.storeId=?1 and e.status='PENDING' and e.start<=?2",
+            shop.id,
+            now())) {
+      request.status = "EXPIRED";
+      request.version++;
+    }
     for (Slot s :
         db.query(
             Slot.class,
@@ -666,10 +684,19 @@ public class StoreApplicationService {
                   .isEmpty(),
               409,
               "RESERVATION_TIME_CONFLICT");
+          boolean instant = !"N".equals(s.instantBooking);
+          require(
+              db.query(
+                      Reservation.class,
+                      "where e.userId=?1 and e.slotId=?2 and e.status='PENDING'",
+                      a.id(),
+                      s.id)
+                  .isEmpty(),
+              409,
+              "RESERVATION_REQUEST_EXISTS");
           String reservationId = id("rsv_");
-          if (r.waitlistId() != null)
-            waitlists.fulfill(
-                r.waitlistId(),
+          if (r.waitlistId() != null) {
+            var candidate =
                 new WaitlistReservationService.Candidate(
                     a.id(),
                     s.storeId,
@@ -679,9 +706,10 @@ public class StoreApplicationService {
                     s.end,
                     s.payable,
                     shop.latitude,
-                    shop.longitude),
-                now(),
-                reservationId);
+                    shop.longitude);
+            if (instant) waitlists.fulfill(r.waitlistId(), candidate, now(), reservationId);
+            else waitlists.validate(r.waitlistId(), candidate, now());
+          }
           Reservation v = new Reservation();
           v.id = reservationId;
           v.userId = a.id();
@@ -696,13 +724,16 @@ public class StoreApplicationService {
           v.end = s.end;
           v.originalPrice = s.originalPrice;
           v.payable = s.payable;
-          v.status = "CONFIRMED";
+          v.status = instant ? "CONFIRMED" : "PENDING";
           v.version = 1L;
           v.createdAt = now();
           db.save(v);
-          s.status = "BOOKED";
-          s.version++;
-          event(s, "BOOKED");
+          if (instant) {
+            s.status = "BOOKED";
+            s.version++;
+            closeRequests(s, "REJECTED", v.id);
+            event(s, "BOOKED");
+          }
           return reservationDto(v, false);
         });
   }
@@ -856,6 +887,7 @@ public class StoreApplicationService {
           reservation.version = 1L;
           reservation.createdAt = now();
           db.save(reservation);
+          closeRequests(slot, "REJECTED", reservation.id);
           event(slot, "BOOKED");
           return reservationDto(reservation, false);
         });
@@ -864,11 +896,13 @@ public class StoreApplicationService {
   public ReservationResponse getReservation(Actor a, String id) {
     Reservation r = reservation(id);
     access(a, r);
+    expire(lockedShop(r.storeId));
     return reservationDto(r, "OWNER".equals(a.role()) && shop(r.storeId).ownerId.equals(a.id()));
   }
 
   public OwnerReservationResponse ownerReservation(Actor a, String storeId, String id) {
-    owned(a, storeId, false);
+    var shop = owned(a, storeId, true);
+    expire(shop);
     Reservation r = reservation(id);
     require(r.storeId.equals(storeId), 404, "RESERVATION_NOT_FOUND");
     return ownerDto(r);
@@ -881,6 +915,11 @@ public class StoreApplicationService {
         400,
         "INVALID_SCOPE");
     OffsetDateTime moment = now();
+    db.query(Reservation.class, "where e.userId=?1 and e.status='PENDING'", a.id()).stream()
+        .map(r -> r.storeId)
+        .distinct()
+        .sorted()
+        .forEach(id -> expire(lockedShop(id)));
     var totals = db.reservationCounts(a.id(), moment);
     var counts =
         new ReservationListResponse.Counts(
@@ -889,9 +928,11 @@ public class StoreApplicationService {
             totals.canceled());
     String filter =
         switch (scope) {
-          case "UPCOMING" -> "e.status='CONFIRMED' and e.end>?2";
-          case "PAST" -> "e.status<>'CANCELED' and (e.status<>'CONFIRMED' or e.end<=?2)";
-          default -> "e.status='CANCELED'";
+          case "UPCOMING" -> "e.status in ('CONFIRMED','PENDING') and e.end>?2";
+          case "PAST" ->
+              "e.status not in ('CANCELED','REJECTED','EXPIRED','WITHDRAWN') and (e.status not in"
+                  + " ('CONFIRMED','PENDING') or e.end<=?2)";
+          default -> "e.status in ('CANCELED','REJECTED','EXPIRED','WITHDRAWN')";
         };
     var args = new ArrayList<Object>(List.of(a.id()));
     if (!scope.equals("CANCELED")) args.add(moment);
@@ -926,7 +967,8 @@ public class StoreApplicationService {
           lockedShop(initial.storeId);
           Reservation v = db.lock(Reservation.class, id);
           version(r.expectedVersion(), v.version);
-          require("CONFIRMED".equals(v.status), 409, "RESERVATION_STATE_CONFLICT");
+          require(
+              Set.of("CONFIRMED", "PENDING").contains(v.status), 409, "RESERVATION_STATE_CONFLICT");
           require(
               Set.of("CUSTOMER_REQUEST", "STORE_REQUEST", "OTHER")
                   .contains(r.reasonCode() == null ? "" : r.reasonCode()),
@@ -940,11 +982,14 @@ public class StoreApplicationService {
                   || ("OWNER".equals(a.role()) && shop(v.storeId).ownerId.equals(a.id())),
               403,
               "OWNER_REQUIRED");
-          v.status = "CANCELED";
+          boolean pending = "PENDING".equals(v.status);
+          v.status = pending ? "WITHDRAWN" : "CANCELED";
           v.cancelReasonCode = r.reasonCode();
           v.cancelReason = r.reason();
           v.canceledAt = now();
           v.version++;
+          if (pending)
+            return new CancelReservationResponse(reservationDto(v, !v.userId.equals(a.id())), null);
           Slot original = slot(v.storeId, v.slotId);
           if ("REGULAR".equals(original.source)) original.status = "CLOSED";
           original.version++;
@@ -984,6 +1029,15 @@ public class StoreApplicationService {
   public UpdateReservationStatusResponse updateStatus(
       Actor a, String storeId, String id, String key, UpdateReservationStatusRequest r) {
     ownerRole(a);
+    if ("CONFIRMED".equals(r.status())) {
+      var initial = reservation(id);
+      owned(a, storeId, false);
+      require(initial.storeId.equals(storeId), 404, "RESERVATION_NOT_FOUND");
+      // 승인도 고객의 다른 예약과 직렬화한다. 두 계정은 ID 순으로 잠가 교차 승인 데드락을 막는다.
+      java.util.stream.Stream.of(a, users.get(initial.userId))
+          .sorted(Comparator.comparing(Actor::id))
+          .forEach(this::lockActor);
+    }
     return once(
         a,
         "STATUS:" + storeId + ":" + id,
@@ -996,6 +1050,8 @@ public class StoreApplicationService {
           Reservation v = db.lock(Reservation.class, id);
           require(v != null && v.storeId.equals(storeId), 404, "RESERVATION_NOT_FOUND");
           version(r.expectedVersion(), v.version);
+          if (Set.of("CONFIRMED", "REJECTED").contains(r.status() == null ? "" : r.status()))
+            return reviewRequest(v, r.status());
           require("CONFIRMED".equals(v.status), 409, "RESERVATION_STATE_CONFLICT");
           require(
               Set.of("COMPLETED", "NO_SHOW").contains(r.status() == null ? "" : r.status()),
@@ -1015,6 +1071,79 @@ public class StoreApplicationService {
           event(original, r.status());
           return new UpdateReservationStatusResponse(ownerDto(v), s == null ? null : vacancyDto(s));
         });
+  }
+
+  private UpdateReservationStatusResponse reviewRequest(Reservation request, String status) {
+    require("PENDING".equals(request.status), 409, "RESERVATION_STATE_CONFLICT");
+    require(request.start.isAfter(now()), 409, "RESERVATION_REQUEST_EXPIRED");
+    Slot slot = db.lock(Slot.class, request.slotId);
+    require("AVAILABLE".equals(slot.status), 409, "SLOT_UNAVAILABLE");
+    if ("CONFIRMED".equals(status)) {
+      var shop = shop(request.storeId);
+      require("N".equals(slot.instantBooking), 409, "RESERVATION_STATE_CONFLICT");
+      require("Y".equals(service(shop.id, request.serviceId).active), 409, "SERVICE_INACTIVE");
+      inHours(shop, request.start, request.end);
+      require(
+          slot.start.isEqual(request.start)
+              && slot.end.isEqual(request.end)
+              && slot.payable.equals(request.payable),
+          409,
+          "RESERVATION_REQUEST_CHANGED");
+      require(
+          db.query(
+                  Reservation.class,
+                  "where e.status='CONFIRMED' and e.start<?1 and e.end>?2 and (e.userId=?3 or"
+                      + " e.storeId=?4)",
+                  request.end,
+                  request.start,
+                  request.userId,
+                  request.storeId)
+              .isEmpty(),
+          409,
+          "RESERVATION_TIME_CONFLICT");
+      if (request.waitlistId != null)
+        waitlists.fulfill(
+            request.waitlistId,
+            new WaitlistReservationService.Candidate(
+                request.userId,
+                shop.id,
+                request.serviceId,
+                shop.category,
+                request.start,
+                request.end,
+                request.payable,
+                shop.latitude,
+                shop.longitude),
+            now(),
+            request.id);
+      slot.status = "BOOKED";
+      slot.version++;
+      closeRequests(slot, "REJECTED", request.id);
+      event(slot, "BOOKED");
+    }
+    request.status = status;
+    request.version++;
+    return new UpdateReservationStatusResponse(ownerDto(request), null);
+  }
+
+  public OwnerReservationListResponse reservationRequests(
+      Actor actor, String storeId, String cursor, Integer limit) {
+    var shop = owned(actor, storeId, true);
+    expire(shop);
+    var page =
+        page(
+            Reservation.class,
+            "where e.storeId=?1 and e.status='PENDING'",
+            new ArrayList<>(List.of(storeId)),
+            "createdAt",
+            false,
+            cursor,
+            "reservation-requests:" + storeId,
+            limit,
+            r -> r.createdAt.toString(),
+            r -> r.id);
+    return new OwnerReservationListResponse(
+        page.items.stream().map(this::ownerDto).toList(), page.page);
   }
 
   private String vacancyStatus(Slot s) {
@@ -1122,6 +1251,8 @@ public class StoreApplicationService {
           s.payable = payable;
           s.discountType = r.discount().type();
           s.discountValue = value;
+          closeRequests(s, "REJECTED", null);
+          s.instantBooking = Boolean.FALSE.equals(r.instantBooking()) ? "N" : "Y";
           s.status = "AVAILABLE";
           s.publicationVersion = s.publicationVersion == null ? 1 : s.publicationVersion + 1;
           s.version++;
@@ -1150,6 +1281,7 @@ public class StoreApplicationService {
           require("AVAILABLE".equals(s.status), 409, "VACANCY_STATE_CONFLICT");
           s.status = "CLOSED";
           s.version++;
+          closeRequests(s, "REJECTED", null);
           event(s, "WITHDRAWN");
           return new WithdrawVacancyResponse(vacancyDto(s), ownerSlotDto(s));
         });
@@ -1253,7 +1385,8 @@ public class StoreApplicationService {
         "REGULAR".equals(s.source) ? null : s.id,
         s.publicationVersion,
         new ReservationSlotResponse.Price(s.originalPrice, s.payable, percent, "KRW"),
-        s.version);
+        s.version,
+        !"N".equals(s.instantBooking));
   }
 
   private ReservationSlotResponse ownerSlotDto(Slot s) {
@@ -1272,7 +1405,8 @@ public class StoreApplicationService {
         r.vacancyId(),
         r.publicationVersion(),
         r.price(),
-        r.version());
+        r.version(),
+        r.instantBooking());
   }
 
   private VacancyResponse vacancyDto(Slot s) {
@@ -1290,11 +1424,19 @@ public class StoreApplicationService {
         s.publicationVersion == null ? null : s.id,
         s.publishedAt,
         s.createdAt,
-        s.version);
+        s.version,
+        !"N".equals(s.instantBooking));
   }
 
   private List<String> actions(Reservation r, boolean owner) {
     var result = new ArrayList<String>(List.of("VIEW_STORE", "OPEN_CHAT"));
+    if ("PENDING".equals(r.status)) {
+      if (r.start.isAfter(now())) {
+        if (owner) result.addAll(List.of("APPROVE", "REJECT"));
+        else result.add("CANCEL");
+      }
+      return result;
+    }
     if (!"CONFIRMED".equals(r.status)) return result;
     result.add("CANCEL");
     if (owner && !now().isBefore(r.end)) result.add("COMPLETE");

@@ -1,0 +1,57 @@
+[
+  {
+    "id": "C-08",
+    "domain": "chatting",
+    "controller": "ChatBookingSuggestionController",
+    "methodName": "analyze",
+    "method": "POST",
+    "path": "/api/v1/chatting/rooms/{roomId}/messages/{messageId}/booking-suggestion",
+    "request": null,
+    "response": "ChatBookingSuggestionResponse",
+    "status": 200,
+    "query": [],
+    "auth": "채팅방 참여자의 세션 쿠키와 X-CSRF-Token 필수. 본문 없음",
+    "requestExample": null,
+    "responseExample": {
+      "sourceMessageId": "msg_customer_005",
+      "sourceContent": "옵션 없이요",
+      "bookingRequested": true,
+      "date": "2026-10-18",
+      "time": "17:00",
+      "serviceDescription": "커트",
+      "contextMessages": [
+        {
+          "id": "msg_customer_001",
+          "sequence": 1,
+          "content": "예약하고 싶어요",
+          "createdAt": "2026-10-17T14:00:01+09:00"
+        },
+        {
+          "id": "msg_customer_002",
+          "sequence": 2,
+          "content": "내일이요",
+          "createdAt": "2026-10-17T14:00:02+09:00"
+        },
+        {
+          "id": "msg_customer_003",
+          "sequence": 3,
+          "content": "17시에요",
+          "createdAt": "2026-10-17T14:00:03+09:00"
+        },
+        {
+          "id": "msg_customer_004",
+          "sequence": 4,
+          "content": "머리 자르려고요",
+          "createdAt": "2026-10-17T14:00:04+09:00"
+        },
+        {
+          "id": "msg_customer_005",
+          "sequence": 5,
+          "content": "옵션 없이요",
+          "createdAt": "2026-10-17T14:00:05+09:00"
+        }
+      ]
+    },
+    "source": "Local user request, 2026-10-17; docs/chat-booking-suggestion.md"
+  }
+]

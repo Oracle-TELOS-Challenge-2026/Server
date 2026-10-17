@@ -41,6 +41,7 @@ class NotificationSubscriptionsTests {
   private JdbcTemplate jdbc;
   private MutableClock clock;
   private NotificationSubscriptions subscriptions;
+  private org.springframework.context.ApplicationEventPublisher events;
 
   @BeforeEach
   void setUp() {
@@ -59,6 +60,7 @@ class NotificationSubscriptionsTests {
     new ResourceDatabasePopulator(new ClassPathResource("notification-subscriptions-schema.sql"))
         .execute(dataSource);
     clock = new MutableClock();
+    events = org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class);
     subscriptions = service();
   }
 
@@ -72,7 +74,30 @@ class NotificationSubscriptionsTests {
         JdbcClient.create(dataSource),
         new DataSourceTransactionManager(dataSource),
         clock,
-        "bintime-33512");
+        "bintime-33512",
+        events);
+  }
+
+  @Test
+  void scanEnqueueFailureRollsBackTheDeviceRegistration() {
+    var session = session(ALICE);
+    org.mockito.Mockito.doThrow(new IllegalStateException("scan unavailable"))
+        .when(events)
+        .publishEvent(
+            org.mockito.ArgumentMatchers.any(
+                com.bintime.notification.contract.PushSubscriptionRegistered.class));
+    assertThatThrownBy(() -> subscriptions.register(ALICE, session, "rollback-fid"))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(
+            jdbc.queryForObject("select count(*) from notification_subscriptions", Integer.class))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from notification_subscription_sessions", Integer.class))
+        .isZero();
+    org.mockito.Mockito.reset(events);
+    subscriptions.register(ALICE, session, "rollback-fid");
+    assertThat(subscriptions.hasActive("alice")).isTrue();
   }
 
   private MockHttpSession session(BintimePrincipal principal) {

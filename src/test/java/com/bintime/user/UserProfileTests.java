@@ -75,6 +75,9 @@ class UserProfileTests {
   @org.springframework.test.context.bean.override.mockito.MockitoBean
   com.bintime.search.port.IntentAiPort ai;
 
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
+  com.bintime.notification.subscription.NotificationSubscriptions subscriptions;
+
   private MockMvc mvc;
   private MockHttpSession session;
   private String csrfToken;
@@ -90,6 +93,8 @@ class UserProfileTests {
           kakao_subject VARCHAR(100) UNIQUE,
           display_name VARCHAR(120) NOT NULL,
           role_code VARCHAR(8) DEFAULT 'CUSTOMER' NOT NULL,
+          recommendation_opt_in CHAR(1) DEFAULT 'N' NOT NULL,
+          recommendation_consent_at TIMESTAMP(6) WITH TIME ZONE,
           latitude NUMBER(9,6), longitude NUMBER(10,6),
           location_at TIMESTAMP(6) WITH TIME ZONE,
           accuracy_meters INTEGER, location_source VARCHAR(6),
@@ -747,6 +752,110 @@ class UserProfileTests {
         .andExpect(status().isConflict());
     assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM search_work", Integer.class)).isZero();
     org.mockito.Mockito.verifyNoInteractions(ai);
+  }
+
+  @Test
+  void personalizedConsentIsExplicitVersionedAndQueuesExistingVacancyScan() throws Exception {
+    perform(HttpMethod.GET, ME + "/notification-preferences", null)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success.data.personalizedVacancyEnabled").value(false))
+        .andExpect(jsonPath("$.success.data.version").value(1));
+    perform(
+            HttpMethod.PUT,
+            ME + "/notification-preferences",
+            "{\"personalizedVacancyEnabled\":true,\"expectedVersion\":1}")
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success.data.personalizedVacancyEnabled").value(true))
+        .andExpect(jsonPath("$.success.data.version").value(2));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT COUNT(*) FROM search_work WHERE kind='PERSONALIZE'", Integer.class))
+        .isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT recommendation_consent_at FROM user_accounts WHERE user_id='user-1'",
+                OffsetDateTime.class))
+        .isNotNull();
+    perform(
+            HttpMethod.PUT,
+            ME + "/notification-preferences",
+            "{\"personalizedVacancyEnabled\":false,\"expectedVersion\":1}")
+        .andExpect(status().isConflict());
+    perform(
+            HttpMethod.PUT,
+            ME + "/notification-preferences",
+            "{\"personalizedVacancyEnabled\":false,\"expectedVersion\":2}")
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success.data.personalizedVacancyEnabled").value(false))
+        .andExpect(jsonPath("$.success.data.version").value(3));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT recommendation_consent_at FROM user_accounts WHERE user_id='user-1'",
+                OffsetDateTime.class))
+        .isNull();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT COUNT(*) FROM search_work WHERE kind='PERSONALIZE'", Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void rolledBackLegacySettingCannotLeaveItsValueOrScanJob() {
+    transactions.executeWithoutResult(
+        status -> {
+          profiles.saveNotificationPreferences(
+              "user-1", new com.bintime.user.dto.SaveNotificationPreferencesRequest(true, 1L));
+          status.setRollbackOnly();
+        });
+    assertThat(profiles.notificationPreferences("user-1").personalizedVacancyEnabled()).isFalse();
+    assertThat(profiles.getProfile("user-1").version()).isEqualTo(1);
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM search_work", Integer.class)).isZero();
+  }
+
+  @Test
+  void notificationConsentRequiresSessionCsrfAndValidInput() throws Exception {
+    String path = ME + "/notification-preferences";
+    mvc.perform(get(path)).andExpect(status().isUnauthorized());
+    mvc.perform(
+            MockMvcRequestBuilders.put(path)
+                .servletPath(path)
+                .session(session)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"personalizedVacancyEnabled\":true,\"expectedVersion\":1}"))
+        .andExpect(status().isForbidden());
+    for (String body :
+        List.of(
+            "{}",
+            "{\"personalizedVacancyEnabled\":null,\"expectedVersion\":1}",
+            "{\"personalizedVacancyEnabled\":true,\"expectedVersion\":0}"))
+      perform(HttpMethod.PUT, path, body).andExpect(status().isBadRequest());
+    assertThat(profiles.notificationPreferences("user-1").personalizedVacancyEnabled()).isFalse();
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM search_work", Integer.class)).isZero();
+  }
+
+  @Test
+  void personalizedCandidatesIncludeNAccountsAndOwnersAcrossAllPages() {
+    var access = context.getBean(com.bintime.user.contract.SearchUserAccess.class);
+    jdbc.update(
+        "update user_accounts set"
+            + " role_code='OWNER',recommendation_opt_in='Y',recommendation_consent_at=CURRENT_TIMESTAMP"
+            + " where user_id='user-1'");
+    for (int i = 0; i < 101; i++)
+      jdbc.update(
+          "insert into"
+              + " user_accounts(user_id,display_name,recommendation_opt_in,recommendation_consent_at)"
+              + " values(?,?,'Y',CURRENT_TIMESTAMP)",
+          "candidate-%03d".formatted(i),
+          "후보");
+    var first = access.personalizedCandidates("", 100);
+    var second = access.personalizedCandidates(first.getLast(), 100);
+    assertThat(first).hasSize(100);
+    assertThat(second).hasSize(3).contains("user-1", "user-2");
+    assertThat(first).doesNotContainAnyElementsOf(second);
+    assertThat(access.personalizedCandidates(second.getLast(), 100)).isEmpty();
+    assertThat(access.personalizedCandidateExists("user-1")).isTrue();
+    assertThat(access.personalizedCandidateExists("user-2")).isTrue();
+    assertThat(access.personalizedCandidateExists("missing-user")).isFalse();
   }
 
   private JsonNode data(ResultActions result) throws Exception {

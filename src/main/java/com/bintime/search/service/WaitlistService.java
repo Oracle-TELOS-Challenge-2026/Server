@@ -251,7 +251,8 @@ public class WaitlistService {
                     s.payablePrice(),
                     "KRW",
                     s.imageUrl(),
-                    OffsetDateTime.now(clock)))
+                    OffsetDateTime.now(clock),
+                    s.instantBooking()))
         .toList();
   }
 

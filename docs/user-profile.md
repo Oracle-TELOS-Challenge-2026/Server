@@ -75,3 +75,17 @@ U-04~U-08을 구현한다. 모든 요청은 카카오 로그인으로 발급된 
 6. 위치 삭제 후 GET의 location이 null인지 확인한다.
 
 자동화 테스트는 세션·CSRF·사용자 격리·입력 검증·버전 경합·위치 경합을 H2에서 검증한다. Oracle 마이그레이션과 JDBC 타입 호환은 로컬 Oracle에서 별도로 확인한다.
+
+## 맞춤 빈자리 알림 동의 (U-10/U-11)
+
+현재 시연은 `recommendation_opt_in=N/Y`, 동의 시각 유무와 무관하게 CUSTOMER/OWNER 전체를 맞춤 알림 후보로 조회한다. 특정 매장·예약 대기·사용자 프로필 위치는 필요 없다. 실제 접수·FCM 제출에는 현재 계정, 활성 로그인 세션의 FID 구독, 유효한 미래 VACANCY, 선호 벡터 코사인 유사도 기준(기본 0.5 이상)이 필요하다. 선호가 없거나 유사도가 낮으면 보내지 않는다. 기존 WAITLIST 경로의 시간·가격·거리 등 조건은 유지한다.
+
+1. 로그인하고 선호도를 저장한다. `OPENAI_API_KEY`와 search worker가 필요하다.
+2. `POST /api/v1/notifications/push-subscriptions`로 현재 기기의 FID를 등록한다.
+3. 등록과 같은 트랜잭션에서 기존 발행 빈자리의 PERSONALIZE 탐색 작업을 접수한다. 새 빈자리 발행·선호 변경도 탐색을 수행한다.
+
+기존 계정이나 신규 기본 N 계정을 Y로 일괄 변경할 필요가 없다. 수신 중단은 기존 `DELETE /api/v1/notifications/push-subscriptions/{subscriptionId}`를 사용한다. 해당 기기 구독을 해제하므로 채팅 푸시에도 적용된다. 재배포·로그아웃 뒤에는 로그인과 FID 등록을 다시 수행한다.
+
+U-10 GET / U-11 PUT `/api/v1/users/me/notification-preferences`는 하위 호환을 위해 유지하지만 OpenAPI에서 deprecated로 표시한다. 응답 `personalizedVacancyEnabled`는 기존 DB 저장값이며 실제 발송 가능 여부가 아니다. false/N이어도 후보에 포함하고, PUT false로 저장해도 발송을 차단하지 않는다. true 저장 시 기존 빈자리 재탐색은 유지한다. 세션·CSRF·공유 expectedVersion/409 검증은 기존과 동일하다.
+
+기존 [008 마이그레이션](../infra/oracle/migrations/008-personalized-notifications.sql)의 컬럼·체크 제약은 유지하며 이번 정책 변경을 위한 추가 SQL은 없다. 컬럼은 Oracle CHAR(1)이고 JPA도 SqlTypes.CHAR로 매핑한다. ddl-auto=validate는 유지한다.

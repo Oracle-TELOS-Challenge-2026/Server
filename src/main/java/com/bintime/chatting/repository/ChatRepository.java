@@ -248,6 +248,32 @@ public class ChatRepository {
         room.customer());
   }
 
+  public List<ChatBookingContextMessage> bookingContext(Room room, long through) {
+    var recent =
+        jdbc.query(
+            """
+            select m.message_id,m.message_sequence,m.content_text,m.created_at
+            from chatting_messages m
+            where m.room_id=? and m.sender_id=? and m.message_sequence<=?
+              and not exists(select 1 from chatting_booking_proposals own where own.card_message_id=m.message_id)
+              and m.message_sequence>(
+                select coalesce(max(card.message_sequence),0)
+                from chatting_booking_proposals p
+                join chatting_messages card on card.message_id=p.card_message_id
+                where p.room_id=? and p.status_code='CONFIRMED')
+            order by m.message_sequence desc fetch first 5 rows only
+            """,
+            (r, n) ->
+                new ChatBookingContextMessage(
+                    r.getString(1), r.getLong(2), r.getString(3), time(r, "created_at")),
+            room.id(),
+            room.customer(),
+            through,
+            room.id());
+    Collections.reverse(recent);
+    return List.copyOf(recent);
+  }
+
   public ChatMessageResponse proposal(Room room, String proposalId) {
     return jdbc
         .query(

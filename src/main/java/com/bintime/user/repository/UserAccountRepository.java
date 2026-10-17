@@ -4,6 +4,7 @@ import com.bintime.user.entity.UserAccount;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceContext;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Profile;
@@ -51,4 +52,25 @@ public class UserAccountRepository {
   }
 
   public record Account(String userId, String role) {}
+
+  public List<String> personalizedCandidates(String after, int limit) {
+    return jdbc.sql(
+            "SELECT user_id FROM user_accounts WHERE role_code IN ('CUSTOMER','OWNER') "
+                + "AND (:after IS NULL OR user_id>:after) ORDER BY user_id FETCH FIRST "
+                + limit
+                + " ROWS ONLY")
+        .param("after", after == null || after.isEmpty() ? null : after)
+        .query(String.class)
+        .list();
+  }
+
+  public boolean personalizedCandidateExists(String userId) {
+    return jdbc.sql(
+                "SELECT COUNT(*) FROM user_accounts WHERE user_id=:id AND role_code IN"
+                    + " ('CUSTOMER','OWNER')")
+            .param("id", userId)
+            .query(Integer.class)
+            .single()
+        > 0;
+  }
 }

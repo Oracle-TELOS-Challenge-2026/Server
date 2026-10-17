@@ -2,7 +2,7 @@
 -- Run ONCE in an EMPTY application schema (19c+ SQL subset).
 -- This file is self-contained: do not run local-setup, search DDL or migrations after it.
 -- Existing databases must continue to use the incremental migrations; this is NOT an upgrade script.
--- Includes final effects of migrations 001/002/003 and 02/03/04/05/06/07.
+-- Includes final effects of migrations 001/002/003/008 and 02/03/04/05/06/07.
 -- 25 application tables; the only initial data is search_user_lock buckets 0..255.
 -- Application account / tablespace / grants must already exist (see infra/README.md).
 -- JDBC/IDE-compatible SQL. SQL*Plus callers should set DEFINE OFF and WHENEVER SQLERROR EXIT.
@@ -13,6 +13,8 @@
 -- 1. USER: login identity, role, location and preferences in one table
 --------------------------------------------------------------------------------
 CREATE TABLE user_accounts (
+  recommendation_opt_in CHAR(1) DEFAULT 'N' NOT NULL,
+  recommendation_consent_at TIMESTAMP(6) WITH TIME ZONE,
   version_no NUMBER(19,0) DEFAULT 1 NOT NULL,
   accuracy_meters NUMBER(10,0),
   location_source VARCHAR2(6 BYTE),
@@ -29,6 +31,9 @@ CREATE TABLE user_accounts (
   CONSTRAINT pk_user_accounts PRIMARY KEY (user_id),
   CONSTRAINT uq_user_kakao UNIQUE (kakao_subject),
   CONSTRAINT ck_user_name CHECK (TRIM(display_name) IS NOT NULL),
+  CONSTRAINT ck_user_recommendation CHECK (
+    (recommendation_opt_in='N' AND recommendation_consent_at IS NULL)
+    OR (recommendation_opt_in='Y' AND recommendation_consent_at IS NOT NULL)),
   CONSTRAINT ck_user_role CHECK (role_code IN ('CUSTOMER','OWNER')),
   CONSTRAINT ck_user_location CHECK (
     (latitude IS NULL AND longitude IS NULL AND location_at IS NULL)
@@ -90,6 +95,7 @@ CREATE TABLE store_services (
 -- source_reservation_id FK is added after reservations have been created.
 --------------------------------------------------------------------------------
 CREATE TABLE store_slots (
+  instant_booking CHAR(1) DEFAULT 'Y' NOT NULL CONSTRAINT ck_slot_instant CHECK (instant_booking IN ('Y','N')),
   original_service_id VARCHAR2(64 BYTE),
   vacancy_original_price NUMBER(10,0),
   published_at TIMESTAMP(6) WITH TIME ZONE,
@@ -194,19 +200,25 @@ CREATE TABLE store_reservations (
   created_at      TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
   CONSTRAINT pk_store_reservations PRIMARY KEY (reservation_id),
   CONSTRAINT uq_reservation_store UNIQUE (reservation_id, store_id),
-  CONSTRAINT uq_reservation_waitlist UNIQUE (waitlist_id),
   CONSTRAINT fk_reservation_user FOREIGN KEY (user_id) REFERENCES user_accounts(user_id),
   CONSTRAINT fk_reservation_slot FOREIGN KEY (slot_id, store_id) REFERENCES store_slots(slot_id, store_id),
   CONSTRAINT ck_reservation_time CHECK (start_at < end_at),
   CONSTRAINT ck_reservation_price CHECK (original_price BETWEEN 0 AND 10000000
     AND payable_price BETWEEN 0 AND original_price),
-  CONSTRAINT ck_reservation_status CHECK (status_code IN ('CONFIRMED','CANCELED','COMPLETED','NO_SHOW')),
+  CONSTRAINT ck_reservation_status CHECK (status_code IN ('PENDING','CONFIRMED','REJECTED','EXPIRED','WITHDRAWN','CANCELED','COMPLETED','NO_SHOW')),
   CONSTRAINT ck_reservation_version CHECK (version_no >= 1)
 );
 
 CREATE UNIQUE INDEX ux_reservation_confirmed_slot ON store_reservations (
                                                                          CASE WHEN status_code = 'CONFIRMED' THEN slot_id END
     );
+
+CREATE UNIQUE INDEX ux_reservation_waitlist_final ON store_reservations (
+  CASE WHEN status_code IN ('CONFIRMED','CANCELED','COMPLETED','NO_SHOW') THEN waitlist_id END);
+CREATE UNIQUE INDEX ux_reservation_pending_user ON store_reservations (
+  CASE WHEN status_code='PENDING' THEN user_id END,
+  CASE WHEN status_code='PENDING' THEN slot_id END);
+CREATE INDEX ix_reservation_requests ON store_reservations(store_id,status_code,created_at,reservation_id);
 
 ALTER TABLE store_slots ADD CONSTRAINT fk_slot_source
     FOREIGN KEY (source_reservation_id, store_id)
@@ -221,7 +233,7 @@ CREATE TABLE notification_alerts (
   request_json CLOB,
   notification_id    VARCHAR2(64 BYTE) DEFAULT LOWER(RAWTOHEX(SYS_GUID())) NOT NULL,
   user_id            VARCHAR2(64 BYTE) NOT NULL,
-  waitlist_id        VARCHAR2(64 BYTE) NOT NULL,
+  waitlist_id        VARCHAR2(64 BYTE),
   slot_id            VARCHAR2(64 BYTE) NOT NULL,
   publication_version NUMBER(10,0),
   title              VARCHAR2(100 CHAR) NOT NULL,
@@ -333,7 +345,7 @@ COMMENT ON TABLE search_waitlists IS 'search: 자연어에서 추출하고 사�
 COMMENT ON TABLE notification_alerts IS '필수 웹 푸시 알림. 저장 후 발송하며 집계 상태와 시도 횟수 기록';
 COMMENT ON COLUMN store_slots.source_reservation_id IS '취소/노쇼 원예약. 원예약당 취소표 1개';
 COMMENT ON COLUMN store_slots.available_until IS '노쇼 시작시각 조정 때도 유지하는 원래 빈 구간 종료';
-COMMENT ON COLUMN notification_alerts.waitlist_id IS '같은 사용자의 복수 조건 일치 시 대표 대기 1개';
+COMMENT ON COLUMN notification_alerts.waitlist_id IS '대표 예약 대기 ID. 대기 없는 맞춤 알림은 NULL';
 COMMENT ON TABLE notification_subscriptions IS 'notification: FCM FID 구독과 하위 호환용 Web Push 필드';
 COMMENT ON COLUMN notification_alerts.push_status IS 'SENT는 푸시 서비스 접수 성공, 기기 도착/읽음 보장은 아님';
 COMMENT ON COLUMN notification_alerts.expires_at IS '제안 유효기한. 일반적으로 슬롯 시작 시각';

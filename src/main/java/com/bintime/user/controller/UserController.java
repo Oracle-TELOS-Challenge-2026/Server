@@ -3,7 +3,9 @@ package com.bintime.user.controller;
 import com.bintime.common.dto.ApiError;
 import com.bintime.common.dto.ApiErrorResponse;
 import com.bintime.common.dto.ResponseMeta;
+import com.bintime.user.dto.NotificationPreferencesResponse;
 import com.bintime.user.dto.SaveLocationRequest;
+import com.bintime.user.dto.SaveNotificationPreferencesRequest;
 import com.bintime.user.dto.SavePreferencesRequest;
 import com.bintime.user.dto.UpdateProfileRequest;
 import com.bintime.user.dto.UserLocationResponse;
@@ -425,5 +427,54 @@ public class UserController {
     return ResponseEntity.ok(
         com.bintime.common.dto.ApiResponse.success(
             profileService().savePreferences(userId(principal), request)));
+  }
+
+  @Operation(
+      operationId = "getMyNotificationPreferences",
+      deprecated = true,
+      summary = "U-10 · 맞춤 빈자리 알림 설정 조회",
+      description = "기존 설정값 조회용 호환 API. 기본 false이며 현재 발송 판정에는 사용하지 않는다. N/false도 맞춤 알림 후보에 포함한다.")
+  @SecurityRequirement(name = "sessionCookie")
+  @ApiResponse(responseCode = "200", description = "현재 동의와 사용자 버전", useReturnTypeSchema = true)
+  @ApiResponse(responseCode = "401", description = "로그인 필요 또는 사용자 없음", content = @Content)
+  @GetMapping(
+      value = "/api/v1/users/me/notification-preferences",
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<com.bintime.common.dto.ApiResponse<NotificationPreferencesResponse>>
+      getMyNotificationPreferences(@AuthenticationPrincipal BintimePrincipal principal) {
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(
+            profileService().notificationPreferences(userId(principal))));
+  }
+
+  @Operation(
+      operationId = "saveMyNotificationPreferences",
+      deprecated = true,
+      summary = "U-11 · 맞춤 빈자리 알림 동의 변경",
+      description =
+          "기존 설정 저장용 호환 API. 저장값 true/false는 현재 맞춤 알림 발송을 허용하거나 차단하지 않는다. "
+              + "신규 기본 N 계정도 활성 FID·유효한 빈자리·선호 유사도 기준을 통과하면 알림을 받는다. 위치는 검사하지 않는다. "
+              + "true 저장은 기존 빈자리 재탐색 요청도 유지한다. 수신 중단은 기기 구독 해제 API를 사용한다. "
+              + "expectedVersion은 사용자 최상위 버전이며 변경 시 1 증가한다.")
+  @SecurityRequirement(name = "sessionCookie")
+  @ApiResponse(responseCode = "200", description = "설정 저장 및 탐색 작업 접수", useReturnTypeSchema = true)
+  @ApiResponse(responseCode = "400", description = "입력 오류", content = @Content)
+  @ApiResponse(responseCode = "401", description = "로그인 필요 또는 사용자 없음", content = @Content)
+  @ApiResponse(responseCode = "403", description = "CSRF 검증 실패", content = @Content)
+  @ApiResponse(responseCode = "409", description = "VERSION_CONFLICT", content = @Content)
+  @PutMapping(
+      value = "/api/v1/users/me/notification-preferences",
+      produces = MediaType.APPLICATION_JSON_VALUE,
+      consumes = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<com.bintime.common.dto.ApiResponse<NotificationPreferencesResponse>>
+      saveMyNotificationPreferences(
+          @Parameter(required = true, description = "현재 세션의 CSRF 토큰")
+              @RequestHeader(value = "X-CSRF-Token", required = false)
+              String csrfToken,
+          @AuthenticationPrincipal BintimePrincipal principal,
+          @Valid @RequestBody SaveNotificationPreferencesRequest request) {
+    return ResponseEntity.ok(
+        com.bintime.common.dto.ApiResponse.success(
+            profileService().saveNotificationPreferences(userId(principal), request)));
   }
 }

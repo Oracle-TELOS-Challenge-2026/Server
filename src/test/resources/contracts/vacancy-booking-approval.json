@@ -1,0 +1,33 @@
+[
+  {
+    "id": "ST-21",
+    "domain": "store",
+    "controller": "OwnerReservationController",
+    "methodName": "getReservationRequests",
+    "method": "GET",
+    "path": "/api/v1/owner/stores/{storeId}/reservation-requests",
+    "request": null,
+    "response": "OwnerReservationListResponse",
+    "status": 200,
+    "query": [
+      {
+        "name": "cursor",
+        "required": false
+      },
+      {
+        "name": "limit",
+        "required": false
+      }
+    ],
+    "auth": "OWNER: 해당 매장 소유자",
+    "requestExample": null,
+    "responseExample": {
+      "items": [],
+      "page": {
+        "nextCursor": null,
+        "hasNext": false
+      }
+    },
+    "source": "Local user request, 2026-10-17; docs/vacancy-booking-approval.md"
+  }
+]

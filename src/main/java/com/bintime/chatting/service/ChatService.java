@@ -60,6 +60,9 @@ public class ChatService {
 
   public record ReadCommitted(String userId, ChatReadResponse read) {}
 
+  public record BookingContext(
+      ChatMessageResponse source, List<ChatBookingContextMessage> messages) {}
+
   private record Cursor(String user, String id, OffsetDateTime activity) {}
 
   private record Window(long second, int count) {}
@@ -144,6 +147,22 @@ public class ChatService {
     return new ChatMessageListResponse(
         visible,
         new ChatMessageListResponse.Page(older, older ? visible.getFirst().sequence() : null));
+  }
+
+  public BookingContext bookingContext(String user, String roomId, String messageId) {
+    actor(user, false);
+    var room = participant(user, roomId, false);
+    require("OPEN".equals(room.status()), 409, "ROOM_READ_ONLY");
+    id(messageId);
+    var source = db.message(room, messageId);
+    require(
+        source != null
+            && "TEXT".equals(source.type())
+            && room.customer().equals(source.sender().id()),
+        404,
+        "SOURCE_MESSAGE_NOT_FOUND");
+    require(source.sequence() == db.latestCustomerSequence(room), 409, "PROPOSAL_SOURCE_OUTDATED");
+    return new BookingContext(source, db.bookingContext(room, source.sequence()));
   }
 
   public Result<ChatMessageResponse> send(

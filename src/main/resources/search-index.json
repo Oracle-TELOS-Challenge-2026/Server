@@ -29,6 +29,7 @@
       "slots": {
         "type": "nested",
         "properties": {
+          "instantBooking": { "type": "boolean" },
           "id": {
             "type": "keyword"
           },

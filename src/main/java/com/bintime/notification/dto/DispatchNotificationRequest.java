@@ -36,14 +36,37 @@ public record DispatchNotificationRequest(
             format = "int64",
             example = "2")
         Long publicationVersion,
-    @Schema(description = "일치한 대기 ID와 버전 목록", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(
+            description = "WAITLIST는 일치한 대기 ID·버전 1~20개, PERSONALIZED는 빈 배열",
+            requiredMode = Schema.RequiredMode.REQUIRED)
         List<MatcheItem> matches,
     @Schema(
             description = "expiresAt",
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             example = "2026-10-17T16:00:00+09:00")
-        OffsetDateTime expiresAt) {
+        OffsetDateTime expiresAt,
+    @Schema(
+            description =
+                "알림 자격 근거. 생략은 기존 WAITLIST. PERSONALIZED는 matches=[]이며 활성 기기·선호 벡터를 사용하고 기존 동의 플래그와"
+                    + " 위치는 검사하지 않는다.",
+            allowableValues = {"WAITLIST", "PERSONALIZED"})
+        String audience) {
+  public DispatchNotificationRequest {
+    audience = audience == null ? "WAITLIST" : audience;
+  }
+
+  public DispatchNotificationRequest(
+      String eventId,
+      String userId,
+      String type,
+      String slotId,
+      Long publicationVersion,
+      List<MatcheItem> matches,
+      OffsetDateTime expiresAt) {
+    this(eventId, userId, type, slotId, publicationVersion, matches, expiresAt, "WAITLIST");
+  }
+
   @Schema(name = "DispatchNotificationRequestMatcheItem")
   public record MatcheItem(
       @Schema(

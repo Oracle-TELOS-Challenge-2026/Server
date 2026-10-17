@@ -42,6 +42,14 @@ public class SearchConfiguration {
         if (service == null) throw SearchFailure.unavailable();
         return service.explicitPreferences(id);
       }
+
+      public java.util.List<String> personalizedCandidates(String after, int limit) {
+        throw SearchFailure.unavailable();
+      }
+
+      public boolean personalizedCandidateExists(String userId) {
+        throw SearchFailure.unavailable();
+      }
     };
   }
 

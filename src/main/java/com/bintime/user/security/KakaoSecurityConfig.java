@@ -46,7 +46,6 @@ import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.cors.CorsConfiguration;
 import tools.jackson.databind.json.JsonMapper;
@@ -244,11 +243,10 @@ public class KakaoSecurityConfig {
                   .failureHandler(
                       (request, response, exception) -> {
                         log.warn(
-                            "Kakao login failed: {}, {}",
+                            "Kakao login failed: {}",
                             exception instanceof OAuth2AuthenticationException oauthError
                                 ? oauthError.getError().getErrorCode()
-                                : exception.getClass().getSimpleName(),
-                            providerFailure(exception, mapper));
+                                : exception.getClass().getSimpleName());
                         new SecurityContextLogoutHandler().logout(request, response, null);
                         new CookieClearingLogoutHandler("bt_session")
                             .logout(request, response, null);
@@ -276,26 +274,6 @@ public class KakaoSecurityConfig {
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
     factory.setReadTimeout(Duration.ofSeconds(5));
     return factory;
-  }
-
-  static String providerFailure(Throwable failure, JsonMapper mapper) {
-    Throwable cause = failure;
-    for (int depth = 0; cause != null && depth < 8; depth++, cause = cause.getCause()) {
-      if (cause instanceof RestClientResponseException response) {
-        String code = "unknown";
-        try {
-          String value =
-              mapper.readTree(response.getResponseBodyAsByteArray()).path("error_code").asText();
-          if (value.matches("KOE[0-9]{3}")) code = value;
-        } catch (RuntimeException ignored) {
-          // 오류 본문·메시지에는 인증 코드나 토큰이 포함될 수 있어 그대로 기록하지 않는다.
-        }
-        return "http=" + response.getStatusCode().value() + ", provider=" + code;
-      }
-      if (cause.getCause() == null || cause.getCause() == cause)
-        return "cause=" + cause.getClass().getSimpleName();
-    }
-    return "cause=unknown";
   }
 
   private static void failure(

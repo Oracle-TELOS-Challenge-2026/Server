@@ -221,3 +221,13 @@ SEARCH_ELASTICSEARCH_URL=http://localhost:9200 ./gradlew test --tests '*StoreCat
 검증 기록: 격리 Oracle + 실제 ES에서 위 흐름을 통과했고, 로컬 앱 DB에서도 서버를 기동해 초기 `bintime-stores` alias 생성과 S-01 HTTP 200을 확인했다. 로컬에는 매장/슬롯이 0건이라 응답은 빈 목록이며 테스트용 업무 데이터를 앱 DB에 추가하지 않았다. 점검 서버는 종료했고 ES 컨테이너와 초기 인덱스는 유지했다.
 
 알림 연결의 실제 Bean·로컬 DDL·Oracle 통합 검증·남은 실기기 QA는 [Search → Notification 연결](search-notification-integration.md)을 따른다. 정상 프로필에서 알림 대체 Bean을 사용하지 않으며 `NotificationSchemaVerifier`가 누락된 알림 JDBC 열을 기동 시 검증한다. 로컬 알림 확장 후 전체 테이블은 25개이며 search 7개 구성은 유지된다.
+
+## 예약 대기 없는 맞춤 빈자리 알림
+
+`SearchUserAccess.personalizedCandidates`는 CUSTOMER/OWNER 전체를 ID 기준 100명씩 조회한다. `recommendation_opt_in=N/Y`와 동의 시각을 후보·접수·FCM 제출 조건으로 사용하지 않는다. `personalizedCandidateExists`는 현재 계정 존재와 역할만 재검증한다. 활성 세션의 FID 구독, 유효한 미래 VACANCY와 현재 발행 버전, 선호 벡터 코사인 유사도 기준(기본 0.5 이상)은 유지한다. 프로필 위치·매장별 대기는 필요 없다. REGULAR 슬롯은 새 맞춤 경로에서 제외한다.
+
+SLOT 소비 시 기존 WAITLIST와 PERSONALIZED 경로를 각각 탐색한다. WAITLIST의 명시적 동의·시간·가격·거리·지정 매장 조건은 유지한다. N 계정이 이 별도의 무대기 경로에서 추천될 수 있다. 사용자+슬롯 중복 방지는 공통으로 적용하며 알림 생성과 기기별 QUEUED 이력은 notification이 함께 저장한다.
+
+선호 변경의 UserPreferencesChanged는 VECTOR와 PERSONALIZE 작업을 저장한다. FID 등록의 PushSubscriptionRegistered는 구독 연결과 같은 트랜잭션에 PERSONALIZE를 등록한다. 따라서 선호를 먼저 저장하고 나중에 기기를 등록해도 기존 발행 빈자리를 탐색한다. 기기 등록 재요청과 기존 NotificationPreferencesChanged(true)의 재탐색은 사용자+슬롯 단위로 중복 알림을 만들지 않는다. 구독 등록의 작업 접수 실패는 구독 변경과 함께 롤백된다.
+
+NOTIFY의 audience=PERSONALIZED는 matches=[]를 사용한다. 생략한 기존 audience는 WAITLIST로 해석한다. 벡터가 없거나 오래되면 기존 VECTOR/STORE_VECTOR 생성을 요청하고 보류하며, 유사도 미달·빈 선호·비활성 기기·무효 슬롯은 발송하지 않는다. 기존 설정 API false는 맞춤 알림을 중단하지 않으며 수신 중단은 기기 구독 해제를 사용한다([사용자 안내](user-profile.md#맞춤-빈자리-알림-동의-u-10u-11)).
